@@ -155,7 +155,7 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSid
 
       console.log('🔍 Updating sidebar navigation...')
       console.log('📊 Found bots:', bots)
-      console.log('❌ Bots error:', botsError)
+      console.log('❌ Botss error:', botsError)
 
       if (botsError) {
         console.error('Error fetching bots for sidebar:', botsError)
