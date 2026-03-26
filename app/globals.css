@@ -12,74 +12,74 @@
   :root {
     --font-sans: var(--font-geist-sans);
     --font-mono: var(--font-geist-mono);
-    /* Updated color tokens to match AI chatbot SaaS design brief */
-    --background: 0 0% 100%;
-    --foreground: 215 25% 27%;
-    --card: 210 40% 96%;
-    --card-foreground: 215 25% 27%;
+    /* Updated color tokens - New executive dashboard design */
+    --background: 210 20% 98%;
+    --foreground: 230 25% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 230 25% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 215 25% 27%;
-    --primary: 160 84% 39%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 215 25% 27%;
+    --popover-foreground: 230 25% 12%;
+    --primary: 76 85% 67%;
+    --primary-foreground: 230 25% 12%;
+    --secondary: 210 20% 96%;
+    --secondary-foreground: 230 25% 12%;
     --muted: 220 14% 96%;
     --muted-foreground: 215 16% 47%;
-    --accent: 160 84% 39%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 76 85% 67%;
+    --accent-foreground: 230 25% 12%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --border: 220 13% 91%;
     --input: 0 0% 100%;
-    --ring: 160 84% 39%;
-    --chart-1: 160 84% 39%;
-    --chart-2: 160 84% 39%;
-    --chart-3: 215 25% 27%;
+    --ring: 76 85% 67%;
+    --chart-1: 76 85% 67%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 230 25% 12%;
     --chart-4: 45 93% 47%;
     --chart-5: 0 84% 60%;
-    --radius: 0.5rem;
-    --sidebar-background: 210 40% 96%;
-    --sidebar-foreground: 215 25% 27%;
-    --sidebar-primary: 0 0% 100%;
-    --sidebar-primary-foreground: 160 84% 39%;
-    --sidebar-accent: 160 84% 39%;
+    --radius: 1rem;
+    --sidebar-background: 240 24% 13%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 76 85% 67%;
+    --sidebar-primary-foreground: 240 24% 13%;
+    --sidebar-accent: 0 0% 100% / 0.05;
     --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 160 84% 39%;
+    --sidebar-border: 0 0% 100% / 0.1;
+    --sidebar-ring: 76 85% 67%;
   }
   .dark {
-    --background: 222 84% 5%;
-    --foreground: 210 40% 98%;
-    --card: 222 84% 5%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 84% 5%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 160 84% 39%;
-    --primary-foreground: 0 0% 100%;
+    --background: 240 10% 7%;
+    --foreground: 220 20% 90%;
+    --card: 240 15% 12%;
+    --card-foreground: 220 20% 90%;
+    --popover: 240 15% 12%;
+    --popover-foreground: 220 20% 90%;
+    --primary: 76 85% 67%;
+    --primary-foreground: 240 24% 13%;
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217 33% 17%;
     --muted-foreground: 215 20% 65%;
-    --accent: 160 84% 39%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 76 85% 67%;
+    --accent-foreground: 240 24% 13%;
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
+    --border: 0 0% 100% / 0.05;
     --input: 217 33% 17%;
-    --ring: 160 84% 39%;
-    --chart-1: 160 84% 39%;
-    --chart-2: 160 84% 39%;
+    --ring: 76 85% 67%;
+    --chart-1: 76 85% 67%;
+    --chart-2: 217 91% 60%;
     --chart-3: 210 40% 98%;
     --chart-4: 45 93% 47%;
     --chart-5: 0 84% 60%;
-    --sidebar-background: 222 84% 5%;
+    --sidebar-background: 240 24% 13%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 160 84% 39%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 217 33% 17%;
+    --sidebar-primary: 76 85% 67%;
+    --sidebar-primary-foreground: 240 24% 13%;
+    --sidebar-accent: 0 0% 100% / 0.05;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 217 33% 17%;
-    --sidebar-ring: 160 84% 39%;
+    --sidebar-border: 0 0% 100% / 0.1;
+    --sidebar-ring: 76 85% 67%;
   }
 }
 
@@ -89,5 +89,28 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', sans-serif;
   }
+}
+
+/* Executive Dashboard Utilities */
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.executive-card {
+  @apply bg-card p-6 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border;
+}
+
+.sidebar-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  vertical-align: middle;
+}
+
+.tab-active {
+  border-bottom: 2px solid hsl(76, 85%, 67%);
+  color: hsl(76, 85%, 67%);
 }

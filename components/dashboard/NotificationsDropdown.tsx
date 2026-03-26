@@ -264,9 +264,9 @@ export default function NotificationsDropdown() {
       {/* Trigger Button */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors duration-200"
+        className="relative w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors duration-200"
       >
-        <Bell className="h-5 w-5 text-neutral-700 dark:text-neutral-300" />
+        <Bell className="h-5 w-5 text-white" />
         {unreadCount > 0 && (
           <motion.span 
             initial={{ scale: 0 }}
@@ -288,11 +288,11 @@ export default function NotificationsDropdown() {
             />
             
             <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              initial={{ opacity: 0, x: -10, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -10, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="absolute right-0 top-full mt-2 z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-xl sm:rounded-2xl bg-white shadow-lg dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
+              className="absolute left-full bottom-0 ml-3 z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-xl sm:rounded-2xl bg-white shadow-2xl dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {/* Header */}

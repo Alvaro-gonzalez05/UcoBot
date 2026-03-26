@@ -4,115 +4,51 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import Image from "next/image"
 import { createClient } from "@/lib/supabase/client"
-import {
-  Users,
-  Gift,
-  Settings,
-  BarChart3,
-  Zap,
-  Building2,
-  TestTube,
-  ChevronLeft,
-  ChevronRight,
-  Package,
-  Calendar,
-  ShoppingCart,
-  MessageSquare,
-  Bot,
-  Shield,
-} from "lucide-react"
+import Image from "next/image"
+import { ChevronLeft, ChevronRight, Menu } from "lucide-react"
+import type { User } from "@supabase/supabase-js"
+import ProfileDropdown from "./ProfileDropdown"
+import NotificationsDropdown from "./NotificationsDropdown"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
 
 interface NavigationItem {
   name: string
   href: string
-  icon: any
+  icon: string // Material Symbols Outlined icon name
   requiresFeature?: string
   requiresAdmin?: boolean
   visible?: boolean
 }
 
 const baseNavigation: NavigationItem[] = [
-  {
-    name: "Dashboard",
-    href: "/dashboard",
-    icon: BarChart3,
-  },
-  {
-    name: "Mensajes",
-    href: "/dashboard/chat",
-    icon: MessageSquare,
-  },
-  {
-    name: "Clientes",
-    href: "/dashboard/clientes",
-    icon: Users,
-  },
-  {
-    name: "Bots",
-    href: "/dashboard/bots",
-    icon: Bot,
-  },
-  {
-    name: "Pedidos",
-    href: "/dashboard/pedidos",
-    icon: ShoppingCart,
-    requiresFeature: "take_orders",
-  },
-  {
-    name: "Reservas",
-    href: "/dashboard/reservas",
-    icon: Calendar,
-    requiresFeature: "take_reservations",
-  },
-  {
-    name: "Promociones",
-    href: "/dashboard/promociones",
-    icon: Gift,
-  },
-  {
-    name: "Automatizaciones",
-    href: "/dashboard/automatizaciones",
-    icon: Zap,
-  },
-  {
-    name: "Mi Negocio",
-    href: "/dashboard/negocio",
-    icon: Building2,
-  },
-  {
-    name: "Pruebas",
-    href: "/dashboard/pruebas",
-    icon: TestTube,
-  },
-  {
-    name: "Configuración",
-    href: "/dashboard/settings",
-    icon: Settings,
-  },
-  {
-    name: "Admin",
-    href: "/dashboard/admin",
-    icon: Shield,
-    requiresAdmin: true,
-  },
+  { name: "Resumen", href: "/dashboard", icon: "dashboard" },
+  { name: "Chatbots", href: "/dashboard/bots", icon: "forum" },
+  { name: "Mensajes", href: "/dashboard/chat", icon: "chat_bubble" },
+  { name: "Clientes", href: "/dashboard/clientes", icon: "group" },
+  { name: "Pedidos", href: "/dashboard/pedidos", icon: "shopping_cart", requiresFeature: "take_orders" },
+  { name: "Reservas", href: "/dashboard/reservas", icon: "calendar_month", requiresFeature: "take_reservations" },
+  { name: "Promociones", href: "/dashboard/promociones", icon: "local_offer" },
+  { name: "Automatizaciones", href: "/dashboard/automatizaciones", icon: "account_tree" },
+  { name: "Pruebas", href: "/dashboard/pruebas", icon: "science" },
+  { name: "Ajustes", href: "/dashboard/settings", icon: "settings" },
+  { name: "Admin", href: "/dashboard/admin", icon: "shield", requiresAdmin: true },
 ]
 
 interface DashboardSidebarProps {
   onLinkClick?: () => void
   mode?: 'desktop' | 'mobile'
+  user?: User
+  profile?: any
 }
 
-export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSidebarProps) {
+export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile }: DashboardSidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
-  const [navigation, setNavigation] = useState<NavigationItem[]>(() => 
-    // Initialize with feature items hidden to avoid flash
-    baseNavigation.map(item => ({ 
-      ...item, 
+  const [navigation, setNavigation] = useState<NavigationItem[]>(() =>
+    baseNavigation.map(item => ({
+      ...item,
       visible: !item.requiresFeature && !item.requiresAdmin
     }))
   )
@@ -124,16 +60,12 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSid
     try {
       const currentUserId = uid || userId
       if (!currentUserId) return
-
       const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
-      
-      // Check for conversations with messages in the last hour
       const { count } = await supabase
         .from('conversations')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', currentUserId)
         .gt('last_message_at', oneHourAgo)
-      
       setHasNewMessages((count || 0) > 0)
     } catch (error) {
       console.error('Error checking new messages:', error)
@@ -142,123 +74,56 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSid
 
   const updateNavigation = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      
-      if (!userId) setUserId(user.id)
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) return
+      if (!userId) setUserId(authUser.id)
 
-      // Get user's bots and their features
       const { data: bots, error: botsError } = await supabase
-        .from("bots")
-        .select("features")
-        .eq("user_id", user.id)
+        .from("bots").select("features").eq("user_id", authUser.id)
+      if (botsError) { console.error('Error fetching bots for sidebar:', botsError); return }
 
-      console.log('🔍 Updating sidebar navigation...')
-      console.log('📊 Found bots:', bots)
-      console.log('❌ Botss error:', botsError)
-
-      if (botsError) {
-        console.error('Error fetching bots for sidebar:', botsError)
-        return
-      }
-
-      // Get user profile to check for admin role
-      const { data: profile } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single()
-      
-      const isAdmin = profile?.role === 'admin'
+      const { data: userProfile } = await supabase
+        .from("user_profiles").select("role").eq("id", authUser.id).single()
+      const isAdmin = userProfile?.role === 'admin'
 
       if (!bots || bots.length === 0) {
-        console.log('⚠️ No bots found, hiding all feature-dependent items')
-        const updatedNavigation = baseNavigation.map(item => ({
+        setNavigation(baseNavigation.map(item => ({
           ...item,
           visible: (!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin)
-        }))
-        setNavigation(updatedNavigation)
+        })))
         return
       }
 
-      // Extract all enabled features across all bots
       const allFeatures = new Set<string>()
-      bots.forEach((bot, index) => {
-        console.log(`🤖 Bot ${index + 1} features:`, bot.features, typeof bot.features)
+      bots.forEach((bot) => {
         if (bot.features && Array.isArray(bot.features)) {
           bot.features.forEach((feature: string) => allFeatures.add(feature))
         }
       })
 
-      console.log('✨ All enabled features:', Array.from(allFeatures))
-
-      // Update navigation based on available features and admin role
-      const updatedNavigation = baseNavigation.map(item => {
+      setNavigation(baseNavigation.map(item => {
         let isVisible = true
-        
-        if (item.requiresFeature) {
-          isVisible = allFeatures.has(item.requiresFeature)
-        }
-        
-        if (item.requiresAdmin) {
-          isVisible = isAdmin
-        }
-        
-        console.log(`📋 ${item.name}: requiresFeature="${item.requiresFeature}" requiresAdmin="${item.requiresAdmin}" → visible=${isVisible}`)
-        return {
-          ...item,
-          visible: isVisible
-        }
-      })
-
-      console.log('🎯 Final navigation state:')
-      updatedNavigation.forEach(item => {
-        if (item.requiresFeature) {
-          console.log(`  ${item.name}: ${item.visible ? '✅ VISIBLE' : '❌ HIDDEN'}`)
-        }
-      })
-      
-      setNavigation(updatedNavigation)
+        if (item.requiresFeature) isVisible = allFeatures.has(item.requiresFeature)
+        if (item.requiresAdmin) isVisible = isAdmin
+        return { ...item, visible: isVisible }
+      }))
     } catch (error) {
       console.error('Error updating navigation:', error)
-      // Fallback: show all items
       setNavigation(baseNavigation.map(item => ({ ...item, visible: true })))
     }
   }
 
   useEffect(() => {
     updateNavigation()
-    
-    // Initial check
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUserId(data.user.id)
-        checkNewMessages(data.user.id)
-      }
+      if (data.user) { setUserId(data.user.id); checkNewMessages(data.user.id) }
     })
-
-    // Listen for custom events when bots are created/updated
-    const handleBotUpdate = () => {
-      console.log('Bot update event received, refreshing navigation...')
-      updateNavigation()
-    }
-
+    const handleBotUpdate = () => updateNavigation()
     window.addEventListener('botCreated', handleBotUpdate)
     window.addEventListener('botUpdated', handleBotUpdate)
-
-    // Also update navigation when navigating between pages (in case user created/edited a bot)
-    const handleRouteChange = () => {
-      setTimeout(() => {
-        updateNavigation()
-        checkNewMessages()
-      }, 500) // Small delay to ensure data is saved
-    }
-    
+    const handleRouteChange = () => { setTimeout(() => { updateNavigation(); checkNewMessages() }, 500) }
     window.addEventListener('focus', handleRouteChange)
-
-    // Set up interval to check for new messages every minute
     const messageInterval = setInterval(() => checkNewMessages(), 60000)
-
     return () => {
       window.removeEventListener('botCreated', handleBotUpdate)
       window.removeEventListener('botUpdated', handleBotUpdate)
@@ -267,109 +132,147 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop' }: DashboardSid
     }
   }, [supabase])
 
-  // Realtime subscription for new messages
   useEffect(() => {
     if (!userId) return
-
     const channel = supabase
       .channel('sidebar_conversations')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'conversations',
-          filter: `user_id=eq.${userId}`
-        },
-        (payload) => {
-          // If a conversation is updated or inserted, it means there's activity
-          // We can simply set the indicator to true immediately
-          setHasNewMessages(true)
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations', filter: `user_id=eq.${userId}` }, () => setHasNewMessages(true))
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [userId, supabase])
 
   const isMobile = mode === 'mobile'
   const isCollapsed = isMobile ? false : collapsed
 
   return (
-    <div
-      className={cn(
-        "flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-300 h-full",
-        isCollapsed ? "w-16" : "w-full lg:w-64",
+    <aside className={cn(
+      "bg-[#1C1C28] text-white flex-shrink-0 flex flex-col p-4 sm:p-5 shadow-2xl transition-all duration-300 relative",
+      isMobile ? "w-full h-full rounded-none" : "m-4 rounded-[2.5rem] h-[calc(100vh-2rem)]",
+      isCollapsed ? "w-22" : "w-64"
+    )}>
+      {/* Collapse toggle — Desktop only. Positioned top right */}
+      {!isMobile && (
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className={cn(
+            "absolute top-6 z-10 w-7 h-7 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-400 hover:text-[#D1F366] hover:bg-white/10 transition-all",
+            isCollapsed ? "left-1/2 -translate-x-1/2 top-20" : "right-5"
+          )}
+        >
+          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
+        </button>
       )}
-    >
-      {/* Logo */}
-      <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
-        {!isCollapsed && (
-          <div className="flex items-center space-x-2">
-            <Image src="/ucobot-logo.png" alt="UcoBot" width={24} height={24} className="text-primary" />
-            <span className="text-lg font-bold text-sidebar-foreground">UcoBot</span>
-          </div>
-        )}
-        {!isMobile && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setCollapsed(!collapsed)}
-            className="text-sidebar-foreground hover:bg-sidebar-accent"
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </Button>
-        )}
-      </div>
 
-      {/* Navigation */}
-      <ScrollArea className="flex-1 px-3 py-4">
-        <nav className="space-y-1">
+      {/* Top section: Logo + Scrollable Nav */}
+      <div className="flex-1 flex flex-col min-h-0">
+        {/* Logo */}
+        <div className={cn(
+          "flex items-center mb-8 mt-2",
+          isCollapsed ? "justify-center" : "gap-3 px-2"
+        )}>
+          <Image
+            src="/ucobot-logo.png"
+            alt="UcoBot Logo"
+            width={40}
+            height={40}
+            className="w-10 h-10 flex-shrink-0"
+          />
+          {!isCollapsed && (
+            <div className="flex flex-col">
+              <span className="text-lg font-bold text-white">UcoBot</span>
+              <span className="text-[10px] text-gray-400 uppercase tracking-widest">CODEA DESARROLLOS</span>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 space-y-0.5 overflow-y-auto hide-scrollbar pb-4">
           {navigation
             .filter(item => item.visible !== false)
             .map((item) => {
               const isActive = pathname === item.href
               return (
                 <Link
-                  key={item.name}
+                  key={item.name + item.href}
                   href={item.href}
                   onClick={onLinkClick}
                   className={cn(
-                    "flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                    "flex items-center gap-4 py-3 rounded-2xl transition-all active:scale-95",
                     isActive
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    isCollapsed && "justify-center",
+                      ? "bg-[#D1F366] text-[#1C1C28] font-semibold shadow-lg shadow-[#D1F366]/10"
+                      : "text-gray-400 sidebar-item transition-colors",
+                    isCollapsed ? "justify-center px-3" : "px-4"
                   )}
                 >
-                  <div className="relative">
-                    <item.icon className={cn("h-4 w-4", !isCollapsed && "mr-3")} />
-                    {item.name === "Mensajes" && hasNewMessages && isCollapsed && (
-                      <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                    )}
-                  </div>
+                  <span className={cn(
+                    "material-symbols-outlined text-xl flex-shrink-0",
+                    isActive ? "text-[#1C1C28]" : ""
+                  )}>{item.icon}</span>
                   {!isCollapsed && (
-                    <div className="flex items-center justify-between flex-1">
-                      <span>{item.name}</span>
-                      {item.name === "Mensajes" && hasNewMessages && (
-                        <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                      )}
-                    </div>
+                    <span className="truncate">{item.name}</span>
+                  )}
+                  {!isCollapsed && item.name === "Mensajes" && hasNewMessages && (
+                    <span className="ml-auto h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
+                  )}
+                  {isCollapsed && item.name === "Mensajes" && hasNewMessages && (
+                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
                   )}
                 </Link>
               )
             })}
         </nav>
-      </ScrollArea>
+      </div>
 
-      {/* Footer */}
-      {!isCollapsed && (
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="text-xs text-sidebar-foreground/60 text-center">UcoBot v1.0</div>
-        </div>
-      )}
+      {/* Bottom section — Profile (left) + Notifications (right) */}
+      <div className={cn(
+        "flex items-center justify-between pt-4 pb-2 border-t border-white/10 shrink-0",
+        isCollapsed ? "flex-col gap-4" : ""
+      )}>
+        {user && profile ? (
+          <ProfileDropdown user={user} profile={profile} />
+        ) : <div />}
+        <NotificationsDropdown />
+      </div>
+    </aside>
+  )
+}
+
+/* ============================================
+   Mobile Header — only shows hamburger + sidebar
+   ============================================ */
+interface MobileHeaderProps {
+  user?: User
+  profile?: any
+}
+
+export function MobileHeader({ user, profile }: MobileHeaderProps) {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+
+  return (
+    <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-background border-b border-border">
+      <div className="flex items-center gap-2">
+        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="-ml-2">
+              <Menu className="h-6 w-6" />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="p-0 w-[85vw] sm:w-72 bg-[#1C1C28] border-none">
+            <DashboardSidebar 
+              mode="mobile" 
+              onLinkClick={() => setIsMobileMenuOpen(false)} 
+              user={user}
+              profile={profile}
+            />
+          </SheetContent>
+        </Sheet>
+        <Image src="/ucobot-logo.png" alt="UcoBot" width={28} height={28} className="w-7 h-7" />
+        <span className="text-sm font-bold">UcoBot</span>
+      </div>
+      <div className="flex items-center gap-2">
+        {user && profile && <ProfileDropdown user={user} profile={profile} />}
+        <NotificationsDropdown />
+      </div>
     </div>
   )
 }

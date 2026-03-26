@@ -83,39 +83,12 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
 
   return (
     <div className="relative">
-      {/* Trigger Button - Responsive Layout */}
+      {/* Trigger Button - Avatar only */}
       <button 
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-0 sm:space-x-3 px-2 sm:px-4 py-2 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-700 transition-colors duration-200 shadow-sm"
+        className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold hover:opacity-90 transition-opacity"
       >
-        {/* Profile Avatar */}
-        <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-          {getInitials(profile?.business_name || user.email || "U")}
-        </div>
-        
-        {/* User Info - Hidden on mobile */}
-        <div className="hidden sm:flex flex-col items-start text-left">
-          <span className="text-sm font-medium text-neutral-900 dark:text-white">
-            {profile?.business_name || "Mi Negocio"}
-          </span>
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">
-            {user.email}
-          </span>
-        </div>
-
-        {/* Verified Badge - Hidden on mobile */}
-        <div className="hidden sm:flex items-center justify-center w-5 h-5 bg-blue-500 rounded-full">
-          <Check className="w-3 h-3 text-white" />
-        </div>
-
-        {/* Dropdown Arrow - Hidden on mobile */}
-        <motion.div
-          animate={{ rotate: isOpen ? 180 : 0 }}
-          transition={{ duration: 0.3 }}
-          className="hidden sm:block"
-        >
-          <ChevronUp className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
-        </motion.div>
+        {getInitials(profile?.business_name || user.email || "U")}
       </button>
 
       <AnimatePresence>
@@ -128,11 +101,11 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
             />
             
             <motion.div
-              initial={{ opacity: 0, y: 10, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              initial={{ opacity: 0, x: -10, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -10, scale: 0.95 }}
               transition={{ duration: 0.2 }}
-              className="absolute right-0 sm:right-4 top-full mt-2 z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-lg dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
+              className="absolute left-full bottom-0 ml-3 z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-2xl dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {/* Profile Header */}
