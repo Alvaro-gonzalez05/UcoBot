@@ -82,11 +82,6 @@ const navigationItems: NavigationItem[] = [
     href: "/dashboard/negocio",
     icon: Building2,
   },
-  {
-    name: "Pruebas",
-    href: "/dashboard/pruebas",
-    icon: TestTube,
-  },
 ]
 
 interface FloatingNavbarProps {

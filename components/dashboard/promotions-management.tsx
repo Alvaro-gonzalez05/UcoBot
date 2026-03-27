@@ -1,16 +1,13 @@
-"use client"
+﻿"use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -20,14 +17,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { toast } from "sonner"
-import { Plus, Gift, Percent, DollarSign, Star, Users, MoreHorizontal, Trash2, Play, Pause, Award, Upload, Loader2, X } from "lucide-react"
-import { Tabs as UITabs, TabsContent as UITabsContent, TabsList as UITabsList, TabsTrigger as UITabsTrigger } from "@/components/ui/tabs"
-import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
-import { motion } from "framer-motion"
+import { Plus, Gift, Percent, Star, Users, MoreVertical, Trash2, Play, Pause, Award, Loader2, X, Tag, Megaphone, Ticket } from "lucide-react"
 
 interface Promotion {
   id: string
@@ -61,8 +54,6 @@ interface PromotionsManagementProps {
   userId: string
 }
 
-
-
 const rewardTypeLabels = {
   discount: "Descuento",
   free_item: "Producto Gratis",
@@ -70,21 +61,44 @@ const rewardTypeLabels = {
   gift: "Regalo",
 }
 
+function getDaysUntilExpiry(endDate: string): string {
+  const now = new Date()
+  const end = new Date(endDate)
+  const diffMs = end.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return "Vencida"
+  if (diffDays === 0) return "Hoy"
+  if (diffDays === 1) return "Mañana"
+  return `${diffDays} días`
+}
+
+function getDaysUntilExpiryColor(endDate: string): string {
+  const now = new Date()
+  const end = new Date(endDate)
+  const diffMs = end.getTime() - now.getTime()
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+  if (diffDays < 0) return "text-gray-400"
+  if (diffDays <= 1) return "text-red-500"
+  if (diffDays <= 7) return "text-amber-500"
+  return "text-gray-700"
+}
+
+function getPromotionProgress(promotion: Promotion): number {
+  if (!promotion.max_uses) return 100
+  return Math.min(100, Math.round((promotion.current_uses / promotion.max_uses) * 100))
+}
+
 export function PromotionsManagement({ initialPromotions, initialRewards, userId }: PromotionsManagementProps) {
   const [promotions, setPromotions] = useState<Promotion[]>(initialPromotions)
   const [rewards, setRewards] = useState<Reward[]>(initialRewards)
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false)
   const [isRewardDialogOpen, setIsRewardDialogOpen] = useState(false)
-  const [isEditPromotionDialogOpen, setIsEditPromotionDialogOpen] = useState(false)
-  const [isEditRewardDialogOpen, setIsEditRewardDialogOpen] = useState(false)
-  const [selectedPromotion, setSelectedPromotion] = useState<Promotion | null>(null)
-  const [selectedReward, setSelectedReward] = useState<Reward | null>(null)
+  const [activeTab, setActiveTab] = useState("promotions")
   const [isLoading, setIsLoading] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [imageUploadMethod, setImageUploadMethod] = useState<"url" | "upload">("url")
   const supabase = createClient()
 
-  // Form states
   const [promotionForm, setPromotionForm] = useState({
     name: "",
     description: "",
@@ -106,36 +120,17 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
   })
 
   const resetPromotionForm = () => {
-    setPromotionForm({
-      name: "",
-      description: "",
-      max_uses: "",
-      start_date: "",
-      end_date: "",
-      is_active: true,
-      image_url: "",
-    })
+    setPromotionForm({ name: "", description: "", max_uses: "", start_date: "", end_date: "", is_active: true, image_url: "" })
   }
 
   const resetRewardForm = () => {
-    setRewardForm({
-      name: "",
-      description: "",
-      points_cost: 0,
-      reward_type: "",
-      reward_value: "",
-      stock_quantity: "",
-      is_active: true,
-    })
+    setRewardForm({ name: "", description: "", points_cost: 0, reward_type: "", reward_value: "", stock_quantity: "", is_active: true })
   }
 
   const handleCreatePromotion = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
     try {
-      // Prepare the data object, ensuring all required fields are present
-      // and optional fields are handled correctly
       const promotionData = {
         user_id: userId,
         name: promotionForm.name,
@@ -145,30 +140,17 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
         start_date: promotionForm.start_date,
         end_date: promotionForm.end_date,
         is_active: promotionForm.is_active,
-        image_url: promotionForm.image_url || null
-      };
-
-      const { data, error } = await supabase
-        .from("promotions")
-        .insert([promotionData])
-        .select()
-        .single()
-
+        image_url: promotionForm.image_url || null,
+      }
+      const { data, error } = await supabase.from("promotions").insert([promotionData]).select().single()
       if (error) throw error
-
       setPromotions([data, ...promotions])
       setIsPromotionDialogOpen(false)
       resetPromotionForm()
-      toast.success(`Promoción "${promotionForm.name}" creada`, {
-        description: "La promoción ha sido creada exitosamente y está disponible para los clientes.",
-        duration: 4000,
-      })
+      toast.success(`Promoción "${promotionForm.name}" creada`, { description: "La promoción ha sido creada exitosamente y está disponible para los clientes.", duration: 4000 })
     } catch (error) {
-      console.error("Error creating promotion:", error);
-      toast.error("Error al crear promoción", {
-        description: "No se pudo crear la promoción. Verifica los datos e inténtalo de nuevo.",
-        duration: 4000,
-      })
+      console.error("Error creating promotion:", error)
+      toast.error("Error al crear promoción", { description: "No se pudo crear la promoción. Verifica los datos e inténtalo de nuevo.", duration: 4000 })
     } finally {
       setIsLoading(false)
     }
@@ -177,35 +159,19 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
   const handleCreateReward = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
-
     try {
       const { data, error } = await supabase
         .from("rewards")
-        .insert([
-          {
-            ...rewardForm,
-            user_id: userId,
-            stock_quantity: rewardForm.stock_quantity ? Number.parseInt(rewardForm.stock_quantity) : null,
-            current_stock: rewardForm.stock_quantity ? Number.parseInt(rewardForm.stock_quantity) : null,
-          },
-        ])
+        .insert([{ ...rewardForm, user_id: userId, stock_quantity: rewardForm.stock_quantity ? Number.parseInt(rewardForm.stock_quantity) : null, current_stock: rewardForm.stock_quantity ? Number.parseInt(rewardForm.stock_quantity) : null }])
         .select()
         .single()
-
       if (error) throw error
-
       setRewards([data, ...rewards])
       setIsRewardDialogOpen(false)
       resetRewardForm()
-      toast.success(`Recompensa "${rewardForm.name}" creada`, {
-        description: "La recompensa ha sido creada exitosamente y está disponible en el catálogo.",
-        duration: 4000,
-      })
+      toast.success(`Recompensa "${rewardForm.name}" creada`, { description: "La recompensa ha sido creada exitosamente.", duration: 4000 })
     } catch (error) {
-      toast.error("Error al crear recompensa", {
-        description: "No se pudo crear la recompensa. Verifica los datos e inténtalo de nuevo.",
-        duration: 4000,
-      })
+      toast.error("Error al crear recompensa", { description: "No se pudo crear la recompensa. Verifica los datos e inténtalo de nuevo.", duration: 4000 })
     } finally {
       setIsLoading(false)
     }
@@ -214,92 +180,49 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
   const handleTogglePromotion = async (promotionId: string, isActive: boolean) => {
     try {
       const { error } = await supabase.from("promotions").update({ is_active: isActive }).eq("id", promotionId)
-
       if (error) throw error
-
       setPromotions(promotions.map((p) => (p.id === promotionId ? { ...p, is_active: isActive } : p)))
-      const promotion = promotions.find(p => p.id === promotionId);
-      toast.success(`Promoción ${isActive ? 'activada' : 'desactivada'}`, {
-        description: `"${promotion?.name || 'La promoción'}" ha sido ${isActive ? "activada" : "desactivada"} exitosamente.`,
-        duration: 4000,
-      })
+      const promotion = promotions.find((p) => p.id === promotionId)
+      toast.success(`Promoción ${isActive ? "activada" : "desactivada"}`, { description: `"${promotion?.name || "La promoción"}" ha sido ${isActive ? "activada" : "desactivada"} exitosamente.`, duration: 4000 })
     } catch (error) {
-      toast.error("Error al cambiar estado de promoción", {
-        description: "No se pudo cambiar el estado de la promoción. Inténtalo de nuevo.",
-        duration: 4000,
-      })
+      toast.error("Error al cambiar estado de promoción", { description: "No se pudo cambiar el estado. Inténtalo de nuevo.", duration: 4000 })
     }
   }
 
   const handleToggleReward = async (rewardId: string, isActive: boolean) => {
     try {
       const { error } = await supabase.from("rewards").update({ is_active: isActive }).eq("id", rewardId)
-
       if (error) throw error
-
       setRewards(rewards.map((r) => (r.id === rewardId ? { ...r, is_active: isActive } : r)))
-      const reward = rewards.find(r => r.id === rewardId);
-      toast.success(`Recompensa ${isActive ? 'activada' : 'desactivada'}`, {
-        description: `"${reward?.name || 'La recompensa'}" ha sido ${isActive ? "activada" : "desactivada"} exitosamente.`,
-        duration: 4000,
-      })
+      const reward = rewards.find((r) => r.id === rewardId)
+      toast.success(`Recompensa ${isActive ? "activada" : "desactivada"}`, { description: `"${reward?.name || "La recompensa"}" ha sido ${isActive ? "activada" : "desactivada"} exitosamente.`, duration: 4000 })
     } catch (error) {
-      toast.error("Error al cambiar estado de recompensa", {
-        description: "No se pudo cambiar el estado de la recompensa. Inténtalo de nuevo.",
-        duration: 4000,
-      })
+      toast.error("Error al cambiar estado de recompensa", { description: "No se pudo cambiar el estado. Inténtalo de nuevo.", duration: 4000 })
     }
   }
 
   const handleDeletePromotion = async (promotionId: string) => {
     try {
+      const promotion = promotions.find((p) => p.id === promotionId)
       const { error } = await supabase.from("promotions").delete().eq("id", promotionId)
-
       if (error) throw error
-
       setPromotions(promotions.filter((p) => p.id !== promotionId))
-      const promotion = promotions.find(p => p.id === promotionId);
-      toast.success("Promoción eliminada", {
-        description: `"${promotion?.name || 'La promoción'}" ha sido eliminada permanentemente.`,
-        duration: 4000,
-      })
+      toast.success("Promoción eliminada", { description: `"${promotion?.name || "La promoción"}" ha sido eliminada permanentemente.`, duration: 4000 })
     } catch (error) {
-      toast.error("Error al eliminar promoción", {
-        description: "No se pudo eliminar la promoción. Inténtalo de nuevo.",
-        duration: 4000,
-      })
+      toast.error("Error al eliminar promoción", { description: "No se pudo eliminar la promoción. Inténtalo de nuevo.", duration: 4000 })
     }
   }
 
   const handleDeleteReward = async (rewardId: string) => {
     try {
+      const reward = rewards.find((r) => r.id === rewardId)
       const { error } = await supabase.from("rewards").delete().eq("id", rewardId)
-
       if (error) throw error
-
       setRewards(rewards.filter((r) => r.id !== rewardId))
-      const reward = rewards.find(r => r.id === rewardId);
-      toast.success("Recompensa eliminada", {
-        description: `"${reward?.name || 'La recompensa'}" ha sido eliminada permanentemente.`,
-        duration: 4000,
-      })
+      toast.success("Recompensa eliminada", { description: `"${reward?.name || "La recompensa"}" ha sido eliminada permanentemente.`, duration: 4000 })
     } catch (error) {
-      toast.error("Error al eliminar recompensa", {
-        description: "No se pudo eliminar la recompensa. Inténtalo de nuevo.",
-        duration: 4000,
-      })
+      toast.error("Error al eliminar recompensa", { description: "No se pudo eliminar la recompensa. Inténtalo de nuevo.", duration: 4000 })
     }
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("es-ES")
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("es-ES", {
-      style: "currency",
-      currency: "EUR",
-    }).format(amount)
   }
 
   const isPromotionActive = (promotion: Promotion) => {
@@ -312,41 +235,19 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-    if (!allowedTypes.includes(file.type)) {
-      toast.error("Formato no soportado. Usa JPG, PNG, GIF o WebP")
-      return
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("El archivo es muy grande. Máximo 5MB permitido")
-      return
-    }
-
+    const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"]
+    if (!allowedTypes.includes(file.type)) { toast.error("Formato no soportado. Usa JPG, PNG, GIF o WebP"); return }
+    if (file.size > 5 * 1024 * 1024) { toast.error("El archivo es muy grande. Máximo 5MB permitido"); return }
     setIsUploading(true)
     toast.loading("Subiendo imagen...", { id: "upload-image" })
-
     try {
       const formDataUpload = new FormData()
-      formDataUpload.append('file', file)
-
-      const response = await fetch('/api/upload-image', {
-        method: 'POST',
-        body: formDataUpload,
-      })
-
+      formDataUpload.append("file", file)
+      const response = await fetch("/api/upload-image", { method: "POST", body: formDataUpload })
       const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(result.error || "Error al subir imagen")
-      }
-
-      setPromotionForm(prev => ({ ...prev, image_url: result.url }))
+      if (!response.ok) throw new Error(result.error || "Error al subir imagen")
+      setPromotionForm((prev) => ({ ...prev, image_url: result.url }))
       toast.success("Imagen subida exitosamente", { id: "upload-image" })
-
     } catch (error) {
       console.error("Error uploading image:", error)
       toast.error(error instanceof Error ? error.message : "Error al subir imagen", { id: "upload-image" })
@@ -355,598 +256,424 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
     }
   }
 
+  const activePromotionsCount = promotions.filter((p) => isPromotionActive(p)).length
+  const totalUses = promotions.reduce((sum, p) => sum + p.current_uses, 0)
+  const activeRewardsCount = rewards.filter((r) => r.is_active).length
+
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <ScrollSlideUp>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Sistema de Puntos y Promociones</h1>
-            <p className="text-sm sm:text-base text-muted-foreground">Gestiona promociones y recompensas para fidelizar clientes</p>
-          </div>
+      <header className="flex justify-between items-center mb-6 flex-shrink-0">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Gestión de Promociones</h2>
+          <p className="text-sm text-gray-500">Crea y administra tus campañas de descuentos y recompensas.</p>
         </div>
-      </ScrollSlideUp>
+        <button
+          onClick={() => { if (activeTab === "rewards") { setIsRewardDialogOpen(true) } else { setIsPromotionDialogOpen(true) } }}
+          className="flex items-center gap-2 px-5 py-3 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold transition-all shadow-lg shadow-[#D1F366]/20 hover:bg-[#B3D93C]"
+        >
+          <Plus className="w-4 h-4" />
+          <span>{activeTab === "rewards" ? "Nueva Recompensa" : "Nueva Promoción"}</span>
+        </button>
+      </header>
 
       {/* Stats */}
-      <ScrollStaggeredChildren>
-        <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
-          <ScrollStaggerChild>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-                <CardTitle className="text-xs sm:text-sm font-medium">Promociones Activas</CardTitle>
-                <Percent className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <ScrollScaleIn>
-                  <div className="text-xl sm:text-2xl font-bold">{promotions.filter((p) => isPromotionActive(p)).length}</div>
-                </ScrollScaleIn>
-                <p className="text-xs text-muted-foreground">En vigencia</p>
-              </CardContent>
-            </Card>
-          </ScrollStaggerChild>
-
-          <ScrollStaggerChild>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-                <CardTitle className="text-xs sm:text-sm font-medium">Recompensas</CardTitle>
-                <Gift className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <ScrollScaleIn>
-                  <div className="text-xl sm:text-2xl font-bold">{rewards.filter((r) => r.is_active).length}</div>
-                </ScrollScaleIn>
-                <p className="text-xs text-muted-foreground">Disponibles</p>
-              </CardContent>
-            </Card>
-          </ScrollStaggerChild>
-
-          <ScrollStaggerChild>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-                <CardTitle className="text-xs sm:text-sm font-medium">Usos Totales</CardTitle>
-                <Users className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <ScrollScaleIn>
-                  <div className="text-xl sm:text-2xl font-bold">{promotions.reduce((sum, p) => sum + p.current_uses, 0)}</div>
-                </ScrollScaleIn>
-                <p className="text-xs text-muted-foreground">Promociones usadas</p>
-              </CardContent>
-            </Card>
-          </ScrollStaggerChild>
-
-          <ScrollStaggerChild>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-                <CardTitle className="text-xs sm:text-sm font-medium">Puntos en Circulación</CardTitle>
-                <Star className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-                <ScrollScaleIn>
-                  <div className="text-xl sm:text-2xl font-bold">0</div>
-                </ScrollScaleIn>
-                <p className="text-xs text-muted-foreground">Puntos activos</p>
-              </CardContent>
-            </Card>
-          </ScrollStaggerChild>
+      <div className="grid grid-cols-3 gap-4 mb-6 flex-shrink-0">
+        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
+              <Megaphone className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Promociones Activas</p>
+              <p className="text-2xl font-bold text-gray-900">{activePromotionsCount}</p>
+            </div>
+          </div>
         </div>
-      </ScrollStaggeredChildren>
+        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center">
+              <Ticket className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Cupones Canjeados</p>
+              <p className="text-2xl font-bold text-gray-900">{totalUses.toLocaleString("es-ES")}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center">
+              <Award className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Recompensas Activas</p>
+              <p className="text-2xl font-bold text-gray-900">{activeRewardsCount}</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="promotions" className="space-y-4 sm:space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="promotions" className="text-xs sm:text-sm">Promociones</TabsTrigger>
-          <TabsTrigger value="rewards" className="text-xs sm:text-sm">Recompensas</TabsTrigger>
-          <TabsTrigger value="settings" className="text-xs sm:text-sm">Configuración</TabsTrigger>
+      <Tabs defaultValue="promotions" className="flex-1 flex flex-col overflow-hidden" onValueChange={setActiveTab}>
+        <TabsList className="flex-shrink-0 bg-white border border-gray-100 rounded-2xl p-1 mb-4 w-fit">
+          <TabsTrigger
+            value="promotions"
+            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-gray-500"
+          >
+            Promociones
+          </TabsTrigger>
+          <TabsTrigger
+            value="rewards"
+            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-gray-500"
+          >
+            Recompensas
+          </TabsTrigger>
+          <TabsTrigger
+            value="settings"
+            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-gray-500"
+          >
+            Configuración
+          </TabsTrigger>
         </TabsList>
 
         {/* Promotions Tab */}
-        <TabsContent value="promotions" className="space-y-4 sm:space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <h2 className="text-lg sm:text-xl font-semibold">Promociones</h2>
-            <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="w-full sm:w-auto">
-                  <Plus className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline">Crear Promoción</span>
-                  <span className="sm:hidden">Nueva Promoción</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle>Crear Nueva Promoción</DialogTitle>
-                  <DialogDescription>Configura una promoción para atraer y fidelizar clientes</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleCreatePromotion}>
-                  <div className="grid gap-6 py-4">
-                    <div className="grid gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="promo-name">Nombre de la Promoción *</Label>
-                        <Input
-                          id="promo-name"
-                          value={promotionForm.name}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, name: e.target.value })}
-                          placeholder="20% de descuento en toda la tienda"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="promo-description">Descripción</Label>
-                        <Textarea
-                          id="promo-description"
-                          value={promotionForm.description}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, description: e.target.value })}
-                          placeholder="Describe los términos y condiciones de la promoción"
-                          rows={3}
-                        />
-                      </div>
-                      
-                      <div className="grid gap-2">
-                        <Label>Imagen de la promoción (opcional)</Label>
-                        <UITabs value={imageUploadMethod} onValueChange={(value) => setImageUploadMethod(value as "url" | "upload")}>
-                          <UITabsList className="grid w-full grid-cols-2">
-                            <UITabsTrigger value="url">URL</UITabsTrigger>
-                            <UITabsTrigger value="upload">Subir archivo</UITabsTrigger>
-                          </UITabsList>
-                          
-                          <UITabsContent value="url" className="space-y-2">
-                            <Input
-                              type="url"
-                              placeholder="https://ejemplo.com/imagen.jpg"
-                              value={promotionForm.image_url}
-                              onChange={(e) => setPromotionForm(prev => ({ ...prev, image_url: e.target.value }))}
-                            />
-                          </UITabsContent>
-                          
-                          <UITabsContent value="upload" className="space-y-2">
-                            <div className="flex flex-col gap-2">
-                              <Input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleImageUpload}
-                                disabled={isUploading}
-                              />
-                              {isUploading && (
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                  Subiendo imagen...
-                                </div>
-                              )}
-                              <p className="text-xs text-muted-foreground">
-                                Formatos: JPG, PNG, GIF, WebP. Máximo 5MB. Se almacena en Supabase Storage.
-                              </p>
-                            </div>
-                          </UITabsContent>
-                        </UITabs>
-                        
-                        {promotionForm.image_url && (
-                          <div className="mt-2 relative inline-block">
-                            <img 
-                              src={promotionForm.image_url} 
-                              alt="Preview" 
-                              className="w-24 h-24 object-cover rounded border"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none'
-                              }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setPromotionForm(prev => ({ ...prev, image_url: "" }))}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-
-
-                    <div className="grid gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="max-uses">Máximo de Usos</Label>
-                        <Input
-                          id="max-uses"
-                          type="number"
-                          min="1"
-                          value={promotionForm.max_uses}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, max_uses: e.target.value })}
-                          placeholder="Ilimitado"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="grid gap-2">
-                        <Label htmlFor="start-date">Fecha de Inicio *</Label>
-                        <Input
-                          id="start-date"
-                          type="datetime-local"
-                          value={promotionForm.start_date}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, start_date: e.target.value })}
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="end-date">Fecha de Fin *</Label>
-                        <Input
-                          id="end-date"
-                          type="datetime-local"
-                          value={promotionForm.end_date}
-                          onChange={(e) => setPromotionForm({ ...promotionForm, end_date: e.target.value })}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="promo-active"
-                        checked={promotionForm.is_active}
-                        onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, is_active: checked })}
-                      />
-                      <Label htmlFor="promo-active">Activar promoción inmediatamente</Label>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsPromotionDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Creando..." : "Crear Promoción"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        <TabsContent value="promotions" className="flex-1 overflow-hidden flex flex-col mt-0">
+          <h3 className="font-bold text-lg mb-4 flex-shrink-0">Mis Promociones</h3>
+          <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
             {promotions.length === 0 ? (
-              <Card className="col-span-full">
-                <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12 px-4 sm:px-6">
-                  <Percent className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-base sm:text-lg font-medium mb-2 text-center">No tienes promociones aún</h3>
-                  <p className="text-sm sm:text-base text-muted-foreground text-center mb-4">
-                    Crea tu primera promoción para atraer y fidelizar clientes
-                  </p>
-                  <Button onClick={() => setIsPromotionDialogOpen(true)} className="w-full sm:w-auto">
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span className="hidden sm:inline">Crear mi primera promoción</span>
-                    <span className="sm:hidden">Crear promoción</span>
-                  </Button>
-                </CardContent>
-              </Card>
+              <div className="bg-white rounded-3xl border border-gray-100 p-12 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 bg-[#D1F366]/20 rounded-2xl flex items-center justify-center mb-4">
+                  <Percent className="w-8 h-8 text-[#1C1C28]" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-800 mb-2">No tienes promociones aún</h3>
+                <p className="text-sm text-gray-500 mb-5">Crea tu primera promoción para atraer y fidelizar clientes</p>
+                <button
+                  onClick={() => setIsPromotionDialogOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Crear mi primera promoción
+                </button>
+              </div>
             ) : (
-              promotions.map((promotion) => (
-                <Card key={promotion.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-                    <div className="flex items-center space-x-2 min-w-0 flex-1">
-                      <div className="p-1.5 sm:p-2 rounded-md bg-primary/10 flex-shrink-0">
-                        <Gift className="h-3 w-3 sm:h-4 sm:w-4 text-primary" />
-                      </div>
-                      <div className="min-w-0">
-                        <CardTitle className="text-sm sm:text-lg truncate">{promotion.name}</CardTitle>
-                      </div>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleTogglePromotion(promotion.id, !promotion.is_active)}>
-                          {promotion.is_active ? (
-                            <>
-                              <Pause className="mr-2 h-4 w-4" />
-                              Desactivar
-                            </>
-                          ) : (
-                            <>
-                              <Play className="mr-2 h-4 w-4" />
-                              Activar
-                            </>
-                          )}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDeletePromotion(promotion.id)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Eliminar
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </CardHeader>
-                  <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
-                    <div className="flex items-center justify-between gap-2">
-                      <Badge variant={isPromotionActive(promotion) ? "default" : "secondary"} className="text-xs">
-                        {isPromotionActive(promotion) ? "Activa" : "Inactiva"}
-                      </Badge>
-                    </div>
-
-                    {promotion.image_url && (
-                      <div className="w-full">
-                        <img 
-                          src={promotion.image_url} 
+              promotions.map((promotion) => {
+                const progress = getPromotionProgress(promotion)
+                const active = isPromotionActive(promotion)
+                const expiryText = getDaysUntilExpiry(promotion.end_date)
+                const expiryColor = getDaysUntilExpiryColor(promotion.end_date)
+                return (
+                  <div
+                    key={promotion.id}
+                    className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow"
+                  >
+                    <div className="flex items-center gap-6 flex-1 min-w-0">
+                      {promotion.image_url ? (
+                        <img
+                          src={promotion.image_url}
                           alt={promotion.name}
-                          className="w-full h-32 object-cover rounded-md border"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = 'none'
-                          }}
+                          className="w-16 h-16 rounded-2xl object-cover flex-shrink-0"
+                          onError={(e) => { ;(e.target as HTMLImageElement).style.display = "none" }}
                         />
-                      </div>
-                    )}
-
-                    {promotion.description && (
-                      <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                        {promotion.description}
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <div className="text-xs sm:text-sm">
-                        <span className="font-medium">Vigencia:</span>
-                        <div className="text-xs text-muted-foreground">
-                          {formatDate(promotion.start_date)} - {formatDate(promotion.end_date)}
+                      ) : (
+                        <div className="w-16 h-16 rounded-2xl bg-[#D1F366]/10 flex items-center justify-center text-[#1C1C28] flex-shrink-0">
+                          <Tag className="w-7 h-7" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                          <h4 className="font-bold text-lg text-gray-900 truncate">{promotion.name}</h4>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                            {active ? "Activa" : "Inactiva"}
+                          </span>
+                        </div>
+                        {promotion.description && (
+                          <p className="text-xs text-gray-500 mb-2 truncate">{promotion.description}</p>
+                        )}
+                        <div className="flex flex-col gap-1 mt-2">
+                          <div className="flex justify-between text-xs font-medium text-gray-500">
+                            <span>Límite de uso</span>
+                            <span>{promotion.current_uses} / {promotion.max_uses ? promotion.max_uses.toLocaleString("es-ES") : "Sin límite"} canjes</span>
+                          </div>
+                          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                            <div className="bg-[#D1F366] h-full rounded-full transition-all" style={{ width: `${promotion.max_uses ? progress : 100}%` }} />
+                          </div>
                         </div>
                       </div>
-
-                      <div className="text-sm">
-                        <span className="font-medium">Usos:</span>
-                        <span className="ml-2">
-                          {promotion.current_uses}
-                          {promotion.max_uses ? ` / ${promotion.max_uses}` : " / ∞"}
-                        </span>
-                      </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))
+
+                    <div className="flex items-center gap-8 flex-shrink-0 ml-4">
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Vence en</p>
+                        <p className={`text-sm font-semibold ${expiryColor}`}>{expiryText}</p>
+                      </div>
+                      <Switch
+                        checked={promotion.is_active}
+                        onCheckedChange={(checked) => handleTogglePromotion(promotion.id, checked)}
+                        className="data-[state=checked]:bg-[#D1F366]"
+                      />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="p-2 text-gray-400 hover:text-gray-700 transition-colors rounded-lg hover:bg-gray-100">
+                            <MoreVertical className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="rounded-xl">
+                          <DropdownMenuItem onClick={() => handleTogglePromotion(promotion.id, !promotion.is_active)}>
+                            {promotion.is_active ? (<><Pause className="mr-2 h-4 w-4" />Desactivar</>) : (<><Play className="mr-2 h-4 w-4" />Activar</>)}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDeletePromotion(promotion.id)} className="text-red-500 focus:text-red-500">
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Eliminar
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                )
+              })
             )}
           </div>
         </TabsContent>
 
         {/* Rewards Tab */}
-        <TabsContent value="rewards" className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Catálogo de Recompensas</h2>
-            <Dialog open={isRewardDialogOpen} onOpenChange={setIsRewardDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Crear Recompensa
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                  <DialogTitle>Crear Nueva Recompensa</DialogTitle>
-                  <DialogDescription>Añade una recompensa que los clientes puedan canjear con puntos</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleCreateReward}>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="reward-name">Nombre de la Recompensa *</Label>
-                      <Input
-                        id="reward-name"
-                        value={rewardForm.name}
-                        onChange={(e) => setRewardForm({ ...rewardForm, name: e.target.value })}
-                        placeholder="Café gratis"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="reward-description">Descripción</Label>
-                      <Textarea
-                        id="reward-description"
-                        value={rewardForm.description}
-                        onChange={(e) => setRewardForm({ ...rewardForm, description: e.target.value })}
-                        placeholder="Describe la recompensa y sus condiciones"
-                        rows={2}
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="points-cost">Costo en Puntos *</Label>
-                      <Input
-                        id="points-cost"
-                        type="number"
-                        min="1"
-                        value={rewardForm.points_cost}
-                        onChange={(e) =>
-                          setRewardForm({ ...rewardForm, points_cost: Number.parseInt(e.target.value) || 0 })
-                        }
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="reward-type">Tipo de Recompensa *</Label>
-                      <Select
-                        value={rewardForm.reward_type}
-                        onValueChange={(value: "discount" | "free_item" | "service" | "gift") =>
-                          setRewardForm({ ...rewardForm, reward_type: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecciona el tipo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="discount">Descuento</SelectItem>
-                          <SelectItem value="free_item">Producto Gratis</SelectItem>
-                          <SelectItem value="service">Servicio</SelectItem>
-                          <SelectItem value="gift">Regalo</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="reward-value">Valor/Detalles de la Recompensa</Label>
-                      <Input
-                        id="reward-value"
-                        value={rewardForm.reward_value}
-                        onChange={(e) => setRewardForm({ ...rewardForm, reward_value: e.target.value })}
-                        placeholder="10% descuento, Café americano, etc."
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="stock">Stock Disponible</Label>
-                      <Input
-                        id="stock"
-                        type="number"
-                        min="1"
-                        value={rewardForm.stock_quantity}
-                        onChange={(e) => setRewardForm({ ...rewardForm, stock_quantity: e.target.value })}
-                        placeholder="Ilimitado"
-                      />
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        id="reward-active"
-                        checked={rewardForm.is_active}
-                        onCheckedChange={(checked) => setRewardForm({ ...rewardForm, is_active: checked })}
-                      />
-                      <Label htmlFor="reward-active">Recompensa disponible</Label>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setIsRewardDialogOpen(false)}>
-                      Cancelar
-                    </Button>
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Creando..." : "Crear Recompensa"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <TabsContent value="rewards" className="flex-1 overflow-hidden flex flex-col mt-0">
+          <h3 className="font-bold text-lg mb-4 flex-shrink-0">Catálogo de Recompensas</h3>
+          <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
             {rewards.length === 0 ? (
-              <Card className="col-span-full">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Gift className="h-12 w-12 text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No tienes recompensas aún</h3>
-                  <p className="text-muted-foreground text-center mb-4">
-                    Crea recompensas que tus clientes puedan canjear con puntos
-                  </p>
-                  <Button onClick={() => setIsRewardDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Crear mi primera recompensa
-                  </Button>
-                </CardContent>
-              </Card>
+              <div className="bg-white rounded-3xl border border-gray-100 p-12 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 bg-[#D1F366]/20 rounded-2xl flex items-center justify-center mb-4">
+                  <Gift className="w-8 h-8 text-[#1C1C28]" />
+                </div>
+                <h3 className="text-lg font-bold text-gray-800 mb-2">No tienes recompensas aún</h3>
+                <p className="text-sm text-gray-500 mb-5">Crea recompensas que tus clientes puedan canjear con puntos</p>
+                <button
+                  onClick={() => setIsRewardDialogOpen(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Crear mi primera recompensa
+                </button>
+              </div>
             ) : (
               rewards.map((reward) => (
-                <Card key={reward.id} className="hover:shadow-md transition-shadow">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <div className="flex items-center space-x-2">
-                      <div className="p-2 rounded-md bg-primary/10">
-                        <Award className="h-4 w-4 text-primary" />
-                      </div>
-                      <CardTitle className="text-lg">{reward.name}</CardTitle>
+                <div
+                  key={reward.id}
+                  className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-center gap-6 flex-1 min-w-0">
+                    <div className="w-16 h-16 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0">
+                      <Award className="w-7 h-7" />
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-3 mb-1 flex-wrap">
+                        <h4 className="font-bold text-lg text-gray-900 truncate">{reward.name}</h4>
+                        <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0">
+                          {rewardTypeLabels[reward.reward_type]}
+                        </span>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${reward.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                          {reward.is_active ? "Disponible" : "No disponible"}
+                        </span>
+                      </div>
+                      {reward.description && (
+                        <p className="text-xs text-gray-500 mb-1 truncate">{reward.description}</p>
+                      )}
+                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
+                        <span className="font-semibold text-[#1C1C28]">
+                          <Star className="inline w-3 h-3 mr-1 text-amber-500" />
+                          {reward.points_cost} puntos
+                        </span>
+                        {reward.reward_value && <span>{reward.reward_value}</span>}
+                        {reward.stock_quantity && <span>Stock: {reward.current_stock} / {reward.stock_quantity}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+                    <Switch
+                      checked={reward.is_active}
+                      onCheckedChange={(checked) => handleToggleReward(reward.id, checked)}
+                      className="data-[state=checked]:bg-[#D1F366]"
+                    />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
+                        <button className="p-2 text-gray-400 hover:text-gray-700 transition-colors rounded-lg hover:bg-gray-100">
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
+                      <DropdownMenuContent align="end" className="rounded-xl">
                         <DropdownMenuItem onClick={() => handleToggleReward(reward.id, !reward.is_active)}>
-                          {reward.is_active ? (
-                            <>
-                              <Pause className="mr-2 h-4 w-4" />
-                              Desactivar
-                            </>
-                          ) : (
-                            <>
-                              <Play className="mr-2 h-4 w-4" />
-                              Activar
-                            </>
-                          )}
+                          {reward.is_active ? (<><Pause className="mr-2 h-4 w-4" />Desactivar</>) : (<><Play className="mr-2 h-4 w-4" />Activar</>)}
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDeleteReward(reward.id)} className="text-destructive">
+                        <DropdownMenuItem onClick={() => handleDeleteReward(reward.id)} className="text-red-500 focus:text-red-500">
                           <Trash2 className="mr-2 h-4 w-4" />
                           Eliminar
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Badge variant={reward.is_active ? "default" : "secondary"}>
-                        {reward.is_active ? "Disponible" : "No disponible"}
-                      </Badge>
-                      <Badge variant="outline">{rewardTypeLabels[reward.reward_type]}</Badge>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-sm">
-                        <span className="font-medium">Costo:</span>
-                        <span className="ml-2 text-primary font-medium">{reward.points_cost} puntos</span>
-                      </div>
-
-                      {reward.reward_value && (
-                        <div className="text-sm">
-                          <span className="font-medium">Detalles:</span>
-                          <span className="ml-2">{reward.reward_value}</span>
-                        </div>
-                      )}
-
-                      {reward.stock_quantity && (
-                        <div className="text-sm">
-                          <span className="font-medium">Stock:</span>
-                          <span className="ml-2">
-                            {reward.current_stock} / {reward.stock_quantity}
-                          </span>
-                        </div>
-                      )}
-
-                      {reward.description && (
-                        <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                          {reward.description}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))
             )}
           </div>
         </TabsContent>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Configuración del Sistema de Puntos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
-                  <Label htmlFor="points-per-euro">Puntos por Euro Gastado</Label>
-                  <Input id="points-per-euro" type="number" min="1" defaultValue="1" />
-                  <p className="text-xs text-muted-foreground">Cuántos puntos gana el cliente por cada euro gastado</p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="points-expiry">Caducidad de Puntos (días)</Label>
-                  <Input id="points-expiry" type="number" min="30" defaultValue="365" />
-                  <p className="text-xs text-muted-foreground">Días hasta que los puntos caduquen</p>
-                </div>
+        <TabsContent value="settings" className="flex-1 overflow-y-auto hide-scrollbar mt-0">
+          <div className="bg-white rounded-3xl border border-gray-100 p-8">
+            <h3 className="font-bold text-lg text-gray-900 mb-6">Configuración del Sistema de Puntos</h3>
+            <div className="grid gap-6 md:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="points-per-euro" className="text-sm font-semibold text-gray-700">Puntos por Euro Gastado</Label>
+                <Input id="points-per-euro" type="number" min="1" defaultValue="1" className="rounded-xl border-gray-200" />
+                <p className="text-xs text-gray-400">Cuántos puntos gana el cliente por cada euro gastado</p>
               </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="welcome-points">Puntos de Bienvenida</Label>
-                <Input id="welcome-points" type="number" min="0" defaultValue="100" />
-                <p className="text-xs text-muted-foreground">Puntos que recibe un cliente al registrarse</p>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="points-expiry" className="text-sm font-semibold text-gray-700">Caducidad de Puntos (días)</Label>
+                <Input id="points-expiry" type="number" min="30" defaultValue="365" className="rounded-xl border-gray-200" />
+                <p className="text-xs text-gray-400">Días hasta que los puntos caduquen</p>
               </div>
-
-              <Button>Guardar Configuración</Button>
-            </CardContent>
-          </Card>
+            </div>
+            <div className="flex flex-col gap-2 mt-4">
+              <Label htmlFor="welcome-points" className="text-sm font-semibold text-gray-700">Puntos de Bienvenida</Label>
+              <Input id="welcome-points" type="number" min="0" defaultValue="100" className="rounded-xl border-gray-200" />
+              <p className="text-xs text-gray-400">Puntos que recibe un cliente al registrarse</p>
+            </div>
+            <button className="mt-6 px-6 py-3 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors">
+              Guardar Configuración
+            </button>
+          </div>
         </TabsContent>
       </Tabs>
+
+      {/* Create Promotion Dialog */}
+      <Dialog open={isPromotionDialogOpen} onOpenChange={setIsPromotionDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Crear Nueva Promoción</DialogTitle>
+            <DialogDescription>Configura una promoción para atraer y fidelizar clientes</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreatePromotion}>
+            <div className="grid gap-5 py-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="promo-name" className="font-semibold">Nombre de la Promoción *</Label>
+                <Input id="promo-name" value={promotionForm.name} onChange={(e) => setPromotionForm({ ...promotionForm, name: e.target.value })} placeholder="20% de descuento en toda la tienda" required className="rounded-xl" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="promo-description" className="font-semibold">Descripción</Label>
+                <Textarea id="promo-description" value={promotionForm.description} onChange={(e) => setPromotionForm({ ...promotionForm, description: e.target.value })} placeholder="Describe los términos y condiciones de la promoción" rows={3} className="rounded-xl" />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label className="font-semibold">Imagen (opcional)</Label>
+                <div className="flex gap-2 mb-2">
+                  <button type="button" onClick={() => setImageUploadMethod("url")} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${imageUploadMethod === "url" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>URL</button>
+                  <button type="button" onClick={() => setImageUploadMethod("upload")} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${imageUploadMethod === "upload" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Subir archivo</button>
+                </div>
+                {imageUploadMethod === "url" ? (
+                  <Input type="url" placeholder="https://ejemplo.com/imagen.jpg" value={promotionForm.image_url} onChange={(e) => setPromotionForm((prev) => ({ ...prev, image_url: e.target.value }))} className="rounded-xl" />
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    <Input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploading} className="rounded-xl" />
+                    {isUploading && (<div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" />Subiendo imagen...</div>)}
+                    <p className="text-xs text-gray-400">Formatos: JPG, PNG, GIF, WebP. Máximo 5MB.</p>
+                  </div>
+                )}
+                {promotionForm.image_url && (
+                  <div className="mt-2 relative inline-block">
+                    <img src={promotionForm.image_url} alt="Preview" className="w-24 h-24 object-cover rounded-xl border" onError={(e) => { ;(e.target as HTMLImageElement).style.display = "none" }} />
+                    <button type="button" onClick={() => setPromotionForm((prev) => ({ ...prev, image_url: "" }))} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="max-uses" className="font-semibold">Máximo de Usos</Label>
+                <Input id="max-uses" type="number" min="1" value={promotionForm.max_uses} onChange={(e) => setPromotionForm({ ...promotionForm, max_uses: e.target.value })} placeholder="Ilimitado" className="rounded-xl" />
+              </div>
+
+              <div className="grid gap-4 grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="start-date" className="font-semibold">Fecha de Inicio *</Label>
+                  <Input id="start-date" type="datetime-local" value={promotionForm.start_date} onChange={(e) => setPromotionForm({ ...promotionForm, start_date: e.target.value })} required className="rounded-xl" />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="end-date" className="font-semibold">Fecha de Fin *</Label>
+                  <Input id="end-date" type="datetime-local" value={promotionForm.end_date} onChange={(e) => setPromotionForm({ ...promotionForm, end_date: e.target.value })} required className="rounded-xl" />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Switch id="promo-active" checked={promotionForm.is_active} onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, is_active: checked })} className="data-[state=checked]:bg-[#D1F366]" />
+                <Label htmlFor="promo-active" className="font-medium text-gray-700">Activar promoción inmediatamente</Label>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsPromotionDialogOpen(false)} className="rounded-xl">Cancelar</Button>
+              <button type="submit" disabled={isLoading} className="px-6 py-2.5 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors disabled:opacity-60">
+                {isLoading ? "Creando..." : "Crear Promoción"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Reward Dialog */}
+      <Dialog open={isRewardDialogOpen} onOpenChange={setIsRewardDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold">Crear Nueva Recompensa</DialogTitle>
+            <DialogDescription>Añade una recompensa que los clientes puedan canjear con puntos</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateReward}>
+            <div className="grid gap-4 py-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="reward-name" className="font-semibold">Nombre de la Recompensa *</Label>
+                <Input id="reward-name" value={rewardForm.name} onChange={(e) => setRewardForm({ ...rewardForm, name: e.target.value })} placeholder="Café gratis" required className="rounded-xl" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="reward-description" className="font-semibold">Descripción</Label>
+                <Textarea id="reward-description" value={rewardForm.description} onChange={(e) => setRewardForm({ ...rewardForm, description: e.target.value })} placeholder="Describe la recompensa y sus condiciones" rows={2} className="rounded-xl" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="points-cost" className="font-semibold">Costo en Puntos *</Label>
+                <Input id="points-cost" type="number" min="1" value={rewardForm.points_cost} onChange={(e) => setRewardForm({ ...rewardForm, points_cost: Number.parseInt(e.target.value) || 0 })} required className="rounded-xl" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="reward-type" className="font-semibold">Tipo de Recompensa *</Label>
+                <Select value={rewardForm.reward_type} onValueChange={(value: "discount" | "free_item" | "service" | "gift") => setRewardForm({ ...rewardForm, reward_type: value })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue placeholder="Selecciona el tipo" /></SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="discount">Descuento</SelectItem>
+                    <SelectItem value="free_item">Producto Gratis</SelectItem>
+                    <SelectItem value="service">Servicio</SelectItem>
+                    <SelectItem value="gift">Regalo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="reward-value" className="font-semibold">Valor/Detalles</Label>
+                <Input id="reward-value" value={rewardForm.reward_value} onChange={(e) => setRewardForm({ ...rewardForm, reward_value: e.target.value })} placeholder="10% descuento, Café americano, etc." className="rounded-xl" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="stock" className="font-semibold">Stock Disponible</Label>
+                <Input id="stock" type="number" min="1" value={rewardForm.stock_quantity} onChange={(e) => setRewardForm({ ...rewardForm, stock_quantity: e.target.value })} placeholder="Ilimitado" className="rounded-xl" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Switch id="reward-active" checked={rewardForm.is_active} onCheckedChange={(checked) => setRewardForm({ ...rewardForm, is_active: checked })} className="data-[state=checked]:bg-[#D1F366]" />
+                <Label htmlFor="reward-active" className="font-medium text-gray-700">Recompensa disponible</Label>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={() => setIsRewardDialogOpen(false)} className="rounded-xl">Cancelar</Button>
+              <button type="submit" disabled={isLoading} className="px-6 py-2.5 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors disabled:opacity-60">
+                {isLoading ? "Creando..." : "Crear Recompensa"}
+              </button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

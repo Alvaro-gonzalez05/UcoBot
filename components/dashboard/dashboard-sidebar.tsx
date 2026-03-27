@@ -31,8 +31,6 @@ const baseNavigation: NavigationItem[] = [
   { name: "Reservas", href: "/dashboard/reservas", icon: "calendar_month", requiresFeature: "take_reservations" },
   { name: "Promociones", href: "/dashboard/promociones", icon: "local_offer" },
   { name: "Automatizaciones", href: "/dashboard/automatizaciones", icon: "account_tree" },
-  { name: "Pruebas", href: "/dashboard/pruebas", icon: "science" },
-  { name: "Ajustes", href: "/dashboard/settings", icon: "settings" },
   { name: "Admin", href: "/dashboard/admin", icon: "shield", requiresAdmin: true },
 ]
 

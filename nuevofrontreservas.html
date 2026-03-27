@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RIGA - Gestión de Reuniones V1</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#D1F366",
+                        "primary-dark": "#B3D93C",
+                        "sidebar-bg": "#1C1C28",
+                        "background-light": "#F5F5F7",
+                        "background-dark": "#121212",
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#1E1E2E",
+                        "text-main-light": "#1C1C28",
+                        "text-main-dark": "#E2E2E2",
+                        "text-muted-light": "#8A8A99",
+                        "text-muted-dark": "#A1A1AA",
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        DEFAULT: "1rem",
+                        'xl': '1.5rem',
+                        '2xl': '2rem',
+                        '3xl': '2.5rem',
+                    },
+                },
+            },
+        };
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar-item:hover { background-color: rgba(255, 255, 255, 0.05); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .calendar-day:hover { background-color: #D1F366; color: #1C1C28; cursor: pointer; }
+        .active-day { background-color: #1C1C28; color: white; border-radius: 50%; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-main-light dark:text-text-main-dark h-screen overflow-hidden flex transition-colors duration-300">
+<aside class="w-64 bg-sidebar-bg text-white flex-shrink-0 flex flex-col justify-between p-6 m-4 rounded-3xl h-[calc(100vh-2rem)]">
+<div>
+<div class="flex items-center gap-3 mb-10 px-2">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-sidebar-bg font-black text-xl">R</div>
+<h1 class="text-2xl font-bold tracking-tight uppercase">RIGA</h1>
+</div>
+<nav class="space-y-2">
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 bg-primary text-sidebar-bg rounded-xl font-semibold transition-all shadow-lg shadow-primary/20" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span>Reuniones</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">forum</span>
+<span>Mensajes</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">shopping_cart</span>
+<span>Pedidos</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>Clientes</span>
+</a>
+</nav>
+</div>
+<div class="p-4 bg-white/5 rounded-2xl">
+<div class="flex items-center gap-3">
+<img alt="User Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-primary/20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAv_z6H6Eg9GZKSY5_9TgVxAiJuF3kQgUXbfhF82Mnms_Ou3UIXK8WjWrGCM57U2Bz1VJPS0a9bxyQK_6vrpTjJLKrE1sUum6tTvhF_QFPeKhZqW5gYpz9Ai0qsmEQuwAG2FvzvSaB10G-zrHn_luiatzo3Nhfwzdbd0s6DcEgKYEessa8SdT9OLJYziQ35ypFNxgC4jSWob0AMMBWQJloSDK8PXLBszx0m_Sids0SwcuZHA9Ulg0siHeMd9HnV-ChF6Wfx3j1PlRg"/>
+<div>
+<p class="text-sm font-bold">Claudio</p>
+<p class="text-[10px] text-gray-500 uppercase">Administrador</p>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col h-[calc(100vh-2rem)] my-4 mr-4 overflow-hidden">
+<div class="grid grid-cols-3 gap-6 mb-6">
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined">event_note</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 font-medium uppercase">Total Citas</p>
+<p class="text-2xl font-bold">124</p>
+</div>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined">pending_actions</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 font-medium uppercase">Pendientes</p>
+<p class="text-2xl font-bold">18</p>
+</div>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined">check_circle</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 font-medium uppercase">Confirmadas</p>
+<p class="text-2xl font-bold">86</p>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 flex gap-6 overflow-hidden">
+<div class="w-80 flex flex-col gap-6 h-full">
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-bold text-sm">Octubre 2023</h3>
+<div class="flex gap-1">
+<button class="p-1 hover:bg-gray-100 rounded-lg"><span class="material-symbols-outlined text-sm">chevron_left</span></button>
+<button class="p-1 hover:bg-gray-100 rounded-lg"><span class="material-symbols-outlined text-sm">chevron_right</span></button>
+</div>
+</div>
+<div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-400 mb-2">
+<div>LU</div><div>MA</div><div>MI</div><div>JU</div><div>VI</div><div>SA</div><div>DO</div>
+</div>
+<div class="grid grid-cols-7 gap-1 text-center text-xs">
+<div class="p-2 text-gray-300">26</div><div class="p-2 text-gray-300">27</div><div class="p-2 text-gray-300">28</div><div class="p-2 text-gray-300">29</div><div class="p-2 text-gray-300">30</div><div class="p-2 calendar-day rounded-lg">1</div><div class="p-2 calendar-day rounded-lg">2</div>
+<div class="p-2 calendar-day rounded-lg">3</div><div class="p-2 calendar-day rounded-lg">4</div><div class="p-2 calendar-day rounded-lg">5</div><div class="p-2 calendar-day rounded-lg">6</div><div class="p-2 calendar-day rounded-lg">7</div><div class="p-2 calendar-day rounded-lg">8</div><div class="p-2 calendar-day rounded-lg">9</div>
+<div class="p-2 calendar-day rounded-lg">10</div><div class="p-2 calendar-day rounded-lg">11</div><div class="p-2 calendar-day rounded-lg active-day">12</div><div class="p-2 calendar-day rounded-lg">13</div><div class="p-2 calendar-day rounded-lg">14</div><div class="p-2 calendar-day rounded-lg">15</div><div class="p-2 calendar-day rounded-lg">16</div>
+<div class="p-2 calendar-day rounded-lg">17</div><div class="p-2 calendar-day rounded-lg">18</div><div class="p-2 calendar-day rounded-lg">19</div><div class="p-2 calendar-day rounded-lg">20</div><div class="p-2 calendar-day rounded-lg">21</div><div class="p-2 calendar-day rounded-lg">22</div><div class="p-2 calendar-day rounded-lg">23</div>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<h3 class="font-bold text-sm mb-4">Filtrar por Local</h3>
+<div class="space-y-3">
+<div class="relative">
+<select class="w-full pl-4 pr-10 py-2.5 bg-gray-50 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary appearance-none cursor-pointer">
+<option>Todas las sedes</option>
+<option>Sucursal Centro</option>
+<option>Showroom Norte</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">expand_more</span>
+</div>
+<div class="flex flex-col gap-2">
+<label class="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300" type="checkbox"/>
+<span class="text-sm font-medium">Sucursal Centro</span>
+</label>
+<label class="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors">
+<input checked="" class="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300" type="checkbox"/>
+<span class="text-sm font-medium">Showroom Norte</span>
+</label>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-5">
+<img alt="Juan Pérez" class="w-16 h-16 rounded-2xl object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAv_z6H6Eg9GZKSY5_9TgVxAiJuF3kQgUXbfhF82Mnms_Ou3UIXK8WjWrGCM57U2Bz1VJPS0a9bxyQK_6vrpTjJLKrE1sUum6tTvhF_QFPeKhZqW5gYpz9Ai0qsmEQuwAG2FvzvSaB10G-zrHn_luiatzo3Nhfwzdbd0s6DcEgKYEessa8SdT9OLJYziQ35ypFNxgC4jSWob0AMMBWQJloSDK8PXLBszx0m_Sids0SwcuZHA9Ulg0siHeMd9HnV-ChF6Wfx3j1PlRg"/>
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">Juan Pérez</h4>
+<span class="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold uppercase tracking-wider">Pendiente</span>
+</div>
+<div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-500">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">schedule</span>
+<span>10:00 AM - 11:00 AM</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">store</span>
+<span>Showroom Norte</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">category</span>
+<span>Asesoría Personalizada</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-6 py-2.5 bg-primary text-sidebar-bg rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all">Confirmar</button>
+<button class="px-6 py-2.5 bg-gray-50 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all">Reprogramar</button>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-5">
+<img alt="Maria Garcia" class="w-16 h-16 rounded-2xl object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-OCvP2-couM7znnQij9k1JFXyKOYEnHgkPSMmka2_acn6ZOAZpQs8csACRjJCbAe20zTwHcug5k8Lr6AZ_POx2SRS46ywHjL8NoTXHxCOU61VA-gXO9cL7VJaVih-PHT_w-bdCfwZWyIOGMsc1SIHDy3KhhhYmUxDq1a5g2yKbUiGELRdjcodHYP3tKkNtRcvKfTB8-l3ZVhQSh4TupQqMxWgKAKZr6PIiMioOo2DmwxGa23w5VTYkx72qDZFBwCcLAS-B9yHRR4"/>
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">Maria Garcia</h4>
+<span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-wider">Confirmada</span>
+</div>
+<div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-500">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">schedule</span>
+<span>11:30 AM - 12:30 PM</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">store</span>
+<span>Sucursal Centro</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">category</span>
+<span>Prueba de Producto</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-6 py-2.5 bg-gray-50 text-gray-400 rounded-xl font-bold text-sm cursor-not-allowed" disabled="">Confirmada</button>
+<button class="px-6 py-2.5 bg-gray-50 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all">Reprogramar</button>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-5">
+<div class="w-16 h-16 rounded-2xl bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xl uppercase">RC</div>
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">Roberto Carlos</h4>
+<span class="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold uppercase tracking-wider">Pendiente</span>
+</div>
+<div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-500">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">schedule</span>
+<span>03:00 PM - 04:00 PM</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">store</span>
+<span>Showroom Norte</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">category</span>
+<span>Asesoría Personalizada</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-6 py-2.5 bg-primary text-sidebar-bg rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary-dark transition-all">Confirmar</button>
+<button class="px-6 py-2.5 bg-gray-50 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all">Reprogramar</button>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-5">
+<img alt="Lucía Sosa" class="w-16 h-16 rounded-2xl object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAv_z6H6Eg9GZKSY5_9TgVxAiJuF3kQgUXbfhF82Mnms_Ou3UIXK8WjWrGCM57U2Bz1VJPS0a9bxyQK_6vrpTjJLKrE1sUum6tTvhF_QFPeKhZqW5gYpz9Ai0qsmEQuwAG2FvzvSaB10G-zrHn_luiatzo3Nhfwzdbd0s6DcEgKYEessa8SdT9OLJYziQ35ypFNxgC4jSWob0AMMBWQJloSDK8PXLBszx0m_Sids0SwcuZHA9Ulg0siHeMd9HnV-ChF6Wfx3j1PlRg"/>
+<div>
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">Lucía Sosa</h4>
+<span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-wider">Confirmada</span>
+</div>
+<div class="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-gray-500">
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">schedule</span>
+<span>04:30 PM - 05:30 PM</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">store</span>
+<span>Sucursal Centro</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base">category</span>
+<span>Retiro en Tienda</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-6 py-2.5 bg-gray-50 text-gray-400 rounded-xl font-bold text-sm cursor-not-allowed" disabled="">Confirmada</button>
+<button class="px-6 py-2.5 bg-gray-50 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-100 transition-all">Reprogramar</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+
+</body></html>

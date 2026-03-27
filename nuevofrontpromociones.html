@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>RIGA - Gestión de Promociones V1</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#D1F366",
+                        "primary-dark": "#B3D93C",
+                        "sidebar-bg": "#1C1C28",
+                        "background-light": "#F5F5F7",
+                        "background-dark": "#121212",
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#1E1E2E",
+                        "text-main-light": "#1C1C28",
+                        "text-main-dark": "#E2E2E2",
+                        "text-muted-light": "#8A8A99",
+                        "text-muted-dark": "#A1A1AA",
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        DEFAULT: "1rem",
+                        'xl': '1.5rem',
+                        '2xl': '2rem',
+                        '3xl': '2.5rem',
+                    },
+                },
+            },
+        };
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar-item:hover { background-color: rgba(255, 255, 255, 0.05); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .toggle-checkbox:checked {
+            @apply right-0 border-primary bg-primary;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            @apply bg-primary/20 border-primary/30;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-main-light dark:text-text-main-dark h-screen overflow-hidden flex transition-colors duration-300">
+<aside class="w-64 bg-sidebar-bg text-white flex-shrink-0 flex flex-col justify-between p-6 m-4 rounded-3xl h-[calc(100vh-2rem)]">
+<div>
+<div class="flex items-center gap-3 mb-10 px-2">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-sidebar-bg font-black text-xl">R</div>
+<h1 class="text-2xl font-bold tracking-tight uppercase">RIGA</h1>
+</div>
+<nav class="space-y-2">
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span>Reuniones</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 bg-primary text-sidebar-bg rounded-xl font-semibold transition-all shadow-lg shadow-primary/20" href="#">
+<span class="material-symbols-outlined">sell</span>
+<span>Promociones</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">forum</span>
+<span>Mensajes</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">shopping_cart</span>
+<span>Pedidos</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-xl transition-colors hover:text-white" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>Clientes</span>
+</a>
+</nav>
+</div>
+<div class="p-4 bg-white/5 rounded-2xl">
+<div class="flex items-center gap-3">
+<img alt="User Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-primary/20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAv_z6H6Eg9GZKSY5_9TgVxAiJuF3kQgUXbfhF82Mnms_Ou3UIXK8WjWrGCM57U2Bz1VJPS0a9bxyQK_6vrpTjJLKrE1sUum6tTvhF_QFPeKhZqW5gYpz9Ai0qsmEQuwAG2FvzvSaB10G-zrHn_luiatzo3Nhfwzdbd0s6DcEgKYEessa8SdT9OLJYziQ35ypFNxgC4jSWob0AMMBWQJloSDK8PXLBszx0m_Sids0SwcuZHA9Ulg0siHeMd9HnV-ChF6Wfx3j1PlRg"/>
+<div>
+<p class="text-sm font-bold">Claudio</p>
+<p class="text-[10px] text-gray-500 uppercase">Administrador</p>
+</div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col h-[calc(100vh-2rem)] my-4 mr-4 overflow-hidden">
+<header class="flex justify-between items-center mb-6">
+<div>
+<h2 class="text-2xl font-bold">Gestión de Promociones</h2>
+<p class="text-sm text-text-muted-light">Crea y administra tus campañas de descuentos.</p>
+</div>
+<button class="flex items-center gap-2 px-6 py-3 bg-primary text-sidebar-bg rounded-xl font-bold transition-all shadow-lg shadow-primary/20 hover:bg-primary-dark">
+<span class="material-symbols-outlined">add</span>
+<span>Nueva Promoción</span>
+</button>
+</header>
+<div class="grid grid-cols-3 gap-6 mb-6">
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined">campaign</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 font-medium uppercase">Promociones Activas</p>
+<p class="text-2xl font-bold">12</p>
+</div>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined">confirmation_number</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 font-medium uppercase">Cupones Canjeados</p>
+<p class="text-2xl font-bold">1,284</p>
+</div>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center">
+<span class="material-symbols-outlined">savings</span>
+</div>
+<div>
+<p class="text-xs text-gray-500 font-medium uppercase">Ahorro Total Clientes</p>
+<p class="text-2xl font-bold">$14,250</p>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-1 flex flex-col overflow-hidden">
+<h3 class="font-bold text-lg mb-4">Mis Promociones</h3>
+<div class="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-6 flex-1">
+<div class="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary-dark">
+<span class="material-symbols-outlined text-3xl">percent</span>
+</div>
+<div class="flex-1 max-w-md">
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">Descuento de Bienvenida</h4>
+<span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-bold uppercase tracking-wider">Porcentaje</span>
+</div>
+<div class="flex flex-col gap-2 mt-3">
+<div class="flex justify-between text-xs font-medium text-gray-500">
+<span>Límite de uso</span>
+<span>450 / 500 canjes</span>
+</div>
+<div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 90%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-10">
+<div class="text-right">
+<p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Vence en</p>
+<p class="text-sm font-semibold">12 días</p>
+</div>
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer focus:outline-none transition-all duration-300" id="toggle1" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-200 border border-gray-300 cursor-pointer" for="toggle1"></label>
+</div>
+<button class="p-2 text-gray-400 hover:text-sidebar-bg transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-6 flex-1">
+<div class="w-16 h-16 rounded-2xl bg-green-50 text-green-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl">payments</span>
+</div>
+<div class="flex-1 max-w-md">
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">Cupón Verano 2023</h4>
+<span class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-bold uppercase tracking-wider">Monto Fijo</span>
+</div>
+<div class="flex flex-col gap-2 mt-3">
+<div class="flex justify-between text-xs font-medium text-gray-500">
+<span>Límite de uso</span>
+<span>120 / 1000 canjes</span>
+</div>
+<div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 12%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-10">
+<div class="text-right">
+<p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Vence en</p>
+<p class="text-sm font-semibold">45 días</p>
+</div>
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer focus:outline-none transition-all duration-300" id="toggle2" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-200 border border-gray-300 cursor-pointer" for="toggle2"></label>
+</div>
+<button class="p-2 text-gray-400 hover:text-sidebar-bg transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-6 flex-1">
+<div class="w-16 h-16 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl">group_add</span>
+</div>
+<div class="flex-1 max-w-md">
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">2x1 en Accesorios</h4>
+<span class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold uppercase tracking-wider">BOGO</span>
+</div>
+<div class="flex flex-col gap-2 mt-3">
+<div class="flex justify-between text-xs font-medium text-gray-500">
+<span>Límite de uso</span>
+<span>245 / 300 canjes</span>
+</div>
+<div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 82%"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-10">
+<div class="text-right">
+<p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Vence en</p>
+<p class="text-sm font-semibold text-red-500">Mañana</p>
+</div>
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer focus:outline-none transition-all duration-300" id="toggle3" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-200 border border-gray-300 cursor-pointer" for="toggle3"></label>
+</div>
+<button class="p-2 text-gray-400 hover:text-sidebar-bg transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+<div class="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow">
+<div class="flex items-center gap-6 flex-1">
+<div class="w-16 h-16 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl">shopping_bag</span>
+</div>
+<div class="flex-1 max-w-md">
+<div class="flex items-center gap-3 mb-1">
+<h4 class="font-bold text-lg">Envío Gratis</h4>
+<span class="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-[10px] font-bold uppercase tracking-wider">Costo Cero</span>
+</div>
+<div class="flex flex-col gap-2 mt-3">
+<div class="flex justify-between text-xs font-medium text-gray-500">
+<span>Límite de uso</span>
+<span>Sin límite</span>
+</div>
+<div class="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full w-full"></div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-10">
+<div class="text-right">
+<p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Vence en</p>
+<p class="text-sm font-semibold">Indefinido</p>
+</div>
+<div class="relative inline-block w-12 mr-2 align-middle select-none transition duration-200 ease-in">
+<input checked="" class="toggle-checkbox absolute block w-6 h-6 rounded-full bg-white border-4 appearance-none cursor-pointer focus:outline-none transition-all duration-300" id="toggle4" name="toggle" type="checkbox"/>
+<label class="toggle-label block overflow-hidden h-6 rounded-full bg-gray-200 border border-gray-300 cursor-pointer" for="toggle4"></label>
+</div>
+<button class="p-2 text-gray-400 hover:text-sidebar-bg transition-colors">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+
+</body></html>

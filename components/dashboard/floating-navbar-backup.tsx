@@ -65,11 +65,6 @@ const rightNavigation = [
     href: "/dashboard/negocio",
     icon: Building2,
   },
-  {
-    name: "Pruebas",
-    href: "/dashboard/pruebas",
-    icon: TestTube,
-  },
 ]
 
 interface FloatingNavbarProps {
@@ -208,15 +203,7 @@ export function FloatingNavbar({ user, profile }: FloatingNavbarProps) {
                 Mi Negocio
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/dashboard/pruebas" className={cn(
-                "w-full cursor-pointer",
-                isActive("/dashboard/pruebas") && "bg-accent"
-              )}>
-                <TestTube className="mr-2 h-4 w-4" />
-                Pruebas
-              </Link>
-            </DropdownMenuItem>
+
           </DropdownMenuContent>
         </DropdownMenu>
 
