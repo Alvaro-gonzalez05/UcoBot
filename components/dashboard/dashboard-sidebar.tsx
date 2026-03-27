@@ -27,6 +27,7 @@ const baseNavigation: NavigationItem[] = [
   { name: "Chatbots", href: "/dashboard/bots", icon: "forum" },
   { name: "Mensajes", href: "/dashboard/chat", icon: "chat_bubble" },
   { name: "Clientes", href: "/dashboard/clientes", icon: "group" },
+  { name: "Punto de venta", href: "/dashboard/punto-de-venta", icon: "point_of_sale", requiresFeature: "take_orders" },
   { name: "Pedidos", href: "/dashboard/pedidos", icon: "shopping_cart", requiresFeature: "take_orders" },
   { name: "Reservas", href: "/dashboard/reservas", icon: "calendar_month", requiresFeature: "take_reservations" },
   { name: "Promociones", href: "/dashboard/promociones", icon: "local_offer" },

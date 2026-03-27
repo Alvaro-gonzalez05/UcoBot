@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, Check, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -64,6 +64,23 @@ interface Message {
   message_type: string
   metadata?: any
   is_read?: boolean
+}
+
+interface ClientProfile {
+  id: string
+  name: string
+  phone?: string | null
+  instagram_username?: string | null
+  points?: number | null
+  total_purchases?: number | null
+  last_purchase_date?: string | null
+}
+
+interface ClientOrder {
+  id: string
+  status: string
+  total_amount: number
+  created_at: string
 }
 
 function ReplyMessage({ 
@@ -217,6 +234,10 @@ export function ChatView({ userId }: ChatViewProps) {
   const [timeRemaining, setTimeRemaining] = useState<string>("")
   const [pendingPause, setPendingPause] = useState<{ duration: string | null } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
+  const [isLoadingClientDetails, setIsLoadingClientDetails] = useState(false)
+  const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null)
+  const [clientOrders, setClientOrders] = useState<ClientOrder[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
@@ -597,6 +618,101 @@ export function ChatView({ userId }: ChatViewProps) {
     }
   }, [selectedConversation, supabase, refreshKey])
 
+  // Fetch client details and recent orders for right-side panel
+  useEffect(() => {
+    if (!selectedConversation) {
+      setClientProfile(null)
+      setClientOrders([])
+      setIsClientDetailsOpen(false)
+      return
+    }
+
+    let isCancelled = false
+
+    const fetchClientDetails = async () => {
+      setIsLoadingClientDetails(true)
+
+      try {
+        let foundClient: ClientProfile | null = null
+
+        if (selectedConversation.client_id) {
+          const { data } = await supabase
+            .from("clients")
+            .select("id, name, phone, instagram_username, points, total_purchases, last_purchase_date")
+            .eq("id", selectedConversation.client_id)
+            .maybeSingle()
+
+          foundClient = (data as ClientProfile | null) ?? null
+        }
+
+        if (!foundClient && selectedConversation.platform === "whatsapp" && selectedConversation.client_phone) {
+          const { data } = await supabase
+            .from("clients")
+            .select("id, name, phone, instagram_username, points, total_purchases, last_purchase_date")
+            .eq("phone", selectedConversation.client_phone)
+            .maybeSingle()
+
+          foundClient = (data as ClientProfile | null) ?? null
+        }
+
+        if (!foundClient && selectedConversation.platform === "instagram" && selectedConversation.client_instagram_id) {
+          const { data } = await supabase
+            .from("clients")
+            .select("id, name, phone, instagram_username, points, total_purchases, last_purchase_date")
+            .eq("instagram", selectedConversation.client_instagram_id)
+            .maybeSingle()
+
+          foundClient = (data as ClientProfile | null) ?? null
+        }
+
+        let recentOrders: ClientOrder[] = []
+
+        if (foundClient?.id) {
+          const { data } = await supabase
+            .from("orders")
+            .select("id, status, total_amount, created_at")
+            .eq("user_id", userId)
+            .eq("client_id", foundClient.id)
+            .order("created_at", { ascending: false })
+            .limit(5)
+
+          recentOrders = (data as ClientOrder[] | null) ?? []
+        } else {
+          const { data } = await supabase
+            .from("orders")
+            .select("id, status, total_amount, created_at")
+            .eq("user_id", userId)
+            .eq("conversation_id", selectedConversation.id)
+            .order("created_at", { ascending: false })
+            .limit(5)
+
+          recentOrders = (data as ClientOrder[] | null) ?? []
+        }
+
+        if (!isCancelled) {
+          setClientProfile(foundClient)
+          setClientOrders(recentOrders)
+        }
+      } catch (error) {
+        console.error("Error fetching client details:", error)
+        if (!isCancelled) {
+          setClientProfile(null)
+          setClientOrders([])
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingClientDetails(false)
+        }
+      }
+    }
+
+    fetchClientDetails()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [selectedConversation, supabase, userId])
+
   // Auto-scroll to bottom
   useEffect(() => {
     if (!scrollRef.current) return
@@ -920,6 +1036,53 @@ export function ChatView({ userId }: ChatViewProps) {
     return `/api/media/proxy?mediaId=${mediaId}&botId=${selectedConversation.bot_id}`
   }
 
+  const formatCurrency = (value: number | null | undefined) => {
+    if (!value) return "$0"
+    return new Intl.NumberFormat("es-AR", {
+      style: "currency",
+      currency: "ARS",
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
+
+  const orderStatusLabel: Record<string, string> = {
+    pending: "Pendiente",
+    confirmed: "Confirmado",
+    preparing: "En preparacion",
+    ready: "Listo",
+    delivered: "Entregado",
+    cancelled: "Cancelado",
+  }
+
+  const clientDisplayName = clientProfile?.name || selectedConversation?.client_name || "Cliente"
+  const inferredInstagramUsername = (() => {
+    if (clientProfile?.instagram_username) {
+      const username = clientProfile.instagram_username.trim()
+      return username.startsWith("@") ? username : `@${username}`
+    }
+
+    if (selectedConversation?.platform === "instagram" && selectedConversation.client_name) {
+      const fromName = selectedConversation.client_name.trim()
+      if (!fromName.includes(" ")) {
+        return fromName.startsWith("@") ? fromName : `@${fromName}`
+      }
+    }
+
+    return "Usuario no disponible"
+  })()
+  const clientContactDisplay = selectedConversation?.platform === "instagram"
+    ? inferredInstagramUsername
+    : (clientProfile?.phone || selectedConversation?.client_phone || "Sin telefono")
+  const clientPoints = clientProfile?.points || 0
+  const recentOrdersSlice = clientOrders.slice(0, 2)
+  const recurringOrderCount = clientOrders.length
+  const totalPurchases = clientProfile?.total_purchases || clientOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0)
+
+  const latestClientMessage = [...messages].reverse().find((msg) => msg.sender_type === "client")
+  const internalNote = latestClientMessage?.content
+    ? `\"${latestClientMessage.content.slice(0, 120)}${latestClientMessage.content.length > 120 ? "..." : ""}\"`
+    : "\"Sin nota interna para este cliente.\""
+
   return (
     <div className="flex h-full md:gap-4 bg-background relative overflow-hidden md:overflow-visible">
       {/* Sidebar - Conversation List */}
@@ -1040,18 +1203,25 @@ export function ChatView({ userId }: ChatViewProps) {
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <Avatar>
-                  <AvatarFallback className={cn(
-                    "text-white",
-                    selectedConversation.platform === 'whatsapp' ? "bg-green-500" : "bg-pink-500"
-                  )}>
-                    {getInitials(selectedConversation.client_name)}
-                  </AvatarFallback>
-                </Avatar>
+                <button
+                  type="button"
+                  onClick={() => setIsClientDetailsOpen((prev) => !prev)}
+                  className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  title="Ver informacion del cliente"
+                >
+                  <Avatar className="transition-transform hover:scale-105">
+                    <AvatarFallback className={cn(
+                      "text-white",
+                      selectedConversation.platform === 'whatsapp' ? "bg-green-500" : "bg-pink-500"
+                    )}>
+                      {getInitials(selectedConversation.client_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
                 <div>
                   <h3 className="font-medium">{selectedConversation.client_name}</h3>
                   <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    {selectedConversation.client_phone}
+                    {selectedConversation.platform === 'instagram' ? inferredInstagramUsername : (selectedConversation.client_phone || "Sin telefono")}
                     {selectedConversation.platform === 'whatsapp' && <span className="text-green-600 ml-1">● WhatsApp</span>}
                     {selectedConversation.platform === 'instagram' && <span className="text-pink-600 ml-1">● Instagram</span>}
                   </p>
@@ -1311,6 +1481,93 @@ export function ChatView({ userId }: ChatViewProps) {
           </div>
         )}
       </Card>
+
+      {selectedConversation && isClientDetailsOpen && (
+        <Card className="absolute inset-y-0 right-0 z-30 w-full max-w-[340px] rounded-none border-l bg-[#f5f5f3] md:static md:w-[320px] md:max-w-none md:rounded-lg md:border">
+          <ScrollArea className="h-full">
+            <div className="p-4 sm:p-5">
+              <div className="mb-6 flex items-center justify-between">
+                <h3 className="text-xl font-semibold text-slate-800">Informacion del Cliente</h3>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setIsClientDetailsOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="mb-6 flex flex-col items-center text-center">
+                <Avatar className="h-20 w-20 border-4 border-white shadow-sm">
+                  <AvatarFallback className={cn(
+                    "text-xl text-white",
+                    selectedConversation.platform === 'whatsapp' ? "bg-green-500" : "bg-pink-500"
+                  )}>
+                    {getInitials(clientDisplayName)}
+                  </AvatarFallback>
+                </Avatar>
+                <h4 className="mt-3 text-2xl font-semibold text-slate-800">{clientDisplayName}</h4>
+                <p className="text-sm text-slate-500">{clientContactDisplay}</p>
+              </div>
+
+              <div className="mb-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border bg-white p-4">
+                  <p className="text-xs text-slate-400">PUNTOS</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-800 flex items-center gap-1">
+                    <Star className="h-4 w-4 text-lime-500" />
+                    {clientPoints.toLocaleString("es-AR")}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-white p-4">
+                  <p className="text-xs text-slate-400">Total Pedidos</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-800 flex items-center gap-1">
+                    <ShoppingBag className="h-4 w-4 text-slate-500" />
+                    {recurringOrderCount}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mb-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold tracking-widest text-slate-400">ULTIMOS PEDIDOS</p>
+                  <span className="text-xs font-medium text-lime-600">Ver todos</span>
+                </div>
+                {isLoadingClientDetails ? (
+                  <div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Cargando pedidos...</div>
+                ) : recentOrdersSlice.length > 0 ? (
+                  <div className="space-y-3">
+                    {recentOrdersSlice.map((order) => (
+                      <div key={order.id} className="flex items-center justify-between rounded-2xl border bg-white p-3">
+                        <div>
+                          <p className="font-semibold text-slate-800">#{order.id.slice(0, 8)}</p>
+                          <p className="text-xs text-emerald-600">{orderStatusLabel[order.status] || "Pedido"}</p>
+                        </div>
+                        <p className="font-semibold text-slate-700">{formatCurrency(order.total_amount)}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">
+                    Este cliente aun no tiene pedidos registrados.
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-lime-200/70 bg-white/80 p-4">
+                <p className="text-xs font-semibold tracking-widest text-slate-400 flex items-center gap-1">
+                  <StickyNote className="h-4 w-4 text-lime-500" />
+                  NOTA INTERNA
+                </p>
+                <p className="mt-2 text-sm italic text-slate-600">{internalNote}</p>
+                {totalPurchases > 0 && (
+                  <p className="mt-3 text-xs font-medium text-slate-500">Facturacion historica: {formatCurrency(totalPurchases)}</p>
+                )}
+              </div>
+            </div>
+          </ScrollArea>
+        </Card>
+      )}
 
       <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
         <DialogContent>
