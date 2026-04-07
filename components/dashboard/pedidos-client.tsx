@@ -118,6 +118,14 @@ export function PedidosClient({
             const newOrder = payload.new as Order
             toast.success(`¡Nuevo pedido recibido! (#${newOrder.id.slice(0, 5)})`)
             setOrders(prev => [newOrder, ...prev])
+            
+            // Reproducir sonido de nuevo pedido ("dinero")
+            try {
+              const audio = new Audio('/sounds/cash-register.mp3')
+              audio.play().catch(e => console.log('Navegador bloqueó el autoplay del audio:', e))
+            } catch (err) {
+              console.error('Error cargando el audio', err)
+            }
           } else if (payload.eventType === 'UPDATE') {
             const updatedOrder = payload.new as Order
             setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o))
