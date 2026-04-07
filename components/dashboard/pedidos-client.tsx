@@ -106,6 +106,9 @@ export function PedidosClient({
 
   const pendingCardsRef = useRef<(HTMLDivElement | null)[]>([])
 
+  // Make sure we have a reliable audio element
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
   useEffect(() => {
     // Setup Supabase Realtime for orders table
     const channel = supabase
@@ -119,12 +122,16 @@ export function PedidosClient({
             toast.success(`¡Nuevo pedido recibido! (#${newOrder.id.slice(0, 5)})`)
             setOrders(prev => [newOrder, ...prev])
             
-            // Reproducir sonido de nuevo pedido ("dinero")
-            try {
-              const audio = new Audio('/sounds/cash-register.mp3')
-              audio.play().catch(e => console.log('Navegador bloqueó el autoplay del audio:', e))
-            } catch (err) {
-              console.error('Error cargando el audio', err)
+            // Reproducir sonido usando la etiqueta <audio> fijada al dom
+            if (audioRef.current) {
+              audioRef.current.currentTime = 0
+              audioRef.current.volume = 1.0
+              audioRef.current.play().catch(e => {
+                console.log('Autoplay bloqueado. Has clic en cualquier parte de la pantalla antes de la primera venta para autorizar el sonido.', e)
+                toast('Notificación de audio silenciada', {
+                  description: 'Haz clic en cualquier parte de la pantalla de Pedidos para permitir notificaciones sonoras.',
+                })
+              })
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedOrder = payload.new as Order
@@ -376,6 +383,7 @@ export function PedidosClient({
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      <audio ref={audioRef} id="new-order-sound" src="/sounds/cash-register.mp3" preload="auto" />
       {/* Header */}
       <div className="flex justify-between items-center mb-6 px-1 pt-2">
         <div>
