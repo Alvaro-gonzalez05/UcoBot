@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-container": "#FFFFFF",
+              "on-surface-variant": "#8A8A99",
+              "error": "#FF4D4D",
+              "surface-container-high": "#E5E7EB",
+              "on-tertiary": "#1C1C28",
+              "inverse-on-surface": "#F5F5F7",
+              "surface-bright": "#FFFFFF",
+              "on-primary-container": "#1C1C28",
+              "surface": "#F5F5F7",
+              "on-surface": "#1C1C28",
+              "outline-variant": "#F3F4F6",
+              "on-tertiary-fixed-variant": "#1C1C28",
+              "on-tertiary-fixed": "#1C1C28",
+              "error-container": "#FFE5E5",
+              "secondary-fixed-dim": "#1C1C28",
+              "inverse-primary": "#B3D93C",
+              "on-secondary-fixed": "#FFFFFF",
+              "secondary-fixed": "#1C1C28",
+              "on-tertiary-container": "#1C1C28",
+              "background": "#F5F5F7",
+              "on-secondary-container": "#FFFFFF",
+              "surface-container-highest": "#D1D5DB",
+              "on-error": "#FFFFFF",
+              "on-background": "#1C1C28",
+              "on-primary-fixed": "#1C1C28",
+              "primary": "#D1F366",
+              "secondary-container": "#2D2D3F",
+              "on-error-container": "#660000",
+              "tertiary": "#F0F2F5",
+              "surface-container": "#F0F2F5",
+              "inverse-surface": "#1C1C28",
+              "surface-dim": "#E2E2E2",
+              "tertiary-fixed": "#F0F2F5",
+              "primary-fixed": "#D1F366",
+              "on-primary-fixed-variant": "#1C1C28",
+              "surface-container-lowest": "#FFFFFF",
+              "on-secondary": "#FFFFFF",
+              "on-primary": "#1C1C28",
+              "tertiary-fixed-dim": "#E5E7EB",
+              "surface-variant": "#FFFFFF",
+              "surface-container-low": "#F9FAFB",
+              "secondary": "#1C1C28",
+              "on-secondary-fixed-variant": "#FFFFFF",
+              "surface-tint": "#D1F366",
+              "primary-container": "#D1F366",
+              "primary-fixed-dim": "#B3D93C",
+              "outline": "#E5E7EB"
+            },
+            fontFamily: {
+              "headline": ["Inter"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "1rem", "lg": "2rem", "xl": "3rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface overflow-hidden">
+<!-- Sidebar Navigation (JSON Anchor) -->
+<aside class="fixed left-0 top-0 h-full flex flex-col py-8 z-40 bg-[#1C1C28] rounded-r-3xl h-screen w-64 shadow-lg shadow-[#D1F366]/5">
+<div class="px-6 mb-10">
+<h1 class="text-xl font-bold text-[#D1F366] tracking-tighter">Neon Slate POS</h1>
+<p class="text-xs text-gray-500 font-medium">Terminal 01</p>
+</div>
+<nav class="flex-1 space-y-2 px-4">
+<!-- Active Tab: Ventas -->
+<a class="flex items-center gap-3 p-4 bg-[#F0F2F5] text-[#1C1C28] border-l-4 border-[#D1F366] font-bold rounded-l-none rounded-r-xl transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="point_of_sale">point_of_sale</span>
+<span class="font-inter text-sm font-medium tracking-tight">Ventas</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-gray-400 hover:text-white hover:bg-[#1C1C28]/50 active:scale-95 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-inter text-sm font-medium tracking-tight">Inventario</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-gray-400 hover:text-white hover:bg-[#1C1C28]/50 active:scale-95 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="analytics">analytics</span>
+<span class="font-inter text-sm font-medium tracking-tight">Reportes</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-gray-400 hover:text-white hover:bg-[#1C1C28]/50 active:scale-95 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-inter text-sm font-medium tracking-tight">Clientes</span>
+</a>
+<a class="flex items-center gap-3 p-4 text-gray-400 hover:text-white hover:bg-[#1C1C28]/50 active:scale-95 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-inter text-sm font-medium tracking-tight">Configuración</span>
+</a>
+</nav>
+<div class="px-4 mt-auto">
+<button class="w-full flex items-center gap-3 p-4 text-error hover:bg-error/10 rounded-xl transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-inter text-sm font-medium tracking-tight">Cerrar Sesión</span>
+</button>
+</div>
+</aside>
+<!-- Top Navigation Bar (JSON Anchor) -->
+<header class="fixed top-0 right-0 left-64 flex justify-between items-center px-8 h-20 z-30 bg-white border-b border-gray-100 shadow-sm">
+<div class="flex items-center gap-4 bg-surface-container-low px-4 py-2 rounded-full w-96">
+<span class="material-symbols-outlined text-on-surface-variant">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-sm w-full" placeholder="Buscar productos por nombre o SKU..." type="text"/>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2">
+<button class="p-2 hover:bg-gray-100 rounded-full transition-all active:scale-95">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="p-2 hover:bg-gray-100 rounded-full transition-all active:scale-95">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+</div>
+<button class="flex items-center gap-2 bg-secondary text-primary px-6 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider hover:shadow-lg active:scale-95 transition-all">
+<span class="material-symbols-outlined text-lg">qr_code_scanner</span>
+                Escanear Código
+            </button>
+<div class="flex items-center gap-3 border-l pl-6 border-gray-100">
+<div class="text-right">
+<p class="text-xs font-bold text-secondary">ADMIN USER</p>
+<p class="text-[10px] text-on-surface-variant tracking-wider">TERMINAL 01</p>
+</div>
+<img class="w-10 h-10 rounded-full border-2 border-primary/20 object-cover" data-alt="professional headshot of a smiling system administrator in a modern office environment" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBDwaeEdl6nvkJNkTQhpQItIwtrAGLrZF7Q_sqjUyxG5Y1cuMS21xC9X8sYM87v1uaSxRtv5IDPuUCbtNeppD8TME1ap9B5mCx9Fc6Ptq4WTvIe66BCP8wq7I5jgFWWcFd7I8lkPAcaDPHJfeAn70ILO0x499GgFcvKT8snl_p1iStQRW2mjVyBIhkOy32sAXfVDQ0V7MWFvgZapuVZGIY61qYZCL-ypp-YMrvxaPa-f8s8ojGpJYaFqE8ScnsauI6GqZWJ244PNKE"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="ml-64 mt-20 p-8 h-[calc(100vh-5rem)] flex gap-8">
+<!-- Left Section: Product Grid & Categories -->
+<section class="flex-1 flex flex-col gap-6 overflow-hidden">
+<!-- Categories Slider -->
+<div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+<button class="px-6 py-2 bg-secondary text-primary rounded-full text-sm font-bold whitespace-nowrap active:scale-95 transition-all">Todos</button>
+<button class="px-6 py-2 bg-white text-on-surface-variant hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-all">Electrónica</button>
+<button class="px-6 py-2 bg-white text-on-surface-variant hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-all">Accesorios</button>
+<button class="px-6 py-2 bg-white text-on-surface-variant hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-all">Software</button>
+<button class="px-6 py-2 bg-white text-on-surface-variant hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-all">Audio</button>
+<button class="px-6 py-2 bg-white text-on-surface-variant hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-all">Periféricos</button>
+<button class="px-6 py-2 bg-white text-on-surface-variant hover:bg-gray-50 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-all">Cables</button>
+</div>
+<!-- Product Grid -->
+<div class="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pr-2 pb-8">
+<!-- Product Card 1 -->
+<div class="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group">
+<div class="relative rounded-lg overflow-hidden aspect-square mb-4 bg-surface">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="professional studio shot of sleek wireless black headphones on a light gray background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDt2HAGHI3nICH0IxoxCh7ZUECeeag34bsDTXFULDYjBStDNEXGEhnVKbXdDBDtiCZz6lfbvtJGadXw7E-U6xJWFmZQCE8Q28aL-O-ef33BPtusOQNPELCgu_IqpwIs9IOW7QfY-1nlGmsu-ZgPdaQIaUzYhxLbfamnq9ACXCCCahePXwF-t1b_AqDBYs-Hl2oU1yk80l4h8pBe4ovoWxqMjIyEg0iM9YvinqTWc5MX1GhdvMRR3weMF131J_TiyuPqGxoQ8NbYN2o"/>
+<div class="absolute top-2 right-2 bg-primary text-secondary text-[10px] font-extrabold px-2 py-1 rounded-full">STOCK: 12</div>
+</div>
+<h3 class="font-bold text-secondary text-sm mb-1 leading-tight">UCOBOT Wireless Audio Gen 2</h3>
+<p class="text-xs text-on-surface-variant mb-3">Audio de alta fidelidad</p>
+<div class="flex justify-between items-center">
+<span class="text-lg font-extrabold text-secondary">$129.00</span>
+<div class="bg-surface-container p-2 rounded-full text-secondary group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+</div>
+</div>
+</div>
+<!-- Product Card 2 -->
+<div class="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group">
+<div class="relative rounded-lg overflow-hidden aspect-square mb-4 bg-surface">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="minimalist design mechanical keyboard with RGB backlighting on a clean white desk setup" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQf0hFk0TfVWcgfcW6aZp9FUz4WhkzKSRWcJ7e0DKNcn0Gl7kMqSTU1eVaaqAiDD6AJR1H0xLIncLevuXDYcIiqGAi0KW930cesVkdWfzohGyxAY97HuJvdkE3x5MWyxoAlgVhgz4h93-gVaQr0rYOBg5EqtBSMk2xAa8FI0uQeNwf5cHvgxk-AdLLZvaNCBWiDzupM0mT18MP7P6yez69UPo_BTqql7OA_OaF_Z0FDRcsZt1qWfPwwzglaVOxRhFiH59kP_QQjUo"/>
+<div class="absolute top-2 right-2 bg-primary text-secondary text-[10px] font-extrabold px-2 py-1 rounded-full">STOCK: 5</div>
+</div>
+<h3 class="font-bold text-secondary text-sm mb-1 leading-tight">Mecánico Pro Carbon Edition</h3>
+<p class="text-xs text-on-surface-variant mb-3">Switch Brown / RGB</p>
+<div class="flex justify-between items-center">
+<span class="text-lg font-extrabold text-secondary">$89.50</span>
+<div class="bg-surface-container p-2 rounded-full text-secondary group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+</div>
+</div>
+</div>
+<!-- Product Card 3 -->
+<div class="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group">
+<div class="relative rounded-lg overflow-hidden aspect-square mb-4 bg-surface">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="modern luxury smartwatch with a leather band resting on a dark velvet cushion" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMaLR20lG9rU_sxms5KXTvfoT4ZkCdLfXLVhCTfdG34Hirnues4wbEoN-Am6YhhWjCIvzRauv6W7nsmBPltUiKcBty4KF69kv_jmb2KM2ybWMble6jx8pzBNXq_5Ova79RrS8zwtaTaUd5xHH7GVM9KO9wj1u_Z8p9rX0Jl4qLjSKExiz0cIwOScudBHCtZLx8eqZU3V0err4s6G85mr6Gi0MCTLv732Aw8kLWncFXpvoRGTTNU367TqAxvivWadDA7W9ra6y8Eb4"/>
+<div class="absolute top-2 right-2 bg-error text-white text-[10px] font-extrabold px-2 py-1 rounded-full">AGOTADO</div>
+</div>
+<h3 class="font-bold text-secondary text-sm mb-1 leading-tight">UCO Watch V3 Slate Grey</h3>
+<p class="text-xs text-on-surface-variant mb-3">Smart / AMOLED</p>
+<div class="flex justify-between items-center">
+<span class="text-lg font-extrabold text-secondary">$210.00</span>
+<div class="bg-surface-container p-2 rounded-full text-secondary">
+<span class="material-symbols-outlined text-sm">lock</span>
+</div>
+</div>
+</div>
+<!-- Product Card 4 -->
+<div class="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group">
+<div class="relative rounded-lg overflow-hidden aspect-square mb-4 bg-surface">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="close-up of a high-tech minimalist white digital clock on a wooden surface with morning sunlight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCUbD6QRd1nQJ8jkbuSMKNC1EGmlnHfBCfhhHJIIbMJym5z-WdfpTFQSXT7UzqNQhIHl6VLt7whDJX16YnI9YYxTQ6Vih6ElyE2IxXHQWln5l_KwzpIeCtNUjCFoxUIv91PswIfI0BUZJPloxiBa0nDLjL0IRKENmm8ppFUS5ZuNNlrHr-zgbZ9sX9FbcKxtYdIsEG4dXtqP-5ZbL2oGA4IAXBjdhvNjE74QNY0eNaEPrbBGquaXw1ecvu-HgSamLQfUgtyGXncIoE"/>
+<div class="absolute top-2 right-2 bg-primary text-secondary text-[10px] font-extrabold px-2 py-1 rounded-full">STOCK: 45</div>
+</div>
+<h3 class="font-bold text-secondary text-sm mb-1 leading-tight">UCO Smart Clock</h3>
+<p class="text-xs text-on-surface-variant mb-3">Home Automation</p>
+<div class="flex justify-between items-center">
+<span class="text-lg font-extrabold text-secondary">$45.00</span>
+<div class="bg-surface-container p-2 rounded-full text-secondary group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+</div>
+</div>
+</div>
+<!-- Product Card 5 -->
+<div class="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group">
+<div class="relative rounded-lg overflow-hidden aspect-square mb-4 bg-surface">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="professional condenser microphone for podcasting and music recording on a boom arm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDYTlicY2gkLxdn5cSYuqx6MEGI4b0SQGwP4o1Ed5BDQ0Sxsgt_ksdjYeX0pO6_68Ip94kmW3-gFFv0uttEG118fnurZjmIZDzq-nXeTPl2WFRWcon22Gtmk-s24lUebhGlWU-JzPnoGAU3zYBN4bkex-xtprOOHeGkrCEiVzyxijAk1ZnzC_qoeR1biCDYsFcI0DqawoLByBylTpZzjRPVtOeeB1--HaJTVFgLVB2CSrbqCVGey9oq_NOqsU1wQSPSXoFNr8LVInY"/>
+<div class="absolute top-2 right-2 bg-primary text-secondary text-[10px] font-extrabold px-2 py-1 rounded-full">STOCK: 8</div>
+</div>
+<h3 class="font-bold text-secondary text-sm mb-1 leading-tight">UCO Studio Mic Pro</h3>
+<p class="text-xs text-on-surface-variant mb-3">Condensador USB-C</p>
+<div class="flex justify-between items-center">
+<span class="text-lg font-extrabold text-secondary">$155.00</span>
+<div class="bg-surface-container p-2 rounded-full text-secondary group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+</div>
+</div>
+</div>
+<!-- Product Card 6 -->
+<div class="bg-white p-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] cursor-pointer group">
+<div class="relative rounded-lg overflow-hidden aspect-square mb-4 bg-surface">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" data-alt="high-end tablet with a digital stylus on a designer workstation with coffee and notebooks" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC9TtoskFlpaZYEz9VpdJOkwD1CspGwzoS-2TLFxQKQ-kNMr_juCIhx2vicG7GEx5KDy-Gl99a0c4sRhQmSYbsEsQtKTY2o0fa0tD5xhf5W9PkJaPaPc0hDPUkLnDeudjXjsW_KdnBKHqSNVglzhnjscoDa80mWzf-n4SewneXg4tOxBC0W_5rzFmU7sw4J01qr5g8BM8F3DqxcwYqo0XMr3PF4LGBGN-ZsFtVOuMKtT_Rrq6Iop_-278UiCBacGmPYZvE50nCEKxA"/>
+<div class="absolute top-2 right-2 bg-primary text-secondary text-[10px] font-extrabold px-2 py-1 rounded-full">STOCK: 15</div>
+</div>
+<h3 class="font-bold text-secondary text-sm mb-1 leading-tight">UCO Tab 12" Slate</h3>
+<p class="text-xs text-on-surface-variant mb-3">128GB / Wifi 6</p>
+<div class="flex justify-between items-center">
+<span class="text-lg font-extrabold text-secondary">$499.00</span>
+<div class="bg-surface-container p-2 rounded-full text-secondary group-hover:bg-primary transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Right Section: Cart / Checkout -->
+<aside class="w-96 flex flex-col gap-6 h-full">
+<!-- Client Selection Card -->
+<div class="bg-secondary text-white p-6 rounded-3xl shadow-lg">
+<div class="flex items-center justify-between mb-4">
+<h2 class="text-sm font-bold uppercase tracking-wider text-primary">Cliente</h2>
+<button class="text-[10px] font-bold uppercase tracking-widest text-white/60 hover:text-primary transition-colors">Crear Nuevo</button>
+</div>
+<div class="relative mb-2">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-lg">person_search</span>
+<input class="w-full bg-white/10 border-none rounded-2xl py-3 pl-10 pr-4 text-sm focus:ring-1 focus:ring-primary placeholder-white/40" placeholder="Buscar cliente..." type="text"/>
+</div>
+<!-- Selected Client (Visual State) -->
+<div class="flex items-center gap-3 bg-white/5 p-3 rounded-2xl border border-white/10">
+<img class="w-10 h-10 rounded-full border border-primary/40 object-cover" data-alt="portrait of a young entrepreneur in a modern casual outfit with a friendly expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAPQRdr_oVejgBIQDyHWWjo6mVlQpac7-HmAaXfTKbTpFqgpE_FFKoEt8XGzMVhoAxSPHS8Z6GOPoFxP5v9kVi0-rqtqLzzIKOn8m0CsFd9MDfMF2uvQO4ijMip6_Dz0z0UYhKbaILqJ3C7rzEJCqAUXnib-q6SCZNZuR37H1X-uRDhahsZmfZan_dnkt8wOnB6yxK7_tngxTojgmAeETFjnv2DWTb1o4GZQZrVTTzn6s9QtebBE-vvr8vuWFozODnpuaOrsdgwSJc"/>
+<div class="flex-1 overflow-hidden">
+<p class="text-xs font-bold truncate">Alejandro Mendoza</p>
+<p class="text-[10px] text-white/60">ID: 450923 - Gold Member</p>
+</div>
+<button class="material-symbols-outlined text-white/40 hover:text-error transition-colors">close</button>
+</div>
+</div>
+<!-- Cart Items -->
+<div class="flex-1 bg-white rounded-3xl p-6 flex flex-col shadow-sm overflow-hidden">
+<h2 class="text-xs font-bold uppercase tracking-widest text-on-surface-variant mb-6 flex justify-between">
+                    Carrito Actual <span>(2 Productos)</span>
+</h2>
+<div class="flex-1 overflow-y-auto space-y-6 pr-2">
+<!-- Cart Item 1 -->
+<div class="flex gap-4">
+<img class="w-14 h-14 rounded-2xl object-cover bg-surface" data-alt="wireless headphones product icon for cart display" src="https://lh3.googleusercontent.com/aida-public/AB6AXuClTpkKMU_COvZOyhqPBMomECiJNWXCJ1tXkRSqcIk1Hasb2rprZdz0CDWnABS_UXk2KHROEPhRGDs6IzaG716WjO4KUCfjFYDuyZBQswiaL05Y92JcxqWXb88mBM6lMby2A8FAnHy6n1_lSZ2_vcY-ugX7pNBJbjL3rq1BCgjida6PjRzigNOXSAHUy0TpaNoj-bWIr24d-CP0PKQrvhe68HRdSPxkbOVW6fIwSNpRu0UVFuaRAfmvCk3I0BbQxtnwGzg6sjFGz84"/>
+<div class="flex-1">
+<p class="text-xs font-bold text-secondary">UCOBOT Wireless Gen 2</p>
+<p class="text-[10px] text-on-surface-variant mb-2">$129.00 / ud</p>
+<div class="flex items-center gap-4">
+<div class="flex items-center bg-surface-container rounded-full">
+<button class="w-6 h-6 flex items-center justify-center hover:text-primary transition-colors"><span class="material-symbols-outlined text-xs">remove</span></button>
+<span class="text-xs font-bold w-6 text-center">1</span>
+<button class="w-6 h-6 flex items-center justify-center hover:text-primary transition-colors"><span class="material-symbols-outlined text-xs">add</span></button>
+</div>
+<span class="text-xs font-extrabold text-secondary ml-auto">$129.00</span>
+</div>
+</div>
+</div>
+<!-- Cart Item 2 -->
+<div class="flex gap-4">
+<img class="w-14 h-14 rounded-2xl object-cover bg-surface" data-alt="mechanical keyboard product icon for cart display" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfLIKKh4LGt7qPIqJWXBbHjoydIKR6hrPa2x-z1Hv1iGrfqFPwym5C_xX3_TBzAAqLM9Lq_2Qqv0NHwaYjJvO56Vg4g_KAFZobO10Rt9KJCwDvX9iQmszprqdcGVZ1GU5AK5LRaWtNhi_us4iVJwhU6f9-MKtRdRNkzHErq6oKf_WTlGN0utR_dPINSr7Ivc7l-1HIAMt1_Ave4ZDSwZ_Xycw55IeZu9Pt1sp4cpGhK56dJn-ZWYnppNYZ6IfIJLtIU-FCSpdTCmw"/>
+<div class="flex-1">
+<p class="text-xs font-bold text-secondary">Mecánico Pro Carbon</p>
+<p class="text-[10px] text-on-surface-variant mb-2">$89.50 / ud</p>
+<div class="flex items-center gap-4">
+<div class="flex items-center bg-surface-container rounded-full">
+<button class="w-6 h-6 flex items-center justify-center hover:text-primary transition-colors"><span class="material-symbols-outlined text-xs">remove</span></button>
+<span class="text-xs font-bold w-6 text-center">2</span>
+<button class="w-6 h-6 flex items-center justify-center hover:text-primary transition-colors"><span class="material-symbols-outlined text-xs">add</span></button>
+</div>
+<span class="text-xs font-extrabold text-secondary ml-auto">$179.00</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Payment Methods -->
+<div class="pt-6 border-t border-gray-100 mt-6">
+<p class="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-3">Método de Pago</p>
+<div class="grid grid-cols-2 gap-2">
+<button class="flex flex-col items-center gap-1 p-3 bg-secondary text-primary rounded-2xl active:scale-95 transition-all">
+<span class="material-symbols-outlined text-xl" data-weight="fill">payments</span>
+<span class="text-[9px] font-bold">Efectivo</span>
+</button>
+<button class="flex flex-col items-center gap-1 p-3 bg-surface-container text-on-surface-variant hover:bg-gray-100 rounded-2xl active:scale-95 transition-all">
+<span class="material-symbols-outlined text-xl">credit_card</span>
+<span class="text-[9px] font-bold">Tarjeta</span>
+</button>
+<button class="flex flex-col items-center gap-1 p-3 bg-surface-container text-on-surface-variant hover:bg-gray-100 rounded-2xl active:scale-95 transition-all">
+<span class="material-symbols-outlined text-xl">account_balance</span>
+<span class="text-[9px] font-bold">Transferencia</span>
+</button>
+<button class="flex flex-col items-center gap-1 p-3 bg-surface-container text-on-surface-variant hover:bg-gray-100 rounded-2xl active:scale-95 transition-all">
+<span class="material-symbols-outlined text-xl">link</span>
+<span class="text-[9px] font-bold">Link Pago</span>
+</button>
+</div>
+</div>
+<!-- Totals & CTA -->
+<div class="pt-6 space-y-2 mt-6">
+<div class="flex justify-between text-xs">
+<span class="text-on-surface-variant">Subtotal</span>
+<span class="font-bold text-secondary">$308.00</span>
+</div>
+<div class="flex justify-between text-xs">
+<span class="text-on-surface-variant">Impuestos (15%)</span>
+<span class="font-bold text-secondary">$46.20</span>
+</div>
+<div class="flex justify-between items-end pt-4 pb-4">
+<span class="text-sm font-bold text-secondary uppercase tracking-wider">Total</span>
+<span class="text-2xl font-extrabold text-secondary tracking-tighter">$354.20</span>
+</div>
+<button class="w-full bg-primary text-secondary py-4 rounded-full font-extrabold text-sm uppercase tracking-widest shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-[0.97] transition-all flex items-center justify-center gap-2">
+                        Finalizar Venta
+                        <span class="material-symbols-outlined text-lg">check_circle</span>
+</button>
+</div>
+</div>
+</aside>
+</main>
+</body></html>

@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Executive Dashboard - IA Negocios</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#D1F366",
+                        "primary-dark": "#B3D93C",
+                        "sidebar-bg": "#1C1C28",
+                        "background-light": "#F8F9FA",
+                        "background-dark": "#121212",
+                        "card-light": "#FFFFFF",
+                        "card-dark": "#1E1E2E",
+                        "text-main-light": "#1C1C28",
+                        "text-main-dark": "#E2E2E2",
+                        "text-muted-light": "#64748B",
+                        "text-muted-dark": "#94A3B8",
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    borderRadius: {
+                        DEFAULT: "1rem",
+                        'xl': '1.25rem',
+                        '2xl': '1.75rem',
+                        '3xl': '2.25rem',
+                    },
+                },
+            },
+        };
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style type="text/tailwindcss">
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar-item:hover { background-color: rgba(255, 255, 255, 0.05); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .tab-active {
+            @apply border-b-2 border-primary text-primary;
+        }
+        .executive-card {
+            @apply bg-card-light dark:bg-card-dark p-6 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border border-gray-100 dark:border-white/5;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-main-light dark:text-text-main-dark h-screen overflow-hidden flex transition-colors duration-300">
+<aside class="w-64 bg-sidebar-bg text-white flex-shrink-0 flex flex-col justify-between p-6 m-4 rounded-[2.5rem] h-[calc(100vh-2rem)] shadow-2xl">
+<div>
+<div class="flex items-center gap-3 mb-10 px-2">
+<div class="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-sidebar-bg shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined font-bold">smart_toy</span>
+</div>
+<h1 class="text-xl font-bold tracking-tight">IA Negocios</h1>
+</div>
+<nav class="space-y-1">
+<a class="flex items-center gap-4 px-4 py-3 bg-primary text-sidebar-bg rounded-2xl font-semibold transition-all active:scale-95 shadow-lg shadow-primary/10" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span>Resumen</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-2xl transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">forum</span>
+<span>Chatbots</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-2xl transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">account_tree</span>
+<span>Flujos</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-2xl transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">group</span>
+<span>Leads</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-2xl transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">insights</span>
+<span>Analíticas</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-gray-400 sidebar-item rounded-2xl transition-colors" href="#">
+<span class="material-symbols-outlined text-xl">settings</span>
+<span>Ajustes</span>
+</a>
+</nav>
+</div>
+<div class="bg-white/5 p-5 rounded-2xl border border-white/10">
+<div class="flex items-center gap-3 mb-3">
+<div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg">bolt</span>
+</div>
+<div>
+<p class="text-[10px] text-gray-400 uppercase tracking-widest">Sincronización</p>
+<p class="text-xs font-bold">IA en tiempo real</p>
+</div>
+</div>
+<div class="w-full bg-white/10 h-1 rounded-full overflow-hidden">
+<div class="bg-primary w-[85%] h-full"></div>
+</div>
+</div>
+</aside>
+<main class="flex-1 flex flex-col h-screen overflow-hidden py-4 pr-4">
+<header class="flex justify-between items-center mb-6 px-4">
+<div>
+<h2 class="text-2xl font-bold dark:text-white flex items-center gap-2">
+                ¡Hola, Alex! <span class="text-2xl">👋</span>
+</h2>
+<p class="text-xs text-text-muted-light dark:text-text-muted-dark font-medium mt-0.5">Aquí tienes el estado actual de tu negocio.</p>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative hidden lg:block">
+<span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 material-symbols-outlined text-lg">search</span>
+<input class="pl-11 pr-4 py-2.5 rounded-2xl border-none bg-white dark:bg-card-dark shadow-sm focus:ring-2 focus:ring-primary w-64 text-sm" placeholder="Buscar métrica..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="w-10 h-10 bg-white dark:bg-card-dark rounded-xl shadow-sm flex items-center justify-center text-gray-500 hover:text-primary transition-all">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div>
+<img alt="User" class="w-10 h-10 rounded-xl object-cover ring-2 ring-white dark:ring-gray-800 shadow-sm" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBsuaIFuELwZpETBfFAni4tTZJR56XnuqIQa03NND_sPT0luFSTzM4stEBG5hYHOfUYhZ_yUvQctOOIggmtx7NCNVcV75BVf9DzPaoojqUXEECG_evyEZZX_oktnWqVABfCcVMwCZlnRMVufn-Z-K-W2A705Sukd4xHx1OQGCtK6g2uutp-rEOxk-tW2OUtq8EtBb-EtQujAMsj-Sd73u7CGPpVwK-nLtOr4fCoqPSU6qoIZB5I6_dLncS8dMH8DKvvLxk-DFKwyFg"/>
+</div>
+</header>
+<div class="flex-1 overflow-y-auto hide-scrollbar px-4 pb-4">
+<div class="flex flex-col xl:flex-row gap-6">
+<div class="flex-1 space-y-6">
+<section class="grid grid-cols-1 md:grid-cols-3 gap-5">
+<div class="executive-card group hover:translate-y-[-2px] transition-transform">
+<div class="flex items-start justify-between mb-4">
+<div class="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-2xl">person_add</span>
+</div>
+<span class="text-[11px] font-bold text-green-500 bg-green-500/10 px-2 py-1 rounded-lg">+24.3%</span>
+</div>
+<h3 class="text-text-muted-light dark:text-text-muted-dark text-xs font-semibold uppercase tracking-wider">Leads Generados</h3>
+<p class="text-3xl font-black mt-1">1,284</p>
+<p class="text-[11px] text-text-muted-light mt-4 leading-relaxed">
+<span class="text-primary font-bold">Proyección:</span> Vas camino a superar tu meta mensual en un 15%.
+                        </p>
+</div>
+<div class="executive-card group hover:translate-y-[-2px] transition-transform">
+<div class="flex items-start justify-between mb-4">
+<div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-blue-500">
+<span class="material-symbols-outlined text-2xl">chat_bubble</span>
+</div>
+<span class="text-[11px] font-bold text-blue-500 bg-blue-500/10 px-2 py-1 rounded-lg">+12.1%</span>
+</div>
+<h3 class="text-text-muted-light dark:text-text-muted-dark text-xs font-semibold uppercase tracking-wider">Interacciones</h3>
+<p class="text-3xl font-black mt-1">45.2k</p>
+<p class="text-[11px] text-text-muted-light mt-4 leading-relaxed">
+<span class="text-blue-500 font-bold">Info:</span> El pico de tráfico fue ayer a las 20:00 (Campaña "Flash").
+                        </p>
+</div>
+<div class="executive-card group hover:translate-y-[-2px] transition-transform">
+<div class="flex items-start justify-between mb-4">
+<div class="w-12 h-12 bg-orange-100 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center text-orange-500">
+<span class="material-symbols-outlined text-2xl">payments</span>
+</div>
+<span class="text-[11px] font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg">+8.5%</span>
+</div>
+<h3 class="text-text-muted-light dark:text-text-muted-dark text-xs font-semibold uppercase tracking-wider">Cierres de Venta</h3>
+<p class="text-3xl font-black mt-1">342</p>
+<p class="text-[11px] text-text-muted-light mt-4 leading-relaxed">
+<span class="text-orange-500 font-bold">Tip:</span> 12 leads están "calientes" esperando seguimiento hoy.
+                        </p>
+</div>
+</section>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="executive-card">
+<div class="flex justify-between items-start mb-6">
+<div>
+<h3 class="text-lg font-bold">Rendimiento de IA</h3>
+<p class="text-xs text-text-muted-light mt-1">Conversiones asistidas por Chatbot</p>
+</div>
+<div class="flex items-center gap-1.5 text-green-500 text-[11px] font-bold bg-green-500/5 px-2 py-1 rounded-lg">
+<span class="material-symbols-outlined text-sm">trending_up</span>
+<span>Top 5% Sector</span>
+</div>
+</div>
+<div class="relative h-48 w-full">
+<canvas id="conversionChart"></canvas>
+</div>
+</div>
+<div class="executive-card">
+<div class="flex justify-between items-center mb-6">
+<div>
+<h3 class="text-lg font-bold">Asistentes Activos</h3>
+<p class="text-xs text-text-muted-light mt-1">3 operativos ahora</p>
+</div>
+<button class="text-[11px] font-bold text-gray-400 hover:text-primary transition-colors uppercase tracking-wider">Ver todos</button>
+</div>
+<div class="space-y-3">
+<div class="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl group cursor-pointer hover:bg-primary/5 transition-all">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-primary/20 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg text-primary">support_agent</span>
+</div>
+<div>
+<h4 class="font-bold text-sm">Ventas Web</h4>
+<p class="text-[10px] text-gray-400">Conversión del 4.2%</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-gray-300 group-hover:text-primary transition-colors">chevron_right</span>
+</div>
+<div class="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl group cursor-pointer hover:bg-primary/5 transition-all">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center text-purple-500">
+<span class="material-symbols-outlined text-lg">calendar_month</span>
+</div>
+<div>
+<h4 class="font-bold text-sm">Citas WhatsApp</h4>
+<p class="text-[10px] text-gray-400">8 agendadas hoy</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-gray-300 group-hover:text-primary transition-colors">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<section class="executive-card overflow-hidden">
+<div class="flex justify-between items-center mb-5">
+<h3 class="text-lg font-bold">Automatizaciones Críticas</h3>
+<button class="w-8 h-8 rounded-full bg-sidebar-bg text-primary flex items-center justify-center hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-lg">bolt</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead class="border-b border-gray-100 dark:border-white/5">
+<tr class="text-[10px] text-text-muted-light font-bold uppercase tracking-widest">
+<th class="pb-3">Flujo</th>
+<th class="pb-3">Estado</th>
+<th class="pb-3 text-right">Impacto</th>
+</tr>
+</thead>
+<tbody class="text-sm">
+<tr class="border-b border-gray-50 dark:border-white/5">
+<td class="py-4">
+<div class="flex items-center gap-3">
+<div class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/20 text-green-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">mail</span>
+</div>
+<span class="font-semibold text-xs">Onboarding Lead</span>
+</div>
+</td>
+<td class="py-4"><span class="px-2 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-md uppercase">Activo</span></td>
+<td class="py-4 text-right font-bold text-xs">+12% Retención</td>
+</tr>
+<tr>
+<td class="py-4">
+<div class="flex items-center gap-3">
+<div class="w-7 h-7 rounded-lg bg-orange-100 dark:bg-orange-900/20 text-orange-600 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">shopping_cart</span>
+</div>
+<span class="font-semibold text-xs">Recuperación Carrito</span>
+</div>
+</td>
+<td class="py-4"><span class="px-2 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-md uppercase">Activo</span></td>
+<td class="py-4 text-right font-bold text-xs">$2,450 Recup.</td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+<div class="w-full xl:w-80 flex-shrink-0 space-y-6">
+<div class="bg-sidebar-bg text-white rounded-[2.5rem] shadow-2xl flex flex-col h-[640px] border border-white/5 relative overflow-hidden">
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2"></div>
+<div class="p-8 pb-4 relative z-10">
+<div class="w-16 h-16 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5 group hover:border-primary/50 transition-colors">
+<span class="material-symbols-outlined text-3xl text-primary">domain</span>
+</div>
+<h3 class="font-bold text-xl mb-1">Mi Negocio</h3>
+<p class="text-[11px] text-gray-400">Completa tu perfil para que la IA aprenda de ti.</p>
+<div class="flex gap-6 mt-8 border-b border-white/10 text-xs font-bold uppercase tracking-widest">
+<button class="pb-3 px-1 tab-active" id="tabGeneral">General</button>
+<button class="pb-3 px-1 text-gray-500 hover:text-primary transition-colors" id="tabContacto">Contacto</button>
+</div>
+</div>
+<div class="p-8 pt-4 flex-1 overflow-y-auto hide-scrollbar relative z-10">
+<form class="space-y-5" id="formGeneral">
+<div>
+<label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Nombre Comercial</label>
+<input class="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-primary focus:border-primary py-2.5 px-4 text-white placeholder:text-white/20" placeholder="Ej: Café Central" type="text" value="Startup IA"/>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Industria</label>
+<select class="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-primary focus:border-primary py-2.5 px-4 text-white">
+<option class="bg-sidebar-bg">Tecnología</option>
+<option class="bg-sidebar-bg">E-commerce</option>
+<option class="bg-sidebar-bg">Servicios Profesionales</option>
+<option class="bg-sidebar-bg">Hostelería</option>
+</select>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Tu Propuesta de Valor</label>
+<textarea class="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-primary focus:border-primary py-2.5 px-4 text-white placeholder:text-white/20 h-24 resize-none" placeholder="¿Qué hace único a tu negocio?"></textarea>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Dominio Web</label>
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 material-symbols-outlined text-sm">link</span>
+<input class="w-full pl-10 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-primary py-2.5 text-white placeholder:text-white/20" placeholder="www.tuweb.com" type="url" value="https://miia.com"/>
+</div>
+</div>
+</form>
+<form class="space-y-5 hidden" id="formContacto">
+<div>
+<label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Email de Atención</label>
+<input class="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-primary py-2.5 px-4 text-white" placeholder="hola@empresa.com" type="email"/>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">WhatsApp Business</label>
+<input class="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-primary py-2.5 px-4 text-white" placeholder="+34 000 000 000" type="tel"/>
+</div>
+<div>
+<label class="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Dirección Principal</label>
+<input class="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-primary py-2.5 px-4 text-white" placeholder="Calle Innovación, 42" type="text"/>
+</div>
+</form>
+</div>
+<div class="p-8 pt-2 relative z-10">
+<button class="w-full bg-primary text-sidebar-bg font-black text-xs uppercase tracking-widest py-4 rounded-2xl hover:bg-white transition-all shadow-xl shadow-primary/5 active:scale-95">
+                            Actualizar Entidad
+                        </button>
+</div>
+</div>
+<div class="bg-primary/10 border border-primary/20 p-5 rounded-3xl relative overflow-hidden group">
+<div class="relative z-10">
+<div class="flex items-center justify-between mb-3">
+<span class="text-[10px] font-black uppercase tracking-widest text-primary-dark">Progreso Mensual</span>
+<span class="text-xs font-bold text-sidebar-bg dark:text-white">68%</span>
+</div>
+<div class="w-full bg-white dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary-dark w-[68%] h-full"></div>
+</div>
+<p class="text-[10px] text-text-muted-light dark:text-gray-400 mt-4 leading-relaxed italic">
+                            "Mantén el ritmo, Alex. Tu tasa de respuesta es un 20% superior al mes pasado."
+                        </p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<script>
+    // Gráfico de IA
+    const ctx = document.getElementById('conversionChart').getContext('2d');
+    const isDarkMode = document.documentElement.classList.contains('dark');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+            datasets: [{
+                label: 'Conversiones',
+                data: [30, 45, 38, 72, 65, 85, 92],
+                borderColor: '#D1F366',
+                backgroundColor: 'rgba(209, 243, 102, 0.1)',
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 0,
+                pointHoverRadius: 6,
+                pointHoverBackgroundColor: '#D1F366',
+                pointHoverBorderColor: '#fff',
+                pointHoverBorderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1C1C28',
+                    titleFont: { size: 10 },
+                    bodyFont: { size: 12, weight: 'bold' },
+                    padding: 10,
+                    cornerRadius: 8,
+                    displayColors: false
+                }
+            },
+            scales: {
+                y: {
+                    display: false,
+                    beginAtZero: true
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: {
+                        color: '#94A3B8',
+                        font: { size: 10, weight: '600' }
+                    }
+                }
+            }
+        }
+    });
+    // Pestañas Formulario
+    const tabGeneral = document.getElementById('tabGeneral');
+    const tabContacto = document.getElementById('tabContacto');
+    const formGeneral = document.getElementById('formGeneral');
+    const formContacto = document.getElementById('formContacto');
+    function switchTab(activeBtn, inactiveBtn, showForm, hideForm) {
+        activeBtn.classList.add('tab-active');
+        activeBtn.classList.remove('text-gray-500');
+        inactiveBtn.classList.remove('tab-active');
+        inactiveBtn.classList.add('text-gray-500');
+        showForm.classList.remove('hidden');
+        hideForm.classList.add('hidden');
+    }
+    tabGeneral.addEventListener('click', () => switchTab(tabGeneral, tabContacto, formGeneral, formContacto));
+    tabContacto.addEventListener('click', () => switchTab(tabContacto, tabGeneral, formContacto, formGeneral));
+</script>
+
+</body></html>

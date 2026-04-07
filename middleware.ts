@@ -20,6 +20,6 @@ export const config = {
      * - api/chat/webhook (webhook chat API)
      * - api/automations/* (automation endpoints for cron jobs)
      */
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm)$|api/whatsapp|api/instagram|api/debug|api/chat/webhook|api/automations).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|html)$|api/whatsapp|api/instagram|api/debug|api/chat/webhook|api/automations).*)",
   ],
 }

@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+
+<html class="light" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>UCOBOT | IA de Próxima Generación para CRM y Automatización</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#D1F366",
+                        "secondary": "#1C1C28",
+                        "on-background": "#1C1C28",
+                        "surface": "#F5F5F7",
+                        "on-surface-variant": "#8A8A99",
+                        "outline": "#E5E7EB",
+                    },
+                    fontFamily: {
+                        "headline": ["Inter", "sans-serif"],
+                        "body": ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "1.5rem", "lg": "2.5rem", "xl": "4rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #0F0F17; color: white; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .hero-gradient {
+            background: linear-gradient(180deg, rgba(28, 28, 40, 0) 0%, rgba(28, 28, 40, 0.9) 100%);
+        }
+        .editorial-line {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #D1F366, transparent);
+        }
+        .text-glow {
+            text-shadow: 0 0 20px rgba(209, 243, 102, 0.3);
+        }
+    </style>
+</head>
+<body class="selection:bg-primary selection:text-secondary">
+<!-- TopNavBar -->
+<nav class="sticky top-0 z-50 flex justify-between items-center px-6 md:px-12 py-6 w-full bg-[#1C1C28]/80 backdrop-blur-xl border-b border-white/5 font-bold tracking-tight">
+<div class="flex flex-col">
+<div class="text-2xl font-black text-primary tracking-tighter leading-none">UCOBOT</div>
+<span class="text-[8px] uppercase tracking-widest text-white/40 mt-1">por CODEA DESARROLLOS</span>
+</div>
+<div class="hidden md:flex items-center gap-10">
+<a class="text-white hover:text-primary transition-colors text-sm" href="#">Funciones</a>
+<a class="text-gray-400 hover:text-white transition-colors text-sm" href="#">CRM</a>
+<a class="text-gray-400 hover:text-white transition-colors text-sm" href="#">Automatización</a>
+<a class="text-gray-400 hover:text-white transition-colors text-sm" href="#">Precios</a>
+</div>
+<button class="bg-primary text-secondary px-6 py-2.5 rounded-full text-sm font-black hover:scale-105 active:scale-95 duration-200 transition-all">
+        COMENZAR
+    </button>
+</nav>
+<main class="max-w-[1600px] mx-auto p-4 md:p-10 space-y-24">
+<!-- Hero Section: Dramatic Editorial Layout -->
+<section class="relative min-h-[90vh] w-full rounded-xl overflow-hidden bg-secondary flex flex-col justify-end">
+<div class="absolute inset-0 z-0">
+<img alt="Fondo tecnológico editorial" class="w-full h-full object-cover object-center opacity-60" src="https://lh3.googleusercontent.com/aida/ADBb0ujIjPM9FumiAyRneJlDJNWToSdngPh_xPGHAueGFgy-5QD8vvNV52sAdaFxL7NKXbJFgTSwwsUSIFSF-bvzkR1v0Av5ozWf_MHZwxBt8EGsx76vElR7o98Zs3kGRTPRYIBaA6ZCgOwkxVu6I51a62JlTLoppjUPYDGWHwQzjV7MWAYrYLBi0x2ybLReNv9BbgnQ_or3tECffq3muyJwziDB0ocDZawv54TJCChQgs6Gb-i7tcfTivY6zG2Z2y0rUBM1tKwsKedT4w"/>
+<div class="absolute inset-0 hero-gradient"></div>
+</div>
+<div class="relative z-10 p-8 md:p-20 w-full grid grid-cols-1 md:grid-cols-12 gap-8 items-end">
+<div class="md:col-span-8">
+<div class="flex items-center gap-4 mb-8">
+<span class="h-[1px] w-12 bg-primary"></span>
+<span class="text-primary font-bold text-xs uppercase tracking-[0.3em]">IA de Vanguardia</span>
+</div>
+<h1 class="text-6xl md:text-[120px] font-black text-white leading-[0.85] tracking-tighter text-glow">
+                    IMPULSA TU <br/>NEGOCIO CON <br/><span class="text-primary">IA</span>
+</h1>
+</div>
+<div class="md:col-span-4 flex flex-col gap-8">
+<p class="text-gray-300 text-lg md:text-xl font-medium leading-relaxed border-l-2 border-primary/30 pl-6">
+                    Escala tus operaciones con automatización inteligente que entiende a tus clientes. Un ecosistema unificado para la era digital.
+                </p>
+<div class="flex flex-wrap gap-4">
+<button class="bg-primary text-secondary px-8 py-4 rounded-full font-black text-sm uppercase tracking-wider hover:shadow-[0_0_30px_rgba(209,243,102,0.4)] transition-all">
+                        Lanzar Dashboard
+                    </button>
+<button class="bg-white/5 backdrop-blur-md border border-white/10 text-white px-8 py-4 rounded-full font-black text-sm uppercase tracking-wider hover:bg-white/10 transition-all">
+                        Ver Demo
+                    </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Editorial Divider -->
+<div class="editorial-line"></div>
+<!-- Bento Grid: Modern Editorial Style -->
+<section class="grid grid-cols-1 md:grid-cols-12 gap-8">
+<!-- Feature 1: Omnichannel -->
+<div class="md:col-span-7 bg-white rounded-xl p-10 flex flex-col justify-between group overflow-hidden relative min-h-[450px]">
+<div class="relative z-10">
+<div class="w-12 h-12 bg-secondary rounded-full flex items-center justify-center mb-8">
+<span class="material-symbols-outlined text-primary text-2xl">chat_bubble</span>
+</div>
+<h3 class="text-4xl font-black text-secondary tracking-tighter mb-6 leading-none uppercase">Chatbots<br/>Omnicanal</h3>
+<p class="text-secondary/70 max-w-sm text-lg font-medium leading-snug">
+                    Conecta con tus usuarios en WhatsApp e Instagram a través de una interfaz de IA unificada que mantiene el contexto global.
+                </p>
+</div>
+<div class="relative z-10 mt-12 bg-secondary/5 p-6 rounded-lg border border-secondary/10">
+<div class="flex items-center gap-4 mb-4">
+<div class="h-2 w-2 rounded-full bg-primary"></div>
+<span class="text-[10px] font-bold text-secondary uppercase tracking-widest">Estado del Sistema: Activo</span>
+</div>
+<div class="h-[1px] w-full bg-secondary/10 mb-4"></div>
+<div class="flex justify-between items-center text-secondary font-black text-xs uppercase">
+<span>Integración WhatsApp</span>
+<span class="text-primary bg-secondary px-2 py-1 rounded">Listo</span>
+</div>
+</div>
+<!-- Abstract Visual -->
+<div class="absolute -right-20 -top-20 w-80 h-80 bg-primary/20 rounded-full blur-3xl group-hover:bg-primary/30 transition-all duration-700"></div>
+</div>
+<!-- Feature 2: Automation -->
+<div class="md:col-span-5 bg-primary rounded-xl p-10 flex flex-col justify-between text-secondary relative overflow-hidden group">
+<div>
+<span class="material-symbols-outlined text-secondary text-5xl mb-8">bolt</span>
+<h3 class="text-3xl font-black tracking-tighter leading-none mb-4 uppercase">Automatización<br/>de Tareas</h3>
+<p class="text-secondary/80 text-lg font-bold">Libera el potencial de tu equipo automatizando el 90% de las tareas repetitivas.</p>
+</div>
+<div class="mt-12 space-y-4">
+<div class="p-4 bg-white/40 backdrop-blur-sm rounded-lg flex items-center justify-between group-hover:translate-x-2 transition-transform">
+<span class="text-xs font-black uppercase tracking-widest">Respuesta IA</span>
+<span class="material-symbols-outlined text-sm">auto_awesome</span>
+</div>
+<div class="p-4 bg-white/40 backdrop-blur-sm rounded-lg flex items-center justify-between group-hover:translate-x-4 transition-transform delay-75">
+<span class="text-xs font-black uppercase tracking-widest">Sincronización</span>
+<span class="material-symbols-outlined text-sm">sync</span>
+</div>
+</div>
+</div>
+<!-- Feature 3: Smart CRM -->
+<div class="md:col-span-12 bg-[#1C1C28] rounded-xl p-12 border border-white/5 flex flex-col md:flex-row items-center gap-16 relative overflow-hidden">
+<div class="flex-1 z-10">
+<div class="text-primary text-[10px] font-black uppercase tracking-[0.4em] mb-4">Gestión Inteligente</div>
+<h3 class="text-5xl font-black text-white tracking-tighter mb-6 uppercase leading-none">CRM Inteligente</h3>
+<p class="text-gray-400 text-xl font-medium leading-relaxed max-w-xl">
+                    Un motor predictivo que califica leads en tiempo real. No solo gestiones relaciones: optimízalas con insights de Machine Learning que te dicen a quién contactar y cuándo.
+                </p>
+<button class="mt-10 group flex items-center gap-4 text-primary font-black uppercase text-sm tracking-widest">
+                    Explorar Capacidades <span class="material-symbols-outlined group-hover:translate-x-2 transition-transform">arrow_forward</span>
+</button>
+</div>
+<div class="flex-1 w-full z-10">
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white/5 border border-white/10 p-6 rounded-xl">
+<div class="text-primary text-3xl font-black mb-1">+45%</div>
+<div class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Conversión</div>
+</div>
+<div class="bg-white/5 border border-white/10 p-6 rounded-xl">
+<div class="text-white text-3xl font-black mb-1">2.4k</div>
+<div class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Leads/Mes</div>
+</div>
+<div class="col-span-2 bg-primary/10 border border-primary/20 p-6 rounded-xl flex items-center justify-between">
+<div>
+<div class="text-white font-black uppercase tracking-tighter">Predicción de Venta</div>
+<div class="text-[10px] text-primary font-bold uppercase tracking-widest">Alta Probabilidad</div>
+</div>
+<div class="h-12 w-12 rounded-full border-2 border-primary flex items-center justify-center">
+<span class="text-primary font-black">98%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Background detail -->
+<div class="absolute right-0 bottom-0 opacity-10 pointer-events-none">
+<span class="material-symbols-outlined text-[300px]" style="font-variation-settings: 'wght' 100;">hub</span>
+</div>
+</div>
+</section>
+<!-- Pricing Section: Premium Editorial Cards -->
+<section class="py-12">
+<div class="text-center mb-16">
+<h2 class="text-5xl font-black tracking-tighter uppercase mb-4">Planes Premium</h2>
+<p class="text-gray-400 font-medium">Inversión transparente para un crecimiento exponencial.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-5xl mx-auto px-4">
+<!-- Plan CRM -->
+<div class="bg-[#1C1C28] border border-white/10 rounded-xl p-12 relative flex flex-col justify-between group hover:border-primary/50 transition-all duration-500 overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+<div>
+<h4 class="text-xs font-black text-gray-500 uppercase tracking-[0.3em] mb-10">CRM &amp; GESTIÓN</h4>
+<h3 class="text-4xl font-black text-white mb-2 uppercase tracking-tighter">Acceso Core</h3>
+<div class="flex items-baseline gap-2 mb-10">
+<span class="text-6xl font-black text-primary">69</span>
+<span class="text-lg font-bold text-gray-500">USD/mes</span>
+</div>
+<ul class="space-y-6 mb-12">
+<li class="flex items-center gap-4 text-gray-300 font-medium">
+<span class="material-symbols-outlined text-primary">check</span> Suite CRM Completa
+                        </li>
+<li class="flex items-center gap-4 text-gray-300 font-medium">
+<span class="material-symbols-outlined text-primary">check</span> Almacenamiento Ilimitado
+                        </li>
+<li class="flex items-center gap-4 text-gray-300 font-medium">
+<span class="material-symbols-outlined text-primary">check</span> Herramientas de Equipo
+                        </li>
+</ul>
+</div>
+<button class="w-full py-5 bg-white text-secondary font-black uppercase text-xs tracking-[0.2em] rounded-full hover:bg-primary transition-colors">
+                    Adquirir Plan
+                </button>
+</div>
+<!-- Plan Automation -->
+<div class="bg-primary rounded-xl p-12 relative flex flex-col justify-between group overflow-hidden shadow-[0_20px_60px_-15px_rgba(209,243,102,0.3)]">
+<div class="absolute top-0 right-0 p-6">
+<span class="bg-secondary text-white px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest">RECOMENDADO</span>
+</div>
+<div>
+<h4 class="text-xs font-black text-secondary/50 uppercase tracking-[0.3em] mb-10">AUTOMATIZACIÓN</h4>
+<h3 class="text-4xl font-black text-secondary mb-2 uppercase tracking-tighter">Mensajería Inteligente</h3>
+<div class="flex items-baseline gap-2 mb-10">
+<span class="text-6xl font-black text-secondary">0.08</span>
+<span class="text-lg font-bold text-secondary/60">USD/mensaje</span>
+</div>
+<ul class="space-y-6 mb-12">
+<li class="flex items-center gap-4 text-secondary font-bold">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bolt</span> IA de Pago por Uso
+                        </li>
+<li class="flex items-center gap-4 text-secondary font-bold">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bolt</span> Motor NLP Avanzado
+                        </li>
+<li class="flex items-center gap-4 text-secondary font-bold">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">bolt</span> Acceso API Completo
+                        </li>
+</ul>
+</div>
+<button class="w-full py-5 bg-secondary text-white font-black uppercase text-xs tracking-[0.2em] rounded-full hover:shadow-2xl transition-all hover:scale-[1.02]">
+                    Activar Automatización
+                </button>
+</div>
+</div>
+</section>
+<!-- CTA Section: Bold & Focused -->
+<section class="bg-white rounded-xl p-12 md:p-24 text-center relative overflow-hidden">
+<div class="relative z-10 max-w-3xl mx-auto">
+<h2 class="text-4xl md:text-7xl font-black text-secondary tracking-tighter mb-8 uppercase leading-[0.9]">
+                ¿LISTO PARA <br/><span class="text-glow" style="text-shadow: none; -webkit-text-stroke: 1px #1C1C28; color: transparent;">AUTOMATIZAR</span> <br/>TU ÉXITO?
+            </h2>
+<p class="text-secondary/60 mb-12 text-lg font-medium">Únete a las más de 500 empresas que ya están revolucionando su experiencia de cliente.</p>
+<div class="flex justify-center">
+<div class="bg-secondary p-2 rounded-full flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+<input class="bg-transparent border-none focus:ring-0 text-white px-8 py-3 w-full md:w-80 text-sm font-medium placeholder:text-gray-500" placeholder="Correo corporativo" type="email"/>
+<button class="bg-primary text-secondary px-10 py-4 rounded-full font-black text-xs uppercase tracking-widest hover:scale-105 active:scale-95 transition-all w-full md:w-auto">
+                        Iniciar Prueba Gratuita
+                    </button>
+</div>
+</div>
+</div>
+<!-- Decorative Grid -->
+<div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: radial-gradient(#1c1c28 1px, transparent 1px); background-size: 20px 20px;"></div>
+</section>
+</main>
+<!-- Footer: Branding Highlight -->
+<footer class="w-full px-8 md:px-20 py-20 bg-secondary mt-20 border-t border-white/5 font-['Inter'] relative overflow-hidden">
+<div class="grid grid-cols-1 md:grid-cols-12 gap-12 items-start relative z-10">
+<div class="md:col-span-4">
+<div class="text-3xl font-black text-primary mb-4 tracking-tighter">UCOBOT</div>
+<div class="text-[11px] uppercase tracking-[0.4em] font-black text-white/40 mb-8 leading-relaxed">
+                UNA SOLUCIÓN DESARROLLADA POR <br/>
+<span class="text-white">CODEA DESARROLLOS</span>
+</div>
+<div class="flex gap-4">
+<div class="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-white/10 hover:border-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-sm">language</span>
+</div>
+<div class="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border border-white/10 hover:border-primary transition-colors cursor-pointer">
+<span class="material-symbols-outlined text-sm">alternate_email</span>
+</div>
+</div>
+</div>
+<div class="md:col-span-5 grid grid-cols-2 gap-8">
+<div class="space-y-4">
+<h5 class="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Compañía</h5>
+<nav class="flex flex-col gap-3">
+<a class="text-xs font-bold text-gray-500 hover:text-primary transition-colors" href="#">Privacidad</a>
+<a class="text-xs font-bold text-gray-500 hover:text-primary transition-colors" href="#">Términos</a>
+<a class="text-xs font-bold text-gray-500 hover:text-primary transition-colors" href="#">Cookies</a>
+</nav>
+</div>
+<div class="space-y-4">
+<h5 class="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">Soporte</h5>
+<nav class="flex flex-col gap-3">
+<a class="text-xs font-bold text-gray-500 hover:text-primary transition-colors" href="#">Documentación API</a>
+<a class="text-xs font-bold text-gray-500 hover:text-primary transition-colors" href="#">Centro de Ayuda</a>
+<a class="text-xs font-bold text-gray-500 hover:text-primary transition-colors" href="#">Contacto</a>
+</nav>
+</div>
+</div>
+<div class="md:col-span-3 text-right">
+<div class="text-[10px] uppercase tracking-widest font-black text-white/20 mb-2">Diseño Editorial v2.0</div>
+<div class="text-[10px] uppercase tracking-widest font-black text-white/40">
+                © 2024 UCOBOT. Todos los derechos reservados.
+            </div>
+</div>
+</div>
+<!-- Branding cue -->
+<div class="absolute -bottom-20 -right-20 text-[200px] font-black text-white opacity-[0.02] select-none pointer-events-none uppercase tracking-tighter">
+        CODEA
+    </div>
+</footer>
+</body></html>

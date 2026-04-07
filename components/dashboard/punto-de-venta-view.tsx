@@ -7,8 +7,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
@@ -241,7 +239,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       ]
     })
 
-    setIsCartOpen(true)
+    // On desktop (lg ≥ 1024px) open the cart panel automatically.
+    // On mobile the floating bubble handles the entry point.
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
+      setIsCartOpen(true)
+    }
   }
 
   const updateQuantity = (productId: string, delta: number) => {
@@ -260,7 +262,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     setCartItems((prev) => prev.filter((item) => item.productId !== productId))
   }
 
-  const finalizeSale = async () => {
+  const submitSale = async (status: "completed" | "pending") => {
     if (cartItems.length === 0) {
       toast.error("Agrega al menos un producto")
       return
@@ -275,7 +277,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         .insert({
           user_id: userId,
           client_id: selectedClient?.id || null,
-          status: "confirmed",
+          status: status,
           items: cartItems.map((item) => ({
             product_id: item.productId,
             name: item.name,
@@ -292,7 +294,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         throw error
       }
 
-      toast.success("Venta registrada correctamente")
+      toast.success(status === "completed" ? "Venta registrada como finalizada" : "Pedido pasado correctamente")
       setCartItems([])
       setSelectedClient(null)
       setClientSearch("")
@@ -300,19 +302,22 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       setIsCartOpen(false)
     } catch (error) {
       console.error("Error creating POS order:", error)
-      toast.error("No se pudo finalizar la venta")
+      toast.error("No se pudo procesar el pedido")
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const finalizeSale = () => submitSale("completed")
+  const moveOrder = () => submitSale("pending")
+
   return (
-    <div className="h-full bg-[#f3f3f6] px-3 py-3 sm:px-4 sm:py-4 lg:px-0 lg:py-0">
+    <div className="h-full w-full bg-[#f3f3f6] p-3 sm:p-4 lg:p-4 xl:p-6 overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1500px] gap-4 overflow-hidden rounded-[2rem] bg-transparent">
         <section
           className={cn(
             "min-w-0 flex-1 rounded-[2rem] bg-[#f7f7fa] p-4 transition-all duration-500 sm:p-5",
-            isCartOpen ? "lg:max-w-[calc(100%-25rem)]" : "lg:max-w-full"
+            isCartOpen ? "lg:mr-0" : ""
           )}
         >
           <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] bg-white px-4 py-3 shadow-[0_10px_30px_rgba(17,24,39,0.04)]">
@@ -366,10 +371,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               <div className="max-w-sm px-6">
                 <p className="text-lg font-semibold text-slate-700">No hay productos disponibles</p>
                 <p className="mt-2 text-sm text-slate-500">Carga productos en tu catalogo para empezar a vender desde esta seccion.</p>
-              </div>
-            </div>
-          ) : (
-            <>
+                  </div>
+                </div>
+              ) : (
+                <>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] 2xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
                 {products.map((product) => (
                   <button
@@ -399,9 +404,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       <h3 className="line-clamp-2 min-h-[3rem] text-[15px] font-semibold leading-tight text-slate-900">{product.name}</h3>
                       <p className="line-clamp-2 min-h-[2.5rem] text-xs text-slate-400">{product.description || product.category || "Producto disponible para venta inmediata"}</p>
                       <div className="flex items-center justify-between gap-2 pt-1">
-                        <span className="min-w-0 text-lg font-black leading-none tracking-tight text-slate-900 sm:text-xl xl:text-2xl">
-                          {formatCurrency(product.price)}
-                        </span>
+                        <div className="min-w-0 flex-1">
+                          <span className="block truncate text-lg font-black leading-none tracking-tight text-slate-900 sm:text-xl">
+                            {formatCurrency(product.price)}
+                          </span>
+                        </div>
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0f2f5] text-slate-600 transition-colors group-hover:bg-[#d8ff55] group-hover:text-slate-900">
                           <Plus className="h-4 w-4" />
                         </span>
@@ -426,24 +433,28 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
         <aside
           className={cn(
-            "fixed inset-y-0 right-0 z-40 w-full max-w-[420px] transform bg-white p-4 shadow-2xl transition-transform duration-500 ease-out lg:static lg:h-auto lg:rounded-[2rem] lg:p-4 lg:shadow-none",
+            "fixed inset-y-0 right-0 z-40 w-full max-w-[420px] transform bg-white p-4 shadow-2xl transition-transform duration-500 ease-out lg:static lg:h-auto lg:w-[420px] lg:shrink-0 lg:rounded-[2rem] lg:p-4 lg:shadow-none",
             isCartOpen ? "translate-x-0" : "translate-x-full lg:w-0 lg:max-w-0 lg:p-0 lg:opacity-0"
           )}
         >
-          <div className={cn("h-full overflow-hidden rounded-[2rem] bg-white", !isCartOpen && "lg:hidden")}>
-            <ScrollArea className="h-full">
-              <div className="space-y-4 p-3 sm:p-4">
-                <div className="rounded-[1.75rem] bg-[#1f2030] p-4 text-white">
+          <div className={cn("flex h-full w-full flex-col overflow-hidden rounded-[2rem] bg-white", !isCartOpen && "lg:hidden")}>
+            <div className="flex-1 w-full overflow-y-auto overflow-x-hidden pt-1 custom-scrollbar">
+              <div className="w-full min-w-0 space-y-4 p-3 pb-24 sm:p-4 lg:pb-4 text-left">
+                <div className="w-full rounded-[1.75rem] bg-[#1f2030] p-4 text-white">
                   <div className="mb-3 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#d8ff55]">Cliente</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Link href="/dashboard/clientes" className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">
+                    <div className="flex items-center gap-3">
+                      <Link href="/dashboard/clientes" className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60 hover:text-white transition-colors">
                         Crear nuevo
                       </Link>
-                      <button type="button" className="lg:hidden" onClick={() => setIsCartOpen(false)}>
-                        <X className="h-4 w-4 text-white/70" />
+                      <button 
+                        type="button" 
+                        onClick={() => setIsCartOpen(false)}
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                      >
+                        <X className="h-5 w-5" />
                       </button>
                     </div>
                   </div>
@@ -505,12 +516,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
                 </div>
 
-                <div className="rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] p-4">
-                  <div className="mb-4 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Carrito actual</p>
+                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] p-4">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Carrito actual</p>
                     </div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">{totalItems} productos</p>
+                    <p className="shrink-0 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">{totalItems} productos</p>
                   </div>
 
                   {cartItems.length === 0 ? (
@@ -520,8 +531,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   ) : (
                     <div className="space-y-3">
                       {cartItems.map((item) => (
-                        <div key={item.productId} className="flex items-center gap-3 rounded-[1.25rem] bg-white p-3 shadow-sm">
-                          <div className="h-14 w-14 overflow-hidden rounded-[1rem] bg-slate-100">
+                        <div key={item.productId} className="flex min-w-0 flex-row items-center gap-3 rounded-[1.25rem] bg-white p-3 shadow-sm">
+                          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[1rem] bg-slate-100">
                             {item.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
@@ -532,23 +543,23 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-semibold text-slate-800">{item.name}</p>
-                            <p className="text-xs text-slate-400">{formatCurrency(item.price)} / ud</p>
-                            <div className="mt-2 flex items-center gap-2">
-                              <button type="button" onClick={() => updateQuantity(item.productId, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                            <h4 className="text-sm font-semibold leading-tight text-slate-800 line-clamp-3 break-words">{item.name}</h4>
+                            <p className="truncate text-xs text-slate-400 mt-1">{formatCurrency(item.price)} / ud</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <button type="button" onClick={() => updateQuantity(item.productId, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200">
                                 <Minus className="h-3 w-3" />
                               </button>
-                              <span className="min-w-6 text-center text-sm font-semibold text-slate-700">{item.quantity}</span>
-                              <button type="button" onClick={() => updateQuantity(item.productId, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+                              <span className="min-w-4 text-center text-sm font-semibold text-slate-700">{item.quantity}</span>
+                              <button type="button" onClick={() => updateQuantity(item.productId, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200">
                                 <Plus className="h-3 w-3" />
                               </button>
                             </div>
                           </div>
-                          <div className="flex h-full flex-col items-end justify-between gap-2">
-                            <button type="button" onClick={() => removeItem(item.productId)}>
-                              <X className="h-4 w-4 text-slate-300" />
+                          <div className="flex h-full shrink-0 flex-col items-end justify-between gap-2 overflow-hidden text-right">
+                            <button type="button" onClick={() => removeItem(item.productId)} className="shrink-0 p-1 hover:bg-slate-50 transition-colors rounded-full">
+                              <X className="h-4 w-4 text-slate-300 hover:text-slate-500" />
                             </button>
-                            <p className="text-sm font-bold text-slate-800">{formatCurrency(item.price * item.quantity)}</p>
+                            <p className="truncate text-sm font-bold text-slate-800">{formatCurrency(item.price * item.quantity)}</p>
                           </div>
                         </div>
                       ))}
@@ -556,7 +567,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
                 </div>
 
-                <div className="rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] p-4">
+                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] p-4">
                   <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
                   <div className="grid grid-cols-2 gap-3">
                     {paymentOptions.map((option) => {
@@ -582,7 +593,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   </div>
                 </div>
 
-                <div className="rounded-[1.75rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-white p-4 shadow-sm">
                   <div className="space-y-2 text-sm text-slate-500">
                     <div className="flex items-center justify-between">
                       <span>Subtotal</span>
@@ -594,24 +605,34 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     </div>
                   </div>
 
-                  <div className="mt-5 flex items-end justify-between border-t border-slate-100 pt-4">
-                    <div>
+                  <div className="mt-5 flex flex-wrap items-end justify-between border-t border-slate-100 pt-4 gap-2">
+                    <div className="min-w-0">
                       <p className="text-sm font-bold uppercase tracking-[0.25em] text-slate-500">Total</p>
                     </div>
-                    <p className="text-4xl font-black tracking-tight text-slate-900">{formatCurrency(total)}</p>
+                    <p className="min-w-0 truncate text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">{formatCurrency(total)}</p>
                   </div>
 
-                  <Button
-                    onClick={finalizeSale}
-                    disabled={isSubmitting || cartItems.length === 0}
-                    className="mt-5 h-14 w-full rounded-full bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
-                  >
-                    {isSubmitting ? "Procesando..." : "Finalizar venta"}
-                    <CheckCircle2 className="ml-2 h-4 w-4" />
-                  </Button>
+                  <div className="flex flex-col gap-2 mt-5">
+                    <Button
+                      onClick={finalizeSale}
+                      disabled={isSubmitting || cartItems.length === 0}
+                      className="h-14 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
+                    >
+                      {isSubmitting ? "Procesando..." : "Finalizar venta"}
+                      <CheckCircle2 className="ml-2 h-4 w-4" />
+                    </Button>
+                    <Button
+                      onClick={moveOrder}
+                      disabled={isSubmitting || cartItems.length === 0}
+                      variant="outline"
+                      className="h-12 w-full rounded-[1.25rem] border-slate-200 text-sm font-bold uppercase tracking-[0.25em] text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    >
+                      Pasar pedido
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </ScrollArea>
+            </div>
           </div>
         </aside>
       </div>
@@ -620,11 +641,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         <button
           type="button"
           onClick={() => setIsCartOpen(true)}
-          className="fixed bottom-6 right-6 z-30 flex h-14 items-center gap-3 rounded-full bg-[#1f2030] px-5 text-sm font-semibold text-white shadow-2xl lg:hidden"
+          className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-[#1f2030] shadow-2xl lg:hidden"
+          aria-label="Ver carrito"
         >
-          <ReceiptText className="h-5 w-5 text-[#d8ff55]" />
-          Ver carrito
-          <Badge className="bg-[#d8ff55] text-slate-900 hover:bg-[#d8ff55]">{totalItems}</Badge>
+          <ReceiptText className="h-6 w-6 text-[#d8ff55]" />
+          <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#d8ff55] text-xs font-black text-slate-900">
+            {totalItems}
+          </span>
         </button>
       )}
     </div>

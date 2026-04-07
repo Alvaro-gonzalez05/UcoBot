@@ -21,6 +21,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
+import { useEffect, useRef } from "react"
+import { gsap } from "gsap"
+import { cn } from "@/lib/utils"
 
 interface Order {
   id: string
@@ -100,6 +103,58 @@ export function PedidosClient({
 
   // Extract unique tags from all orders
   const allTags = Array.from(new Set(orders.flatMap(o => o.tags || []))).sort()
+
+  const pendingCardsRef = useRef<(HTMLDivElement | null)[]>([])
+
+  useEffect(() => {
+    // Setup Supabase Realtime for orders table
+    const channel = supabase
+      .channel('orders-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const newOrder = payload.new as Order
+            toast.success(`¡Nuevo pedido recibido! (#${newOrder.id.slice(0, 5)})`)
+            setOrders(prev => [newOrder, ...prev])
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedOrder = payload.new as Order
+            setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o))
+          } else if (payload.eventType === 'DELETE') {
+            const deletedOrder = payload.old as Order
+            setOrders(prev => prev.filter(o => o.id !== deletedOrder.id))
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    // GSAP animation for pending orders
+    const pendingElements = pendingCardsRef.current.filter(Boolean)
+    if (pendingElements.length > 0) {
+      const ctx = gsap.context(() => {
+        gsap.to(pendingElements, {
+          y: -4,
+          boxShadow: "0 10px 15px -3px rgba(209, 243, 102, 0.4)",
+          repeat: -1,
+          yoyo: true,
+          duration: 1.5,
+          ease: "sine.inOut",
+          stagger: {
+            amount: 0.5,
+            from: "start"
+          }
+        })
+      })
+      return () => ctx.revert()
+    }
+  }, [orders])
 
   // Filter orders based on selected tags
   const filteredOrders = orders.filter(order => {
@@ -276,6 +331,7 @@ export function PedidosClient({
       case 'confirmed': return 'Confirmado'
       case 'preparing': return 'Preparando'
       case 'ready': return 'Listo'
+      case 'completed': return 'Finalizado'
       case 'delivered': return 'Entregado'
       case 'cancelled': return 'Cancelado'
       default: return status
@@ -287,14 +343,25 @@ export function PedidosClient({
     return <MessageCircle className="h-4 w-4 text-green-500" />
   }
 
+  const getCardStyle = (status: string) => {
+    switch (status) {
+      case 'pending':    return 'bg-[#fcffeb] border-[#D1F366] order-card-pending'
+      case 'completed':  return 'bg-slate-50 opacity-70 grayscale-[30%] border-slate-200'
+      case 'cancelled':  return 'bg-slate-50 opacity-60 grayscale-[50%] border-slate-200 text-slate-400 line-through'
+      case 'ready':      return 'bg-[#f4fcf6] border-[#1aa34a]/30'
+      default:           return 'bg-card border-border'
+    }
+  }
+
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'pending':    return 'bg-orange-100 text-orange-700 border border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-800'
-      case 'confirmed':  return 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800'
-      case 'preparing':  return 'bg-yellow-100 text-yellow-700 border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800'
-      case 'ready':      return 'bg-green-100 text-green-700 border border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800'
-      case 'delivered':  return 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700'
-      case 'cancelled':  return 'bg-red-100 text-red-700 border border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800'
+      case 'pending':    return 'bg-[#D1F366] text-[#1C1C28] border border-[#B3D93C]'
+      case 'confirmed':  return 'bg-blue-100 text-blue-700 border border-blue-200'
+      case 'preparing':  return 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+      case 'ready':      return 'bg-[#1DB954] text-white border border-[#1aa34a]'
+      case 'completed':  return 'bg-slate-200 text-slate-500 border border-slate-300'
+      case 'delivered':  return 'bg-gray-100 text-gray-600 border border-gray-200'
+      case 'cancelled':  return 'bg-slate-100 text-slate-400 border border-slate-200 line-through'
       default:           return 'bg-gray-100 text-gray-600 border border-gray-200'
     }
   }
@@ -411,12 +478,22 @@ export function PedidosClient({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {filteredOrders.map((order) => (
+              {filteredOrders.map((order, index) => (
                 <div
                   key={order.id}
-                  className="bg-card rounded-3xl p-5 shadow-sm border border-border transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  ref={(el) => {
+                    if (order.status === 'pending') {
+                      pendingCardsRef.current[index] = el
+                    } else {
+                      pendingCardsRef.current[index] = null
+                    }
+                  }}
+                  className={cn(
+                    "rounded-3xl p-5 shadow-sm border transition-all hover:shadow-md",
+                    getCardStyle(order.status)
+                  )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className={cn("flex flex-wrap items-center justify-between gap-4", order.status === "cancelled" && "opacity-60")}>
                     {/* Left: ID, status, time */}
                     <div className="flex items-center gap-4 w-full md:w-auto">
                       {/* Product image or placeholder */}
@@ -765,9 +842,10 @@ export function PedidosClient({
                       <SelectItem value="pending">Pendiente</SelectItem>
                       <SelectItem value="confirmed">Confirmado</SelectItem>
                       <SelectItem value="preparing">Preparando</SelectItem>
-                      <SelectItem value="ready">Listo</SelectItem>
-                      <SelectItem value="delivered">Entregado</SelectItem>
-                      <SelectItem value="cancelled">Cancelado</SelectItem>
+                        <SelectItem value="ready">Listo</SelectItem>
+                        <SelectItem value="delivered">Entregado</SelectItem>
+                        <SelectItem value="completed">Finalizado</SelectItem>
+                        <SelectItem value="cancelled">Cancelado</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
