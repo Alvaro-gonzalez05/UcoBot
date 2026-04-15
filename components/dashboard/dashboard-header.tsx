@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import ProfileDropdown from "./ProfileDropdown"
 import NotificationsDropdown from "./NotificationsDropdown"
+import { PushNotificationToggle } from "./push-notification-toggle"
 import Image from "next/image"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Menu } from "lucide-react"
@@ -70,6 +71,9 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
       <div className="flex items-center space-x-2 sm:space-x-4 flex-shrink-0">
         {/* User Profile Dropdown */}
         <ProfileDropdown user={user} profile={profile} />
+        
+        {/* Push Notification Toggle */}
+        <PushNotificationToggle />
         
         {/* Notifications Dropdown */}
         <NotificationsDropdown />

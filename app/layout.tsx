@@ -10,6 +10,13 @@ export const metadata: Metadata = {
   title: 'UcoBot - ChatBot Para Negocios',
   description: 'Plataforma argentina para crear chatbots inteligentes. Desde Mendoza para todo el país.',
   generator: 'Next.js',
+  manifest: '/manifest.json',
+  themeColor: '#D1F366',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'UcoBot',
+  },
 }
 
 export default function RootLayout({
