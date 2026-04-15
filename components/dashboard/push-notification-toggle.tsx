@@ -12,11 +12,22 @@ export function PushNotificationToggle() {
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+    // Check full support: Notification API + Service Worker + PushManager
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
       setPermission("unsupported")
+      console.warn("Push not supported:", {
+        notification: "Notification" in window,
+        sw: "serviceWorker" in navigator,
+        push: "PushManager" in window,
+      })
       return
     }
     setPermission(Notification.permission as PermissionState)
+
+    // Auto-register SW on load if already granted
+    if (Notification.permission === "granted") {
+      navigator.serviceWorker.register("/sw.js").catch(console.error)
+    }
   }, [])
 
   const registerServiceWorker = async () => {
@@ -55,19 +66,35 @@ export function PushNotificationToggle() {
   const handleEnable = async () => {
     setIsLoading(true)
     try {
-      const registration = await registerServiceWorker()
+      // 1. Register Service Worker
+      let registration: ServiceWorkerRegistration
+      try {
+        registration = await registerServiceWorker()
+      } catch (swError: any) {
+        toast.error("Error registrando Service Worker: " + swError.message)
+        return
+      }
+
+      // 2. Request notification permission
       const result = await Notification.requestPermission()
       setPermission(result as PermissionState)
 
       if (result === "granted") {
-        await subscribeUser(registration)
-        toast.success("Notificaciones activadas correctamente")
+        // 3. Subscribe to push
+        try {
+          await subscribeUser(registration)
+          toast.success("Notificaciones activadas correctamente")
+        } catch (subError: any) {
+          toast.error("Error en suscripción push: " + subError.message)
+        }
       } else if (result === "denied") {
         toast.error("Notificaciones bloqueadas. Puedes habilitarlas desde la configuración de tu navegador.")
+      } else {
+        toast.info("Permiso de notificaciones descartado")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error enabling push notifications:", error)
-      toast.error("Error al activar notificaciones")
+      toast.error("Error: " + (error.message || "No se pudo activar"))
     } finally {
       setIsLoading(false)
     }
@@ -102,7 +129,17 @@ export function PushNotificationToggle() {
   }
 
   if (permission === "unsupported") {
-    return null
+    return (
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => toast.error("Tu navegador no soporta notificaciones push. En iPhone, agregá la app a la pantalla de inicio primero.")}
+        className="h-9 w-9 rounded-xl text-muted-foreground opacity-50"
+        title="Notificaciones push no soportadas"
+      >
+        <BellOff className="h-5 w-5" />
+      </Button>
+    )
   }
 
   if (permission === "granted") {
