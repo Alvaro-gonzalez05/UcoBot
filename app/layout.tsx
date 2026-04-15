@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   generator: 'Next.js',
   manifest: '/manifest.json',
   themeColor: '#D1F366',
+  other: {
+    'mobile-web-app-capable': 'yes',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
