@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, Menu } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
 import ProfileDropdown from "./ProfileDropdown"
 import NotificationsDropdown from "./NotificationsDropdown"
+import { PushNotificationToggle } from "./push-notification-toggle"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 
@@ -230,7 +231,10 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
         {user && profile ? (
           <ProfileDropdown user={user} profile={profile} />
         ) : <div />}
-        <NotificationsDropdown />
+        <div className="flex items-center gap-1">
+          <PushNotificationToggle />
+          <NotificationsDropdown />
+        </div>
       </div>
     </aside>
   )
@@ -270,6 +274,7 @@ export function MobileHeader({ user, profile }: MobileHeaderProps) {
       </div>
       <div className="flex items-center gap-2">
         {user && profile && <ProfileDropdown user={user} profile={profile} />}
+        <PushNotificationToggle />
         <NotificationsDropdown />
       </div>
     </div>
