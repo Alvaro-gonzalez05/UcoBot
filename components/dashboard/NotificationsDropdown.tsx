@@ -9,6 +9,7 @@ import { es } from "date-fns/locale";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer";
+import { cn } from "@/lib/utils";
 
 interface Notification {
   id: string;
@@ -23,7 +24,11 @@ interface Notification {
 
 const PAGE_SIZE = 10;
 
-export default function NotificationsDropdown() {
+interface NotificationsDropdownProps {
+  position?: 'sidebar' | 'header';
+}
+
+export default function NotificationsDropdown({ position = 'sidebar' }: NotificationsDropdownProps) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -288,11 +293,16 @@ export default function NotificationsDropdown() {
             />
             
             <motion.div
-              initial={{ opacity: 0, x: -10, scale: 0.95 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: -10, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.95, ...(position === 'sidebar' ? { x: -10 } : { y: -10 }) }}
+              animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, ...(position === 'sidebar' ? { x: -10 } : { y: -10 }) }}
               transition={{ duration: 0.2 }}
-              className="absolute left-full bottom-0 ml-3 z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-xl sm:rounded-2xl bg-white shadow-2xl dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
+              className={cn(
+                "absolute z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-xl sm:rounded-2xl bg-white shadow-2xl dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden",
+                position === 'sidebar'
+                  ? "left-full bottom-0 ml-3"
+                  : "right-0 top-full mt-2"
+              )}
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {/* Header */}

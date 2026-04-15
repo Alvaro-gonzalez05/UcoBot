@@ -72,7 +72,7 @@ export function DashboardHeader({ user, profile }: DashboardHeaderProps) {
         <ProfileDropdown user={user} profile={profile} />
         
         {/* Notifications Dropdown */}
-        <NotificationsDropdown />
+        <NotificationsDropdown position="header" />
       </div>
     </header>
   )

@@ -275,7 +275,7 @@ export function MobileHeader({ user, profile }: MobileHeaderProps) {
       <div className="flex items-center gap-2">
         {user && profile && <ProfileDropdown user={user} profile={profile} />}
         <PushNotificationToggle />
-        <NotificationsDropdown />
+        <NotificationsDropdown position="header" />
       </div>
     </div>
   )
