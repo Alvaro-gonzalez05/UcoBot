@@ -48,6 +48,7 @@ interface ReservasClientProps {
     totalItems: number
     totalPages: number
   }
+  demo?: boolean
 }
 
 function getInitials(name: string) {
@@ -67,7 +68,7 @@ function getInitialColor(name: string) {
   return INITIALS_COLORS[idx]
 }
 
-export function ReservasClient({ reservations, pagination }: ReservasClientProps) {
+export function ReservasClient({ reservations, pagination, demo = false }: ReservasClientProps) {
   const supabase = createClient()
   const router = useRouter()
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -497,7 +498,9 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
                   {/* Reschedule / more */}
                   <Button
                     variant="ghost"
-                    onClick={() => handleEdit(reservation)}
+                    onClick={demo ? undefined : () => handleEdit(reservation)}
+                    disabled={demo}
+                    title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
                     className="px-5 py-2.5 rounded-xl font-bold text-sm bg-muted text-muted-foreground hover:bg-muted/80 whitespace-nowrap"
                   >
                     Reprogramar
@@ -511,11 +514,20 @@ export function ReservasClient({ reservations, pagination }: ReservasClientProps
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuLabel>Acciones</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={() => handleEdit(reservation)}>
+                      <DropdownMenuItem
+                        onClick={demo ? undefined : () => handleEdit(reservation)}
+                        disabled={demo}
+                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                      >
                         <Edit className="mr-2 h-4 w-4" /> Editar
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleDelete(reservation.id)} className="text-red-600">
+                      <DropdownMenuItem
+                        onClick={demo ? undefined : () => handleDelete(reservation.id)}
+                        disabled={demo}
+                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                        className="text-red-600"
+                      >
                         <Trash className="mr-2 h-4 w-4" /> Eliminar
                       </DropdownMenuItem>
                     </DropdownMenuContent>

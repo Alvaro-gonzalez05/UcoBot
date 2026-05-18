@@ -37,9 +37,12 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const publicRoutes = ["/", "/login", "/register", "/nosotros", "/capacidades"]
+  const publicRoutes = ["/", "/login", "/register", "/nosotros", "/capacidades", "/demo"]
   const isPublicRoute = publicRoutes.some(
-    (route) => request.nextUrl.pathname === route || request.nextUrl.pathname.startsWith("/register/"),
+    (route) =>
+      request.nextUrl.pathname === route ||
+      request.nextUrl.pathname.startsWith("/register/") ||
+      request.nextUrl.pathname.startsWith("/demo/"),
   )
 
   if (!user && !isPublicRoute) {

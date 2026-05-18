@@ -103,6 +103,7 @@ interface AutomationStats {
 interface AutomationsManagementProps {
   initialAutomations: Automation[]
   userId: string
+  demo?: boolean
 }
 
 const triggerTypes = {
@@ -136,7 +137,7 @@ const triggerTypes = {
   },
 }
 
-export function AutomationsManagement({ initialAutomations, userId }: AutomationsManagementProps) {
+export function AutomationsManagement({ initialAutomations, userId, demo = false }: AutomationsManagementProps) {
   const [automations, setAutomations] = useState<Automation[]>(initialAutomations)
   const [bots, setBots] = useState<Bot[]>([])
   const [systemTemplates, setSystemTemplates] = useState<SystemTemplate[]>([])
@@ -558,10 +559,11 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
         </ScrollSlideUp>
         <ScrollFadeIn delay={0.2}>
           <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-            <Button onClick={() => {
-              console.log("Botón clickeado - abriendo formulario");
-              setIsCreateDialogOpen(true);
-            }}>
+            <Button
+              onClick={demo ? undefined : () => { setIsCreateDialogOpen(true) }}
+              disabled={demo}
+              title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Nueva Automatización
             </Button>
@@ -667,12 +669,18 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => openEditDialog(automation)}>
+                              <DropdownMenuItem
+                                onClick={demo ? undefined : () => openEditDialog(automation)}
+                                disabled={demo}
+                                title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                              >
                                 <Edit className="h-4 w-4 mr-2" />
                                 Editar
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => handleToggleAutomation(automation.id, !automation.is_active)}
+                                onClick={demo ? undefined : () => handleToggleAutomation(automation.id, !automation.is_active)}
+                                disabled={demo}
+                                title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
                               >
                                 {automation.is_active ? (
                                   <>
@@ -687,7 +695,9 @@ export function AutomationsManagement({ initialAutomations, userId }: Automation
                                 )}
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => handleDeleteAutomation(automation.id)}
+                                onClick={demo ? undefined : () => handleDeleteAutomation(automation.id)}
+                                disabled={demo}
+                                title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
                                 className="text-red-600"
                               >
                                 <Trash2 className="h-4 w-4 mr-2" />

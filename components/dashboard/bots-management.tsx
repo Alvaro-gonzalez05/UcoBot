@@ -61,6 +61,7 @@ interface BotData {
 interface BotsManagementProps {
   initialBots: BotData[]
   userId: string
+  demo?: boolean
 }
 
 const platformIcons = {
@@ -82,7 +83,7 @@ const availableFeatures = [
   { id: "loyalty_points", label: "Consulta de puntos de fidelización" },
 ]
 
-export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
+export function BotsManagement({ initialBots, userId, demo = false }: BotsManagementProps) {
   const [bots, setBots] = useState<BotData[]>(initialBots)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -370,7 +371,12 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
               whileTap={{ scale: 0.95 }}
               className="flex-1 sm:flex-initial"
             >
-              <Button onClick={() => setIsCreateDialogOpen(true)} disabled={!canCreateBot} className="w-full sm:w-auto">
+              <Button
+                onClick={demo ? undefined : () => setIsCreateDialogOpen(true)}
+                disabled={demo || !canCreateBot}
+                title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                className="w-full sm:w-auto"
+              >
                 <Plus className="h-4 w-4 mr-2" />
                 <span className="hidden sm:inline">Crear Bot</span>
                 <span className="sm:hidden">Nuevo Bot</span>
@@ -470,7 +476,12 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Button onClick={() => setIsCreateDialogOpen(true)} className="w-full sm:w-auto">
+                  <Button
+                    onClick={demo ? undefined : () => setIsCreateDialogOpen(true)}
+                    disabled={demo}
+                    title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                    className="w-full sm:w-auto"
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     <span className="hidden sm:inline">Crear mi primer bot</span>
                     <span className="sm:hidden">Crear bot</span>
@@ -506,17 +517,29 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                       </motion.div>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => openEditDialog(bot)}>
+                      <DropdownMenuItem
+                        onClick={demo ? undefined : () => openEditDialog(bot)}
+                        disabled={demo}
+                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                      >
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
                       {(bot.platform === "whatsapp" || bot.platform === "instagram") && (
-                        <DropdownMenuItem onClick={() => openMetaConfigDialog(bot)}>
+                        <DropdownMenuItem
+                          onClick={demo ? undefined : () => openMetaConfigDialog(bot)}
+                          disabled={demo}
+                          title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                        >
                           <Zap className="mr-2 h-4 w-4" />
                           {bot.platform === "whatsapp" ? "Configurar Meta Business (WhatsApp)" : "Configurar Meta Business (Instagram)"}
                         </DropdownMenuItem>
                       )}
-                      <DropdownMenuItem onClick={() => handleToggleBot(bot.id, !bot.is_active)}>
+                      <DropdownMenuItem
+                        onClick={demo ? undefined : () => handleToggleBot(bot.id, !bot.is_active)}
+                        disabled={demo}
+                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                      >
                         {bot.is_active ? (
                           <>
                             <Pause className="mr-2 h-4 w-4" />
@@ -529,7 +552,12 @@ export function BotsManagement({ initialBots, userId }: BotsManagementProps) {
                           </>
                         )}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleDeleteBot(bot.id)} className="text-destructive">
+                      <DropdownMenuItem
+                        onClick={demo ? undefined : () => handleDeleteBot(bot.id)}
+                        disabled={demo}
+                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                        className="text-destructive"
+                      >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Eliminar
                       </DropdownMenuItem>

@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { Users, MessageSquare, DollarSign, Activity, CreditCard } from "lucide-react"
+import { Users, MessageSquare, DollarSign, Activity, CreditCard, Bot } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -69,6 +69,12 @@ export default async function AdminDashboard() {
             <Link href="/dashboard/admin/payments">
               <CreditCard className="mr-2 h-4 w-4" />
               Ver Pagos
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/admin/demos">
+              <Bot className="mr-2 h-4 w-4" />
+              Ver Demos
             </Link>
           </Button>
           <Button asChild>

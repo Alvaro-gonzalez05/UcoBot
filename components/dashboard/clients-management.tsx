@@ -25,6 +25,7 @@ import { Plus, MoreHorizontal, Edit, Trash2, Users, Gift, Calendar, Phone, Mail,
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
 import { ClientsPagination } from "./clients-pagination"
+import { DemoBlocker } from "@/components/ui/demo-blocker"
 import { ClientsSearch } from "./clients-search"
 
 interface Client {
@@ -53,9 +54,10 @@ interface ClientsManagementProps {
     hasPrevPage: boolean
   }
   searchTerm: string
+  demo?: boolean
 }
 
-export function ClientsManagement({ initialClients, userId, pagination, searchTerm }: ClientsManagementProps) {
+export function ClientsManagement({ initialClients, userId, pagination, searchTerm, demo = false }: ClientsManagementProps) {
   const [clients, setClients] = useState<Client[]>(initialClients)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -242,7 +244,16 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
           </div>
         </ScrollSlideUp>
         <ScrollFadeIn delay={0.2}>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          {demo ? (
+            <DemoBlocker>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Añadir Cliente
+              </Button>
+            </DemoBlocker>
+          ) : null}
+          <Dialog open={demo ? false : isAddDialogOpen} onOpenChange={demo ? undefined : setIsAddDialogOpen}>
+            {!demo && (
             <DialogTrigger asChild>
               <motion.div
                 whileHover={{ scale: 1.05 }}
@@ -254,6 +265,7 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
                 </Button>
               </motion.div>
             </DialogTrigger>
+            )}
           <DialogContent className="sm:max-w-[425px]">
             <DialogHeader>
               <DialogTitle>Añadir Nuevo Cliente</DialogTitle>
@@ -523,12 +535,18 @@ export function ClientsManagement({ initialClients, userId, pagination, searchTe
                             </motion.div>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                            <DropdownMenuItem
+                              onClick={demo ? undefined : () => openEditDialog(client)}
+                              disabled={demo}
+                              title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
+                            >
                               <Edit className="mr-2 h-4 w-4" />
                               Editar
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => handleDeleteClient(client.id)}
+                              onClick={demo ? undefined : () => handleDeleteClient(client.id)}
+                              disabled={demo}
+                              title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
                               className="text-destructive"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
