@@ -9,6 +9,8 @@ import {
   MessageSquare, Users, Calendar, ShoppingBag, Package, FileText, Zap,
   Menu, X, ArrowRight, LayoutDashboard, CheckCircle2, Clock,
   Play, ToggleLeft, TrendingUp, Globe, Star, AlertCircle, Sun, Moon,
+  Search, Phone, MoreVertical, Smile, CheckCheck, PauseCircle, PlayCircle,
+  RefreshCw, ArrowLeft, StickyNote,
 } from "lucide-react"
 import Link from "next/link"
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts"
@@ -16,6 +18,17 @@ import { ClientsManagement } from "@/components/dashboard/clients-management"
 import { ReservasClient } from "@/components/dashboard/reservas-client"
 import { AutomationsManagement } from "@/components/dashboard/automations-management"
 import { BotsManagement } from "@/components/dashboard/bots-management"
+import { cn } from "@/lib/utils"
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
+import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Textarea } from "@/components/ui/textarea"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
 // ─── Icon map ─────────────────────────────────────────────────────────────────
 const SIDEBAR_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -26,11 +39,12 @@ const SIDEBAR_ICONS: Record<string, React.ComponentType<{ className?: string }>>
 // ─── Fixed + optional section IDs ─────────────────────────────────────────────
 const FIXED_SECTIONS: SidebarItem[] = [
   { id: "dashboard", label: "Dashboard", visible: true, icon: "LayoutDashboard" },
-  { id: "chat", label: "Mensajes", visible: true, icon: "MessageSquare" },
+  { id: "mensajes", label: "Mensajes", visible: true, icon: "MessageSquare" },
   { id: "bots", label: "Chatbots", visible: true, icon: "Bot" },
   { id: "automations", label: "Automatizaciones", visible: true, icon: "Zap" },
 ]
-const FIXED_SECTION_IDS = new Set(FIXED_SECTIONS.map((s) => s.id))
+// "chat" se excluye del nav pero se incluye aquí para que no aparezca en "Tu negocio"
+const FIXED_SECTION_IDS = new Set([...FIXED_SECTIONS.map((s) => s.id), "chat"])
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 interface SidebarItem {
@@ -740,6 +754,7 @@ function SectionContent({ section, session }: { section: SidebarItem; session: D
 
   switch (section.id) {
     case "dashboard":   return <DashboardSection session={session} />
+    case "mensajes":    return <MensajesDemoSection session={session} />
     case "bots":        return (
       <div className="flex-1 overflow-y-auto bg-background p-4">
         <BotsManagement initialBots={MOCK_BOTS} userId="demo-user" demo={true} />
@@ -885,158 +900,340 @@ function DemoSidebar({ session, visibleSections, activeSection, onSelectSection,
   )
 }
 
-// ─── MENSAJES section (hardcoded inbox) ──────────────────────────────────────
-type ConvMsg = { from: "bot" | "client"; text: string }
-interface DemoConversation {
-  id: string; name: string; platform: "whatsapp" | "instagram"
-  lastMsg: string; time: string; unread: number; messages: ConvMsg[]
+// ─── MENSAJES section (réplica fiel del chat real) ───────────────────────────
+interface DemoConvMsg { id: string; sender_type: "client" | "bot"; content: string; created_at: string }
+interface DemoConv {
+  id: string; name: string; phone: string; platform: "whatsapp" | "instagram"
+  last_message_at: string; unread_count: number; last_message: string
+  needs_attention: boolean; paused: boolean
+  client: { points: number; total_purchases: number; orders: { id: string; status: string; amount: string }[] }
+  messages: DemoConvMsg[]
 }
 
 function MensajesDemoSection({ session }: { session: DemoSession }) {
   const fc = session.feature_config || {}
   const appLabel = (fc.appointments_label || "cita").toLowerCase()
-  const reqLabel = (fc.requests_label || "pedido").toLowerCase()
 
-  const conversations: DemoConversation[] = [
+  const now = Date.now()
+  const CONVS: DemoConv[] = [
     {
-      id: "maria", name: "María García", platform: "whatsapp",
-      lastMsg: "Perfecto! Entonces nos vemos el martes.", time: "Hace 10 min", unread: 0,
+      id: "maria", name: "María García", phone: "+54 9 11 1234-5678", platform: "whatsapp",
+      last_message_at: new Date(now - 10 * 60000).toISOString(),
+      unread_count: 2, last_message: "Perfecto! Entonces nos vemos el martes.",
+      needs_attention: false, paused: true,
+      client: { points: 120, total_purchases: 3, orders: [{ id: "A001", status: "Entregado", amount: "$2.500" }, { id: "A002", status: "Confirmado", amount: "$1.200" }] },
       messages: [
-        { from: "client", text: `Hola! Quería consultar por los precios` },
-        { from: "bot", text: `¡Hola María! Con gusto te ayudo. ¿Qué servicio te interesa?` },
-        { from: "client", text: `El servicio premium, ¿cuánto sale?` },
-        { from: "bot", text: `El servicio premium tiene un valor de $2.500. Incluye atención personalizada, seguimiento y garantía. ¿Te gustaría agendar una ${appLabel}?` },
-        { from: "client", text: `Sí, me interesa. ¿Tienen disponibilidad el martes?` },
-        { from: "bot", text: `¡Perfecto! Tenemos disponibilidad el martes a las 15:00 y 17:00. ¿Cuál te viene mejor?` },
-        { from: "client", text: `Las 15:00 me viene bien.` },
-        { from: "bot", text: `Tu ${appLabel} quedó confirmada para el martes a las 15:00. Te enviaré un recordatorio el día antes. ¿Necesitás algo más?` },
-        { from: "client", text: `Perfecto! Entonces nos vemos el martes.` },
+        { id: "m1", sender_type: "client", content: "Hola! Quería consultar por los precios", created_at: new Date(now - 25*60000).toISOString() },
+        { id: "m2", sender_type: "bot", content: "¡Hola María! Con gusto te ayudo. ¿Qué servicio te interesa?", created_at: new Date(now - 24*60000).toISOString() },
+        { id: "m3", sender_type: "client", content: "El servicio premium, ¿cuánto sale?", created_at: new Date(now - 23*60000).toISOString() },
+        { id: "m4", sender_type: "bot", content: `El servicio premium tiene un valor de $2.500. Incluye atención personalizada y seguimiento. ¿Te gustaría agendar una ${appLabel}?`, created_at: new Date(now - 20*60000).toISOString() },
+        { id: "m5", sender_type: "client", content: "Sí, me interesa. ¿Tienen disponibilidad el martes?", created_at: new Date(now - 15*60000).toISOString() },
+        { id: "m6", sender_type: "bot", content: "¡Perfecto! Tenemos disponibilidad el martes a las 15:00 y 17:00. ¿Cuál te viene mejor?", created_at: new Date(now - 12*60000).toISOString() },
+        { id: "m7", sender_type: "client", content: "Las 15:00 me viene bien.", created_at: new Date(now - 11*60000).toISOString() },
+        { id: "m8", sender_type: "bot", content: `¡Listo! Tu ${appLabel} quedó confirmada para el martes a las 15:00. Te enviaré un recordatorio el día antes.`, created_at: new Date(now - 11*60000 + 5000).toISOString() },
+        { id: "m9", sender_type: "client", content: "Perfecto! Entonces nos vemos el martes.", created_at: new Date(now - 10*60000).toISOString() },
       ],
     },
     {
-      id: "juan", name: "Juan López", platform: "instagram",
-      lastMsg: "Están abiertos mañana?", time: "Hace 2 hs", unread: 1,
+      id: "juan", name: "Juan López", phone: "+54 9 11 9876-5432", platform: "instagram",
+      last_message_at: new Date(now - 2*3600000).toISOString(),
+      unread_count: 1, last_message: "Están abiertos mañana?",
+      needs_attention: true, paused: true,
+      client: { points: 45, total_purchases: 1, orders: [] },
       messages: [
-        { from: "client", text: `Están abiertos mañana?` },
-        { from: "bot", text: `¡Hola Juan! Sí, mañana estamos abiertos de 9:00 a 18:00. ¿En qué te podemos ayudar?` },
-        { from: "client", text: `Están abiertos mañana?` },
+        { id: "j1", sender_type: "client", content: "Están abiertos mañana?", created_at: new Date(now - 2*3600000).toISOString() },
       ],
     },
     {
-      id: "carlos", name: "Carlos Ruiz", platform: "whatsapp",
-      lastMsg: "Quiero más info del servicio premium", time: "Ayer", unread: 0,
+      id: "carlos", name: "Carlos Ruiz", phone: "+54 9 11 5555-4444", platform: "whatsapp",
+      last_message_at: new Date(now - 86400000).toISOString(),
+      unread_count: 0, last_message: "Tienen plan de cuotas?",
+      needs_attention: false, paused: false,
+      client: { points: 320, total_purchases: 8, orders: [{ id: "B001", status: "Entregado", amount: "$5.000" }, { id: "B002", status: "Entregado", amount: "$2.500" }] },
       messages: [
-        { from: "client", text: `Quiero más info del servicio premium` },
-        { from: "bot", text: `¡Claro, Carlos! El servicio premium incluye atención personalizada y seguimiento post-servicio. Precio: $2.500. ¿Querés que te contacte un asesor?` },
-        { from: "client", text: `Tienen plan de cuotas?` },
-        { from: "bot", text: `Sí, manejamos 3 y 6 cuotas sin interés. ¿Te interesa que un asesor te contacte para más detalles?` },
+        { id: "c1", sender_type: "client", content: "Quiero más info del servicio premium", created_at: new Date(now - 26*3600000).toISOString() },
+        { id: "c2", sender_type: "bot", content: "¡Claro, Carlos! El servicio premium incluye atención personalizada y seguimiento post-servicio. Precio: $2.500.", created_at: new Date(now - 25*3600000).toISOString() },
+        { id: "c3", sender_type: "client", content: "Tienen plan de cuotas?", created_at: new Date(now - 86400000).toISOString() },
+        { id: "c4", sender_type: "bot", content: "Sí, manejamos 3 y 6 cuotas sin interés. ¿Te interesa que un asesor te contacte?", created_at: new Date(now - 86400000 + 60000).toISOString() },
       ],
     },
     {
-      id: "ana", name: "Ana Martínez", platform: "whatsapp",
-      lastMsg: "Gracias! Me registré", time: "Hace 3 días", unread: 0,
+      id: "ana", name: "Ana Martínez", phone: "+54 9 11 3333-2222", platform: "whatsapp",
+      last_message_at: new Date(now - 3*86400000).toISOString(),
+      unread_count: 0, last_message: "Gracias! Me registré",
+      needs_attention: false, paused: false,
+      client: { points: 85, total_purchases: 2, orders: [] },
       messages: [
-        { from: "client", text: `Hola! Me gustaría registrarme como cliente` },
-        { from: "bot", text: `¡Bienvenida! Para registrarte necesito tu nombre completo y teléfono de contacto.` },
-        { from: "client", text: `Ana Martínez, +54 9 11 3333-2222` },
-        { from: "bot", text: `¡Listo Ana! Ya quedaste registrada como cliente. Vas a recibir novedades y promociones exclusivas. ¿Puedo ayudarte con algo más?` },
-        { from: "client", text: `Gracias! Me registré` },
+        { id: "a1", sender_type: "client", content: "Hola! Me gustaría registrarme como cliente", created_at: new Date(now - 3*86400000 - 10*60000).toISOString() },
+        { id: "a2", sender_type: "bot", content: "¡Bienvenida! Para registrarte necesito tu nombre completo y teléfono de contacto.", created_at: new Date(now - 3*86400000 - 9*60000).toISOString() },
+        { id: "a3", sender_type: "client", content: "Ana Martínez, +54 9 11 3333-2222", created_at: new Date(now - 3*86400000 - 8*60000).toISOString() },
+        { id: "a4", sender_type: "bot", content: "¡Listo Ana! Ya quedaste registrada. Vas a recibir novedades y promociones exclusivas.", created_at: new Date(now - 3*86400000 - 7*60000).toISOString() },
+        { id: "a5", sender_type: "client", content: "Gracias! Me registré", created_at: new Date(now - 3*86400000).toISOString() },
       ],
     },
   ]
 
-  const [selectedId, setSelectedId] = useState(conversations[0].id)
-  const selected = conversations.find((c) => c.id === selectedId) ?? conversations[0]
-  const msgEndRef = useRef<HTMLDivElement>(null)
+  const [selectedId, setSelectedId] = useState<string>("maria")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
+  const [pauseState, setPauseState] = useState<Record<string, boolean>>({ maria: true, juan: true })
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { msgEndRef.current?.scrollIntoView({ behavior: "smooth" }) }, [selectedId])
+  const filtered = CONVS.filter(c =>
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || c.phone.includes(searchTerm)
+  )
+  const selected = CONVS.find(c => c.id === selectedId) ?? CONVS[0]
+  const isPaused = pauseState[selected.id] ?? selected.paused
 
-  const platformIcon = (p: string) => p === "instagram" ? "📸" : "💬"
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+  }, [selectedId])
+
+  const formatTime = (iso: string) => {
+    const date = new Date(iso)
+    const d = new Date()
+    if (date.toDateString() === d.toDateString()) return format(date, "HH:mm")
+    if (d.getTime() - date.getTime() < 7 * 86400000) return format(date, "EEEE", { locale: es })
+    return format(date, "dd/MM/yyyy")
+  }
+  const getInitials = (name: string) => name.substring(0, 2).toUpperCase()
 
   return (
-    <div className="flex-1 flex overflow-hidden">
-      {/* Left — conversation list */}
-      <div className="w-64 flex-shrink-0 border-r border-border flex flex-col bg-background">
-        <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-semibold text-foreground">Mensajes</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">{conversations.length} conversaciones</p>
-        </div>
-        <div className="flex-1 overflow-y-auto divide-y divide-border/50">
-          {conversations.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => setSelectedId(conv.id)}
-              className={`w-full px-4 py-3.5 flex items-start gap-3 text-left transition-colors ${
-                selectedId === conv.id ? "bg-accent" : "hover:bg-muted/50"
-              }`}
-            >
-              <div className="relative flex-shrink-0">
-                <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center text-sm font-bold text-foreground">
-                  {conv.name.charAt(0)}
-                </div>
-                <span className="absolute -bottom-0.5 -right-0.5 text-[10px] leading-none">{platformIcon(conv.platform)}</span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="text-sm font-medium text-foreground truncate">{conv.name}</span>
-                  {conv.unread > 0 && (
-                    <span className="flex-shrink-0 w-4 h-4 rounded-full bg-[#CCFF00] text-black text-[9px] font-black flex items-center justify-center">{conv.unread}</span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">{conv.lastMsg}</p>
-                <p className="text-[10px] text-muted-foreground/60 mt-0.5">{conv.time}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Right — conversation messages */}
-      <div className="flex-1 flex flex-col min-w-0 bg-background">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-shrink-0">
-          <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-bold text-foreground flex-shrink-0">
-            {selected.name.charAt(0)}
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-foreground">{selected.name}</p>
-            <p className="text-[10px] text-muted-foreground capitalize">{platformIcon(selected.platform)} {selected.platform}</p>
+    <div className="flex h-full md:gap-4 bg-background relative overflow-hidden md:overflow-visible">
+      {/* Sidebar — conversation list */}
+      <Card className="w-full md:w-1/3 flex flex-col overflow-hidden absolute inset-0 md:static z-10 bg-background rounded-none md:rounded-lg border-0 md:border">
+        <div className="p-4 border-b bg-muted/30">
+          <div className="relative">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input placeholder="Buscar conversación..." className="pl-8" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
         </div>
+        <div className="flex-1 overflow-y-auto">
+          <div className="flex flex-col">
+            {filtered.map(conv => {
+              const paused = pauseState[conv.id] ?? conv.paused
+              const showUnread = conv.unread_count > 0 && paused
+              const needsAttention = conv.needs_attention
+              return (
+                <button key={conv.id}
+                  onClick={() => { setSelectedId(conv.id); setIsClientDetailsOpen(false) }}
+                  className={cn(
+                    "flex items-start gap-3 p-4 text-left transition-colors hover:bg-muted/50 border-b last:border-0 relative",
+                    selectedId === conv.id && "bg-muted",
+                    showUnread && !needsAttention && "bg-blue-50 dark:bg-blue-950/20",
+                    needsAttention && "bg-red-50 dark:bg-red-950/20"
+                  )}>
+                  {showUnread && !needsAttention && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500" />}
+                  {needsAttention && <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500" />}
+                  <Avatar>
+                    <AvatarFallback className={cn("text-white", conv.platform === "whatsapp" ? "bg-green-500" : "bg-pink-500")}>
+                      {getInitials(conv.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 overflow-hidden">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={cn("truncate", (showUnread || needsAttention) ? "font-bold text-foreground" : "font-medium")}>{conv.name}</span>
+                      <span className={cn("text-xs whitespace-nowrap", needsAttention ? "text-red-600 font-bold" : showUnread ? "text-blue-600 font-medium" : "text-muted-foreground")}>
+                        {formatTime(conv.last_message_at)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <p className={cn("text-sm truncate max-w-[180px]", (showUnread || needsAttention) ? "font-medium text-foreground" : "text-muted-foreground")}>
+                        {conv.last_message}
+                      </p>
+                      {showUnread && (
+                        <Badge variant="default" className={cn("h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]", needsAttention ? "bg-red-500 hover:bg-red-600" : "")}>
+                          {conv.unread_count}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="mt-1 flex gap-1">
+                      <Badge variant="outline" className="text-[10px] h-4 px-1 py-0">{conv.platform}</Badge>
+                      {paused && (
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:border-yellow-800">
+                          IA Pausada
+                        </Badge>
+                      )}
+                      {needsAttention && <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">Ayuda</Badge>}
+                    </div>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </Card>
 
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          <DemoBanner text="Vista previa del inbox. En tu cuenta real verás las conversaciones reales de tus clientes en tiempo real." />
-          {selected.messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.from === "client" ? "justify-end" : "justify-start"} gap-2`}>
-              {msg.from === "bot" && (
-                <div className="w-6 h-6 rounded-full bg-[#CCFF00] flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Bot className="w-3.5 h-3.5 text-black" />
+      {/* Main — chat window */}
+      <Card className={cn(
+        "flex-1 flex flex-col overflow-hidden transition-transform duration-300 ease-in-out absolute inset-0 md:static z-20 bg-background w-full md:w-auto rounded-none md:rounded-lg border-0 md:border",
+        selected ? "translate-x-0" : "translate-x-full md:translate-x-0"
+      )}>
+        {selected ? (
+          <>
+            {/* Chat header */}
+            <div className="p-4 border-b flex items-center justify-between bg-muted/30">
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="icon" className="md:hidden -ml-2 mr-1" onClick={() => setSelectedId("")}>
+                  <ArrowLeft className="h-5 w-5" />
+                </Button>
+                <button onClick={() => setIsClientDetailsOpen(p => !p)} className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2" title="Ver información del cliente">
+                  <Avatar className="transition-transform hover:scale-105">
+                    <AvatarFallback className={cn("text-white", selected.platform === "whatsapp" ? "bg-green-500" : "bg-pink-500")}>
+                      {getInitials(selected.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+                <div>
+                  <h3 className="font-medium">{selected.name}</h3>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    {selected.platform === "instagram" ? `@${selected.name.toLowerCase().replace(/ /g, "_")}` : selected.phone}
+                    {selected.platform === "whatsapp" && <span className="text-green-600 ml-1">● WhatsApp</span>}
+                    {selected.platform === "instagram" && <span className="text-pink-600 ml-1">● Instagram</span>}
+                  </p>
                 </div>
-              )}
-              <div className={`max-w-[75%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                msg.from === "client"
-                  ? "bg-[#CCFF00] text-black rounded-br-sm font-medium"
-                  : "bg-card text-card-foreground border border-border rounded-bl-sm"
-              }`}>
-                {msg.text}
+              </div>
+              <div className="flex items-center gap-1 md:gap-2">
+                {isPaused && (
+                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5">
+                    <PauseCircle className="h-3 w-3" />
+                    <span className="hidden md:inline">IA Pausada</span>
+                  </Badge>
+                )}
+                <Button variant="ghost" size="icon" className="hidden md:flex"><Phone className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="icon" className="hidden md:flex"><RefreshCw className="h-4 w-4" /></Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setPauseState(p => ({ ...p, [selected.id]: !isPaused }))}>
+                      {isPaused
+                        ? <><PlayCircle className="mr-2 h-4 w-4" />Reactivar IA</>
+                        : <><PauseCircle className="mr-2 h-4 w-4" />Pausar IA (Intervenir)</>
+                      }
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
-          ))}
-          <div ref={msgEndRef} />
-        </div>
 
-        {/* Locked input */}
-        <div className="flex-shrink-0 px-4 pb-4 pt-2 border-t border-border bg-background">
-          <div className="bg-muted border border-border rounded-2xl flex items-center gap-2 px-4 py-3 opacity-60 cursor-not-allowed">
-            <span className="flex-1 text-sm text-muted-foreground">Respondé directamente desde WhatsApp o Instagram...</span>
-            <Send className="w-4 h-4 text-muted-foreground" />
+            {/* Messages area */}
+            <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-slate-50 dark:bg-slate-950/50">
+              <DemoBanner text="Vista previa del inbox. En tu cuenta real verás las conversaciones reales de tus clientes en tiempo real." />
+              {selected.messages.map(msg => {
+                const isClient = msg.sender_type === "client"
+                return (
+                  <div key={msg.id} className={cn("flex", isClient ? "justify-start" : "justify-end")}>
+                    <div className={cn(
+                      "max-w-[85%] md:max-w-[70%] rounded-lg p-3 shadow-sm",
+                      isClient ? "bg-white dark:bg-slate-800 rounded-tl-none border" : "bg-primary text-primary-foreground rounded-tr-none"
+                    )}>
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      <div className={cn("text-[10px] mt-1 flex items-center justify-end gap-1",
+                        isClient ? "text-muted-foreground" : "text-primary-foreground/70"
+                      )}>
+                        {format(new Date(msg.created_at), "HH:mm")}
+                        {!isClient && <CheckCheck className="h-3 w-3" />}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Input area */}
+            <div className="p-2 border-t bg-background">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" className="text-muted-foreground"><Smile className="h-5 w-5" /></Button>
+                <Button variant="ghost" size="icon" className="text-muted-foreground" disabled={!isPaused}><Paperclip className="h-5 w-5" /></Button>
+                <Textarea
+                  placeholder={isPaused ? "Escribe un mensaje..." : "Pausá la IA para intervenir manualmente"}
+                  className="flex-1 min-h-[50px] max-h-[120px] resize-none py-[14px]"
+                  disabled={!isPaused}
+                />
+                <Button disabled={!isPaused}><Send className="h-4 w-4" /></Button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8">
+            <div className="bg-muted/50 p-6 rounded-full mb-4"><Send className="h-10 w-10 opacity-20" /></div>
+            <h3 className="font-medium text-lg mb-2">Tus Mensajes</h3>
+            <p className="text-center max-w-xs">Selecciona una conversación de la lista para ver el historial de mensajes con tus clientes.</p>
           </div>
-          <p className="text-center text-muted-foreground/50 text-[10px] mt-2 uppercase tracking-wider">
-            ACTIVÁ TU CUENTA PARA RESPONDER MENSAJES REALES
-          </p>
-        </div>
-      </div>
+        )}
+      </Card>
+
+      {/* Client details panel */}
+      {selected && isClientDetailsOpen && (
+        <Card className="absolute inset-y-0 right-0 z-30 w-full max-w-[340px] rounded-none border-l bg-[#f5f5f3] dark:bg-slate-900 md:static md:w-[320px] md:max-w-none md:rounded-lg md:border">
+          <ScrollArea className="h-full">
+            <div className="p-4 sm:p-5">
+              <div className="mb-6 flex items-center justify-between">
+                <h3 className="text-xl font-semibold">Información del Cliente</h3>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsClientDetailsOpen(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="mb-6 flex flex-col items-center text-center">
+                <Avatar className="h-20 w-20 border-4 border-white shadow-sm">
+                  <AvatarFallback className={cn("text-xl text-white", selected.platform === "whatsapp" ? "bg-green-500" : "bg-pink-500")}>
+                    {getInitials(selected.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <h4 className="mt-3 text-2xl font-semibold">{selected.name}</h4>
+                <p className="text-sm text-muted-foreground">{selected.phone}</p>
+              </div>
+              <div className="mb-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border bg-background p-4">
+                  <p className="text-xs text-muted-foreground">PUNTOS</p>
+                  <p className="mt-1 text-xl font-semibold flex items-center gap-1">
+                    <Star className="h-4 w-4 text-lime-500" />{selected.client.points.toLocaleString("es-AR")}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-background p-4">
+                  <p className="text-xs text-muted-foreground">Total Pedidos</p>
+                  <p className="mt-1 text-xl font-semibold flex items-center gap-1">
+                    <ShoppingBag className="h-4 w-4 text-muted-foreground" />{selected.client.total_purchases}
+                  </p>
+                </div>
+              </div>
+              <div className="mb-5">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold tracking-widest text-muted-foreground">ULTIMOS PEDIDOS</p>
+                  <span className="text-xs font-medium text-lime-600">Ver todos</span>
+                </div>
+                {selected.client.orders.length > 0 ? (
+                  <div className="space-y-3">
+                    {selected.client.orders.map(order => (
+                      <div key={order.id} className="flex items-center justify-between rounded-2xl border bg-background p-3">
+                        <div>
+                          <p className="font-semibold">#{order.id}</p>
+                          <p className="text-xs text-emerald-600">{order.status}</p>
+                        </div>
+                        <p className="font-semibold">{order.amount}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border bg-background p-4 text-sm text-muted-foreground">
+                    Este cliente aún no tiene pedidos registrados.
+                  </div>
+                )}
+              </div>
+              <div className="rounded-2xl border border-lime-200/70 bg-background/80 p-4">
+                <p className="text-xs font-semibold tracking-widest text-muted-foreground flex items-center gap-1">
+                  <StickyNote className="h-4 w-4 text-lime-500" />NOTA INTERNA
+                </p>
+                <p className="mt-2 text-sm italic text-muted-foreground">
+                  &quot;{selected.messages[selected.messages.length - 1]?.content?.slice(0, 120) ?? "Sin nota interna."}&quot;
+                </p>
+              </div>
+            </div>
+          </ScrollArea>
+        </Card>
+      )}
     </div>
   )
 }
@@ -1252,7 +1449,7 @@ export default function DemoChatPage() {
   const [registeredClientName, setRegisteredClientName] = useState<string | null>(null)
   const [currentLeadTag, setCurrentLeadTag] = useState<string | null>(null)
   const [messageEvents, setMessageEvents] = useState<Record<string, ChatEvent[]>>({})
-  const [activeSection, setActiveSection] = useState("chat")
+  const [activeSection, setActiveSection] = useState("dashboard")
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -1354,7 +1551,8 @@ export default function DemoChatPage() {
       {/* Desktop sidebar — always dark */}
       <div className="hidden md:flex w-56 flex-shrink-0 bg-[#0C0C12] border-r border-zinc-900 flex-col">
         <DemoSidebar session={session} visibleSections={visibleSections}
-          activeSection={activeSection} onSelectSection={(id) => setActiveSection(id)} />
+          activeSection={activeSection} onSelectSection={(id) => setActiveSection(id)}
+          onProbar={() => setActiveSection("chat")} />
       </div>
 
       {/* Mobile sidebar */}
@@ -1371,7 +1569,8 @@ export default function DemoChatPage() {
                 <X className="w-4 h-4" />
               </button>
               <DemoSidebar session={session} visibleSections={visibleSections}
-                activeSection={activeSection} onSelectSection={(id) => { setActiveSection(id); setMobileSidebarOpen(false) }} />
+                activeSection={activeSection} onSelectSection={(id) => { setActiveSection(id); setMobileSidebarOpen(false) }}
+                onProbar={() => { setActiveSection("chat"); setMobileSidebarOpen(false) }} />
             </motion.div>
           </>
         )}
@@ -1386,7 +1585,7 @@ export default function DemoChatPage() {
               className="md:hidden text-muted-foreground hover:text-foreground transition-colors">
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-foreground text-sm font-semibold">{activeSectionData?.label || "Chat"}</span>
+            <span className="text-foreground text-sm font-semibold">{activeSection === "chat" ? "Probar bot" : (activeSectionData?.label || "Dashboard")}</span>
           </div>
           <div className="flex items-center gap-2">
             <AnimatePresence>
