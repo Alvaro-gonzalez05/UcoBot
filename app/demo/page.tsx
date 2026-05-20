@@ -473,9 +473,8 @@ export default function DemoPage() {
                 {WELCOME_CHIPS.map((chip) => (
                   <span
                     key={chip.label}
-                    className="inline-flex items-center gap-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs px-3 py-1.5 rounded-full"
+                    className="inline-flex items-center bg-zinc-900 border border-zinc-800 text-zinc-400 text-xs px-3 py-1.5 rounded-full"
                   >
-                    <span>{chip.icon}</span>
                     {chip.label}
                   </span>
                 ))}
@@ -490,12 +489,21 @@ export default function DemoPage() {
               transition={{ delay: 0.42, duration: 0.4 }}
               className="px-4 pb-6 max-w-2xl w-full mx-auto"
             >
+              {/* Speech bubble — tail at bottom-left, aligned with input text start */}
+              <div className="mb-3 ml-3">
+                <div className="relative inline-block bg-[#CCFF00] text-black text-sm font-semibold px-4 py-2.5 rounded-2xl rounded-bl-none">
+                  Escribí tu nombre para comenzar
+                  <span className="absolute -bottom-1.5 left-0 w-3 h-3 bg-[#CCFF00] rounded-br-lg" />
+                  <span className="absolute -bottom-3 left-0 w-3 h-3 bg-black rounded-br-lg" />
+                </div>
+              </div>
+
               <div className="flex gap-2 bg-zinc-900 border border-zinc-700/60 rounded-2xl p-2 focus-within:border-[#CCFF00]/40 transition-colors shadow-xl">
                 <input
                   value={welcomeInput}
                   onChange={(e) => setWelcomeInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") handleWelcomeSubmit() }}
-                  placeholder="Escribí tu nombre para comenzar..."
+                  placeholder="Tu nombre..."
                   autoFocus
                   className="flex-1 bg-transparent px-3 py-2 text-white text-sm placeholder:text-zinc-600 focus:outline-none"
                 />

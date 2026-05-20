@@ -638,38 +638,374 @@ function ProductsSection({ session, sectionLabel }: { session: DemoSession; sect
 }
 
 // ─── FORMS section ────────────────────────────────────────────────────────────
-function FormsSection({ sectionLabel }: { sectionLabel: string }) {
-  const forms = [
-    { name: "Formulario de contacto", type: "link",           responses: 24, active: true  },
-    { name: "Calificación de interés", type: "conversacional", responses: 11, active: true  },
-    { name: "Encuesta post-visita",    type: "conversacional", responses: 7,  active: false },
+type FormView = "list" | "responses" | "preview"
+interface FormField { label: string; placeholder: string; span: "half" | "full" }
+interface FormResponseCol { key: string; label: string }
+interface MockFormItem {
+  id: string; name: string; type: "link" | "conversacional"
+  responses: number; active: boolean; completionRate: number; avgPerDay: number
+  // link preview
+  previewTitle: string; previewSubtitle: string; section1Title: string
+  fields: FormField[]; blurredTitle: string; blurredFieldCount: number
+  summaryLabel: string; summaryTopValue: string
+  summaryRows: { label: string; value: string }[]
+  ctaTitle: string; ctaText: string
+  // conversacional responses
+  responseColumns: FormResponseCol[]
+  responseData: Record<string, string>[]
+}
+
+function FormsSection({ session, sectionLabel }: { session: DemoSession; sectionLabel: string }) {
+  const [view, setView] = useState<FormView>("list")
+  const [selected, setSelected] = useState<MockFormItem | null>(null)
+  const fc = session.feature_config || {}
+  const appLabel = fc.appointments_label || "visita"
+  const catLabel = fc.catalog_label || "servicio"
+  const reqLabel = fc.requests_label || "consulta"
+
+  const forms: MockFormItem[] = [
+    {
+      id: "qualification",
+      name: `Calificación de ${reqLabel}`,
+      type: "conversacional",
+      responses: 18, active: true, completionRate: 74, avgPerDay: 2.3,
+      previewTitle: "", previewSubtitle: "", section1Title: "", fields: [],
+      blurredTitle: "", blurredFieldCount: 0, summaryLabel: "", summaryTopValue: "",
+      summaryRows: [], ctaTitle: "", ctaText: "",
+      responseColumns: [
+        { key: "nombre",      label: "Nombre"           },
+        { key: "interes",     label: "Interés"          },
+        { key: "zona",        label: "Zona / Detalle"   },
+        { key: "presupuesto", label: "Presupuesto"      },
+        { key: "tag",         label: "Clasificación"    },
+        { key: "fecha",       label: "Fecha"            },
+      ],
+      responseData: [
+        { nombre: "María García",   interes: `${catLabel} premium`,   zona: "Palermo",        presupuesto: "$2.500",   tag: "Alta intención", fecha: "Hoy, 14:30"  },
+        { nombre: "Carlos Ruiz",    interes: `${catLabel} estándar`,  zona: "Belgrano",       presupuesto: "$1.200",   tag: "Explorando",     fecha: "Ayer, 10:15" },
+        { nombre: "Ana Martínez",   interes: `${catLabel} premium`,   zona: "Recoleta",       presupuesto: "$3.000+",  tag: "Alta intención", fecha: "Ayer, 16:45" },
+        { nombre: "Juan López",     interes: `${catLabel} básico`,    zona: "No especificó",  presupuesto: "Sin def.", tag: "Lead frío",      fecha: "Lun, 09:20"  },
+        { nombre: "Laura Sánchez",  interes: `${catLabel} premium`,   zona: "Caballito",      presupuesto: "$2.000",   tag: "Muy interesado", fecha: "Dom, 11:00"  },
+      ],
+    },
+    {
+      id: "visit",
+      name: `Solicitud de ${appLabel}`,
+      type: "link",
+      responses: 11, active: true, completionRate: 88, avgPerDay: 1.4,
+      previewTitle: `Coordiná tu ${appLabel}`,
+      previewSubtitle: "Completá tus datos y te confirmamos en minutos",
+      section1Title: "Tus datos personales",
+      fields: [
+        { label: "Nombre",    placeholder: "Ej: María",              span: "half" },
+        { label: "Apellido",  placeholder: "Ej: García",             span: "half" },
+        { label: "Email",     placeholder: "tu@email.com",           span: "full" },
+        { label: "WhatsApp",  placeholder: "+54 9 11 0000-0000",     span: "full" },
+      ],
+      blurredTitle: `Detalles de tu ${reqLabel}`,
+      blurredFieldCount: 4,
+      summaryLabel: "TU SOLICITUD",
+      summaryTopValue: "Pendiente",
+      summaryRows: [
+        { label: "Zona de interés",    value: "--" },
+        { label: "Presupuesto aprox.", value: "--" },
+        { label: "Disponibilidad",     value: "--" },
+      ],
+      ctaTitle: "Respuesta garantizada",
+      ctaText: "Recibís confirmación por WhatsApp en menos de 2 horas hábiles.",
+      responseColumns: [], responseData: [],
+    },
+    {
+      id: "feedback",
+      name: "Encuesta de satisfacción",
+      type: "conversacional",
+      responses: 7, active: false, completionRate: 62, avgPerDay: 0.8,
+      previewTitle: "", previewSubtitle: "", section1Title: "", fields: [],
+      blurredTitle: "", blurredFieldCount: 0, summaryLabel: "", summaryTopValue: "",
+      summaryRows: [], ctaTitle: "", ctaText: "",
+      responseColumns: [
+        { key: "nombre",       label: "Cliente"          },
+        { key: "calificacion", label: "Calificación"     },
+        { key: "recomendaria", label: "¿Recomendaría?"   },
+        { key: "comentario",   label: "Comentario"       },
+        { key: "fecha",        label: "Fecha"            },
+      ],
+      responseData: [
+        { nombre: "María García",  calificacion: "⭐⭐⭐⭐⭐ 5/5", recomendaria: "Sí",            comentario: "Excelente atención",   fecha: "Ayer"   },
+        { nombre: "Carlos Ruiz",   calificacion: "⭐⭐⭐⭐ 4/5",  recomendaria: "Sí",            comentario: "Muy rápidos",          fecha: "Lun"    },
+        { nombre: "Ana Martínez",  calificacion: "⭐⭐⭐⭐⭐ 5/5", recomendaria: "Definitivamente", comentario: "Proceso muy claro",   fecha: "Dom"    },
+      ],
+    },
   ]
+
+  const totalResponses = forms.reduce((acc, f) => acc + f.responses, 0)
+  const activeForms = forms.filter(f => f.active)
+  const avgCompletion = activeForms.length
+    ? Math.round(activeForms.reduce((acc, f) => acc + f.completionRate, 0) / activeForms.length)
+    : 0
+
+  const goBack = () => { setView("list"); setSelected(null) }
+
+  // ── Responses view ────────────────────────────────────────────────────────────
+  if (view === "responses" && selected) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 py-4 border-b border-zinc-900">
+          <button onClick={goBack} className="flex items-center gap-2 text-zinc-400 hover:text-white text-sm transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Volver a {sectionLabel}
+          </button>
+        </div>
+        <div className="p-6 max-w-5xl mx-auto space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[#CCFF00]/10 border border-[#CCFF00]/20 flex items-center justify-center flex-shrink-0">
+              <MessageSquare className="w-5 h-5 text-[#CCFF00]" />
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">{selected.name}</h3>
+              <p className="text-zinc-500 text-xs">{selected.responses} respuestas · Formulario conversacional</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 text-center">
+              <p className="text-2xl font-bold text-white">{selected.responses}</p>
+              <p className="text-zinc-500 text-xs mt-0.5">Respuestas totales</p>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 text-center">
+              <p className="text-2xl font-bold text-[#CCFF00]">{selected.completionRate}%</p>
+              <p className="text-zinc-500 text-xs mt-0.5">Tasa de completado</p>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5 text-center">
+              <p className="text-2xl font-bold text-white">{selected.avgPerDay}</p>
+              <p className="text-zinc-500 text-xs mt-0.5">Promedio / día</p>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+              <p className="text-white text-sm font-semibold">Últimas respuestas</p>
+              <span className="text-zinc-600 text-xs bg-zinc-800 px-2 py-0.5 rounded-full">Datos de ejemplo</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-zinc-800">
+                    {selected.responseColumns.map(col => (
+                      <th key={col.key} className="text-left text-zinc-500 text-xs px-4 py-2.5 font-medium whitespace-nowrap">{col.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {selected.responseData.map((row, i) => (
+                    <tr key={i} className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/30 transition-colors">
+                      {selected.responseColumns.map(col => (
+                        <td key={col.key} className="px-4 py-3 text-sm text-zinc-300 whitespace-nowrap">{row[col.key]}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Link form preview ─────────────────────────────────────────────────────────
+  if (view === "preview" && selected) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-6 py-4 border-b border-zinc-900">
+          <button onClick={goBack} className="flex items-center gap-2 text-zinc-400 hover:text-white text-sm transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Volver a {sectionLabel}
+          </button>
+        </div>
+        <div className="p-6 max-w-4xl mx-auto space-y-4">
+          <DemoBanner text="Vista previa del formulario de link tal como lo vería un contacto que recibe el URL. El cliente puede personalizar campos, colores y lógica." />
+
+          {/* Form header */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-5 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-[#CCFF00]/15 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-4 h-4 text-[#CCFF00]" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-white font-bold text-sm">{selected.previewTitle}</h3>
+                <p className="text-zinc-500 text-xs truncate">{selected.previewSubtitle}</p>
+              </div>
+            </div>
+            {/* Step indicator */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="w-6 h-6 rounded-full border border-zinc-700 flex items-center justify-center">
+                <span className="text-zinc-600 text-[10px] font-bold">1</span>
+              </span>
+              <div className="w-5 h-px bg-zinc-700" />
+              <span className="w-6 h-6 rounded-full bg-[#CCFF00] flex items-center justify-center">
+                <span className="text-black text-[10px] font-bold">2</span>
+              </span>
+              <div className="w-5 h-px bg-zinc-700" />
+              <span className="w-6 h-6 rounded-full border border-zinc-700 flex items-center justify-center">
+                <span className="text-zinc-600 text-[10px] font-bold">3</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Main form area */}
+            <div className="md:col-span-2 space-y-3">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <Users className="w-4 h-4 text-[#CCFF00]" />
+                  <h4 className="text-white font-semibold text-sm">{selected.section1Title}</h4>
+                </div>
+
+                {/* Half-width fields */}
+                <div className="grid grid-cols-2 gap-3">
+                  {selected.fields.filter(f => f.span === "half").map((field, i) => (
+                    <div key={i}>
+                      <label className="text-zinc-400 text-xs mb-1.5 block">{field.label}</label>
+                      <div className="bg-zinc-800 border border-zinc-700 focus-within:border-[#CCFF00]/50 rounded-xl px-3 py-2.5 transition-colors">
+                        <span className="text-zinc-500 text-sm">{field.placeholder}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Full-width fields */}
+                {selected.fields.filter(f => f.span === "full").map((field, i) => (
+                  <div key={i} className="mt-3">
+                    <label className="text-zinc-400 text-xs mb-1.5 block">{field.label}</label>
+                    <div className="bg-zinc-800 border border-zinc-700 focus-within:border-[#CCFF00]/50 rounded-xl px-3 py-2.5 transition-colors">
+                      <span className="text-zinc-500 text-sm">{field.placeholder}</span>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Blurred next step */}
+                <div className="mt-4 relative rounded-xl overflow-hidden">
+                  <div className="bg-zinc-800/40 border border-zinc-800 rounded-xl p-4 blur-[2px] opacity-50 pointer-events-none select-none">
+                    <h4 className="text-zinc-400 font-semibold text-sm mb-3">{selected.blurredTitle}</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {Array.from({ length: selected.blurredFieldCount }).map((_, i) => (
+                        <div key={i} className="bg-zinc-700 rounded-lg h-9" />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <button className="mt-4 text-[#CCFF00] text-sm font-semibold flex items-center gap-1.5 hover:gap-2.5 transition-all duration-200">
+                  Continuar <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Summary panel */}
+            <div className="space-y-3">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                <p className="text-zinc-600 text-[9px] uppercase tracking-widest mb-1">{selected.summaryLabel}</p>
+                <p className="text-white font-bold text-lg mb-4">{selected.summaryTopValue}</p>
+                <div className="space-y-2.5">
+                  {selected.summaryRows.map((row, i) => (
+                    <div key={i} className="flex justify-between items-center">
+                      <span className="text-zinc-500 text-xs">{row.label}</span>
+                      <span className="text-zinc-600 text-xs">{row.value}</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-zinc-800 pt-2.5 flex justify-between items-center">
+                    <span className="text-white text-xs font-semibold">Total</span>
+                    <span className="text-zinc-500 text-xs">--</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-[#CCFF00]/5 border border-[#CCFF00]/20 rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="w-4 h-4 text-[#CCFF00] flex-shrink-0" />
+                  <p className="text-[#CCFF00] text-xs font-semibold">{selected.ctaTitle}</p>
+                </div>
+                <p className="text-zinc-400 text-xs leading-relaxed">{selected.ctaText}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── List view ─────────────────────────────────────────────────────────────────
   return (
     <div className="flex-1 overflow-y-auto">
-      <DemoBanner text={`Vista previa de ${sectionLabel}. Podés crear formularios conversacionales (el bot los hace por chat) o de link (URL para compartir).`} />
+      <DemoBanner text={`Vista previa de ${sectionLabel}. Podés crear formularios conversacionales (el bot los completa durante el chat) o de link (URL pública para compartir).`} />
       <div className="p-6 max-w-3xl mx-auto space-y-4">
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
+            <p className="text-2xl font-bold text-white">{forms.length}</p>
+            <p className="text-zinc-500 text-xs mt-0.5">Formularios</p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
+            <p className="text-2xl font-bold text-white">{totalResponses}</p>
+            <p className="text-zinc-500 text-xs mt-0.5">Respuestas totales</p>
+          </div>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-3.5">
+            <p className="text-2xl font-bold text-[#CCFF00]">{avgCompletion}%</p>
+            <p className="text-zinc-500 text-xs mt-0.5">Tasa de completado</p>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-white font-semibold">{sectionLabel}</h3>
-            <p className="text-zinc-600 text-xs mt-0.5">3 formularios · 42 respuestas totales</p>
+            <p className="text-zinc-600 text-xs mt-0.5">{forms.length} formularios · {totalResponses} respuestas totales</p>
           </div>
-          <span className="text-xs text-zinc-600 border border-zinc-700 rounded-lg px-3 py-1.5">+ Crear</span>
+          <span className="text-xs text-zinc-600 border border-zinc-700 rounded-lg px-3 py-1.5 cursor-pointer hover:border-zinc-600 hover:text-zinc-400 transition-colors">
+            + Crear
+          </span>
         </div>
+
         <div className="space-y-3">
-          {forms.map((form, i) => (
-            <div key={i} className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
-                {form.type === "link" ? <Globe className="w-5 h-5 text-zinc-500" /> : <MessageSquare className="w-5 h-5 text-zinc-500" />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white text-sm font-semibold">{form.name}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-zinc-600 text-xs capitalize">{form.type}</span>
-                  <span className="text-zinc-700">·</span>
-                  <span className="text-zinc-600 text-xs">{form.responses} respuestas</span>
+          {forms.map((form) => (
+            <div key={form.id} className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-4 hover:border-zinc-700 transition-colors">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center flex-shrink-0">
+                  {form.type === "link"
+                    ? <Globe className={`w-5 h-5 ${form.active ? "text-[#CCFF00]" : "text-zinc-600"}`} />
+                    : <MessageSquare className={`w-5 h-5 ${form.active ? "text-[#CCFF00]" : "text-zinc-600"}`} />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-white text-sm font-semibold truncate">{form.name}</p>
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${form.active ? "bg-[#CCFF00]" : "bg-zinc-700"}`} />
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                    <span className="text-[11px] px-1.5 py-0.5 rounded capitalize font-medium text-zinc-500 bg-zinc-800">
+                      {form.type}
+                    </span>
+                    <span className="text-zinc-600 text-xs">{form.responses} respuestas</span>
+                    <span className="text-zinc-600 text-xs">{form.completionRate}% completado</span>
+                  </div>
+                </div>
+                <div className="flex-shrink-0">
+                  {form.type === "conversacional" && (
+                    <button
+                      onClick={() => { setSelected(form); setView("responses") }}
+                      className="text-xs text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 rounded-lg px-3 py-1.5 transition-colors"
+                    >
+                      Ver respuestas
+                    </button>
+                  )}
+                  {form.type === "link" && (
+                    <button
+                      onClick={() => { setSelected(form); setView("preview") }}
+                      className="text-xs text-zinc-400 hover:text-white border border-zinc-800 hover:border-zinc-600 rounded-lg px-3 py-1.5 transition-colors"
+                    >
+                      Ver formulario
+                    </button>
+                  )}
                 </div>
               </div>
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${form.active ? "bg-[#CCFF00]" : "bg-zinc-700"}`} />
             </div>
           ))}
         </div>
@@ -787,7 +1123,7 @@ function SectionContent({ section, session }: { section: SidebarItem; session: D
     )
     case "orders":      return <OrdersSection session={session} sectionLabel={section.label} />
     case "products":    return <ProductsSection session={session} sectionLabel={section.label} />
-    case "forms":       return <FormsSection sectionLabel={section.label} />
+    case "forms":       return <FormsSection session={session} sectionLabel={section.label} />
     case "promotions":  return <PromotionsSection sectionLabel={section.label} />
     default: return (
       <div className="flex-1 flex items-center justify-center p-8">

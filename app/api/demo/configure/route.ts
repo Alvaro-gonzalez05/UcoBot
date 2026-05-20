@@ -26,10 +26,10 @@ DESCRIPCIÓN Y NECESIDADES: ${business_description}
 
 FEATURES DISPONIBLES (seleccioná SOLO las que realmente aplican al negocio):
 - "register_clients": Registrar y reconocer clientes recurrentes, guardar nombre y datos de contacto
-- "take_orders": Tomar pedidos de productos/servicios con catálogo de precios
+- "take_orders": Tomar pedidos de productos/servicios con catálogo de precios. NUNCA para: inmobiliarias, consultorías, asesorías jurídicas o financieras, servicios de alto ticket sin catálogo fijo. Solo si hay ítems con precio definido que se pueden "pedir" por el chat.
 - "manage_appointments": Agendar reuniones, visitas, citas, reservas, turnos
-- "lead_qualification": Calificar leads por perfil, intención, urgencia y presupuesto (ideal para ventas complejas)
-- "loyalty_points": Sistema de puntos de fidelización por compras
+- "lead_qualification": Calificar leads por perfil, intención, urgencia y presupuesto (ideal para ventas complejas, inmobiliarias, servicios B2B)
+- "loyalty_points": Sistema de puntos de fidelización por compras. NUNCA para: inmobiliarias, servicios de alto ticket con compra única, consultorías, servicios profesionales. SOLO para: cafeterías, peluquerías/barberías, farmacias, restaurantes, tiendas con compras frecuentes.
 - "custom_forms": Recopilar datos estructurados mediante conversación natural (formularios conversacionales)
 
 Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código), con esta estructura exacta:
@@ -99,19 +99,34 @@ Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código)
     {
       "id": "promotions",
       "label": "nombre de la sección de promociones — esta sección en UcoBot gestiona ofertas, descuentos y campañas que el bot puede comunicar activamente. (ej: Promociones, Ofertas, Campañas)",
-      "visible": true si el negocio hace descuentos o campañas comerciales de forma regular,
+      "visible": true SOLO para negocios B2C de consumo frecuente con promociones reales (tiendas, restaurantes, e-commerce, salones de belleza). SIEMPRE false para: inmobiliarias, estudios jurídicos, consultoría, servicios financieros premium, educación universitaria, B2B, servicios de alto ticket. Ante la duda → false.,
       "icon": "Tag",
       "justification": "1 oración concreta de si este negocio usa promociones activas o no"
     }
   ]
-}`
+}
+
+REGLAS CRÍTICAS PARA sidebar_config (aplicar con criterio estricto):
+- "visible": true SOLO si la funcionalidad es CENTRAL al negocio y se usaría a diario.
+- Para negocios de servicios premium o consultivos (inmobiliarias, asesorías, salud especializada, legal, financiero): "promotions" y "loyalty_points" son casi SIEMPRE false. Si el negocio no los mencionó explícitamente, poné false.
+- "orders": Para negocios consultivos premium (ej: inmobiliarias), las consultas estructuradas van en el CRM ("clients"), NO en orders. Solo visible si existe un flujo diferenciado de pedidos o cotizaciones con datos específicos que no son el CRM de contactos.
+- "forms": ÚNICAMENTE si custom_forms está en features. Sin excepción.
+- "reservations": ÚNICAMENTE si manage_appointments está en features. Sin excepción.
+- Ante la duda, preferí false. Es mejor que el cliente pida agregar una sección que ver secciones irrelevantes.`
 
     const result = await model.generateContent(configPrompt)
     const rawText = result.response.text().trim()
 
     let aiConfig: any
     try {
-      const cleaned = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
+      let cleaned = rawText.trim()
+      // Extract content from markdown code block if present
+      const codeBlockMatch = cleaned.match(/^```(?:json)?\s*\r?\n?([\s\S]+?)\r?\n?\s*```\s*$/)
+      if (codeBlockMatch) {
+        cleaned = codeBlockMatch[1].trim()
+      } else if (cleaned.includes("```")) {
+        cleaned = cleaned.replace(/```(?:json)?\s*/gi, "").replace(/```\s*/gi, "").trim()
+      }
       aiConfig = JSON.parse(cleaned)
     } catch {
       console.error("Error parsing AI response:", rawText)
