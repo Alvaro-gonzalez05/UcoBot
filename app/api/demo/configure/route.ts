@@ -63,45 +63,45 @@ Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código)
   "sidebar_config": [
     {
       "id": "clients",
-      "label": "nombre para los clientes/leads según el rubro (ej: Clientes, Leads, Pacientes, Alumnos, Propietarios)",
-      "visible": true o false según si el negocio necesita gestionar una base de clientes o leads,
+      "label": "nombre del CRM de clientes/leads según el rubro — esta sección en UcoBot es el CRM donde se ven todos los contactos que interactuaron con el bot: sus datos, historial de mensajes, etiquetas de calificación asignadas, puntos de fidelidad y operaciones. (ej: Leads, Clientes, Pacientes, Alumnos, Propietarios)",
+      "visible": true si el negocio necesita seguimiento y gestión de una base de contactos,
       "icon": "Users",
-      "justification": "1 oración concreta de por qué este negocio SÍ o NO necesita gestionar clientes en el panel"
+      "justification": "1 oración concreta explicando por qué este negocio SÍ o NO necesita un CRM de contactos en el panel"
     },
     {
       "id": "reservations",
-      "label": "nombre para turnos/citas según el rubro (ej: Visitas, Reservas, Turnos, Reuniones, Citas)",
+      "label": "nombre de la agenda de citas/visitas — esta sección en UcoBot es el calendario donde se ven todas las citas que el bot coordinó y confirmó, con estado (pendiente, confirmada, cancelada). (ej: Visitas, Reservas, Turnos, Reuniones, Citas)",
       "visible": true SOLO si manage_appointments está en features, false si no,
       "icon": "Calendar",
-      "justification": "1 oración concreta de por qué este negocio SÍ o NO necesita esta sección"
+      "justification": "1 oración concreta de por qué este negocio SÍ o NO necesita agenda de citas"
     },
     {
       "id": "orders",
-      "label": "nombre para pedidos/solicitudes (ej: Pedidos, Consultas, Cotizaciones, Presupuestos)",
-      "visible": true SOLO si take_orders está en features, false si no,
+      "label": "nombre del registro de pedidos/solicitudes — esta sección en UcoBot es la bandeja donde llegan todas las solicitudes estructuradas que el bot registró durante las conversaciones: pedidos, consultas con detalle, cotizaciones o interesados con datos completos. (ej: Pedidos, Consultas, Cotizaciones, Interesados, Presupuestos)",
+      "visible": true si take_orders está en features O si el negocio recibe consultas/solicitudes estructuradas que conviene registrar por separado del CRM,
       "icon": "ShoppingBag",
-      "justification": "1 oración concreta de por qué este negocio SÍ o NO necesita esta sección"
+      "justification": "1 oración concreta explicando qué tipo de pedidos o solicitudes registraría el bot para este negocio"
     },
     {
       "id": "products",
-      "label": "nombre para el catálogo (ej: Propiedades, Servicios, Productos, Menú, Proyectos)",
-      "visible": true si take_orders está en features o el negocio claramente tiene un catálogo, false si no,
+      "label": "nombre del catálogo — esta sección en UcoBot es el inventario de ítems que el bot puede mostrar, recomendar y sobre los que puede tomar pedidos: propiedades, productos, servicios, menú. (ej: Propiedades, Catálogo, Menú, Servicios, Proyectos)",
+      "visible": true si el negocio tiene un catálogo definido de ítems que el bot presenta a los clientes,
       "icon": "Package",
-      "justification": "1 oración concreta de por qué este negocio SÍ o NO necesita esta sección"
+      "justification": "1 oración concreta de qué ítems tendría el catálogo para este negocio y por qué"
     },
     {
       "id": "forms",
-      "label": "nombre para formularios (ej: Formularios, Encuestas, Registros)",
-      "visible": true SOLO si custom_forms está en features, false si no,
+      "label": "nombre de los formularios conversacionales — esta sección en UcoBot son formularios que el bot completa mediante conversación natural: calificaciones de lead, registros de interés, encuestas de perfil. (ej: Calificaciones, Formularios, Registros, Encuestas)",
+      "visible": true SOLO si custom_forms está en features,
       "icon": "FileText",
-      "justification": "1 oración concreta de por qué este negocio SÍ o NO necesita esta sección"
+      "justification": "1 oración concreta de qué tipo de formularios o calificaciones estructuradas necesita este negocio"
     },
     {
       "id": "promotions",
-      "label": "nombre para promociones/ofertas (ej: Promociones, Ofertas, Campañas, Descuentos)",
-      "visible": true si el negocio hace campañas o descuentos regularmente, false si no,
+      "label": "nombre de la sección de promociones — esta sección en UcoBot gestiona ofertas, descuentos y campañas que el bot puede comunicar activamente. (ej: Promociones, Ofertas, Campañas)",
+      "visible": true si el negocio hace descuentos o campañas comerciales de forma regular,
       "icon": "Tag",
-      "justification": "1 oración concreta de por qué este negocio SÍ o NO necesita esta sección"
+      "justification": "1 oración concreta de si este negocio usa promociones activas o no"
     }
   ]
 }`
