@@ -98,7 +98,7 @@
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
 .executive-card {
-  @apply bg-card p-6 rounded-3xl shadow-[0_4px_20px_rgba(0,0,0,0.03)] border;
+  @apply bg-card p-6 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.14)] border;
 }
 
 .sidebar-item:hover {

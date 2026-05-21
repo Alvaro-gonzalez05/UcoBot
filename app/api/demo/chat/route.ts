@@ -55,23 +55,25 @@ INFORMACIÓN DEL NEGOCIO:
 FUNCIONALIDADES HABILITADAS:
 ${features.includes("manage_appointments") ? `✅ Agendar ${featureConfig.appointments_label || "citas"} (confirmá con "${featureConfig.appointments_confirm_phrase || "CITA CONFIRMADA"}")` : ""}
 ${features.includes("take_orders") ? `✅ Tomar ${featureConfig.requests_label || "pedidos"} (confirmá con "${featureConfig.requests_confirm_phrase || "PEDIDO CONFIRMADO"}")` : ""}
-${features.includes("lead_qualification") ? `✅ Calificar leads usando los tags: ${allowedTags.join(", ")}` : ""}
 ${features.includes("register_clients") ? `✅ Registrar nombre y datos de contacto del cliente` : ""}
 ${features.includes("loyalty_points") ? `✅ Informar sobre puntos de fidelización` : ""}
 ${features.includes("custom_forms") ? `✅ Recopilar información estructurada` : ""}
+
+${features.includes("lead_qualification") && allowedTags.length > 0 ? `CALIFICACIÓN DE LEADS — MUY IMPORTANTE:
+Tenés que clasificar activamente a cada persona que escribe usando estas etiquetas específicas del negocio: ${allowedTags.map(t => `"${t}"`).join(", ")}
+A medida que la conversación avanza y obtenés más información, determiná cuál etiqueta aplica mejor según el perfil, intención, urgencia y presupuesto del lead. Actualizá la clasificación cuando tengas suficiente info — no esperes al final.` : ""}
 
 CAPACIDADES ACTUALES DE UCOBOT (usá esta info si te preguntan por integraciones o funcionalidades):
 ✅ Canales disponibles: WhatsApp Business, Instagram Direct
 ❌ No disponible aún: Telegram, TikTok, Email, SMS masivos, Facebook Messenger, webchat propio
 
-Si alguien pregunta por algo que UcoBot NO tiene — por ejemplo: integración con GoHighLevel, Kommo, HubSpot, Salesforce u otros CRMs externos; plataformas no disponibles; sistema de pagos dentro del chat; generación automática de PDFs, contratos o presupuestos; integración con portales inmobiliarios (Properati, Argenprop, ZAP); o cualquier funcionalidad que no esté entre las activas — respondé honestamente y con cercanía:
-"Eso actualmente no está disponible de forma nativa en UcoBot, pero podés pedirle al equipo de Codea Desarrollos que lo desarrollen específicamente para tu negocio — ellos hacen desarrollo a medida."
+Si alguien pregunta por algo que UcoBot NO tiene — por ejemplo: integración con GoHighLevel, Kommo, HubSpot, Salesforce u otros CRMs externos; sistema de pagos dentro del chat; integración con portales inmobiliarios; o cualquier funcionalidad que no esté entre las activas — respondé honestamente: "Eso actualmente no está disponible de forma nativa en UcoBot, pero podés pedirle al equipo de Codea Desarrollos que lo desarrollen específicamente para tu negocio."
 
 PERSONALIDAD:
 ${session.personality_prompt}
 
 INSTRUCCIÓN CRÍTICA DE RESPUESTA:
-Respondé SIEMPRE con un JSON válido (sin markdown), con esta estructura exacta:
+Respondé SIEMPRE con un JSON válido (sin markdown, sin bloques de código), con esta estructura exacta:
 {
   "message": "tu respuesta al cliente aquí, natural y conversacional",
   "metadata": {
@@ -81,14 +83,17 @@ Respondé SIEMPRE con un JSON válido (sin markdown), con esta estructura exacta
   }
 }
 
-REGLAS DE METADATA:
-- "client_name": Si el cliente acaba de decir su nombre por primera vez en esta conversación, ponelo aquí. Si no, null.
-- "lead_tag": ${features.includes("lead_qualification") ? `Si podés clasificar al cliente según el historial, usá uno de: ${allowedTags.map(t => `"${t}"`).join(", ")}. Si aún no tenés suficiente info, null.` : "siempre null"}
-- "needs_handover": true SOLO si el cliente pide hablar con una persona, quiere negociar precios, o tiene intención de compra/inversión muy clara. En ese caso, el "message" debe comenzar con [HANDOVER].`
+REGLAS DE METADATA — OBLIGATORIAS:
+- "client_name": Si el cliente mencionó su nombre por primera vez en este mensaje o en la conversación, ponelo aquí. Si no, null.
+- "lead_tag": ${features.includes("lead_qualification") && allowedTags.length > 0
+  ? `Cuando tengas suficiente información para clasificar al lead, asigná UNO de estos tags exactos: ${allowedTags.map(t => `"${t}"`).join(", ")}. Podés actualizar el tag si cambia la clasificación. Si aún no tenés info suficiente, null.`
+  : "siempre null"}
+- "needs_handover": true SOLO si el cliente pide hablar con una persona, quiere visitar, negociar precios o tiene intención clara de compra/inversión. En ese caso el "message" DEBE comenzar con [HANDOVER].
+- NUNCA omitas el campo "metadata". Siempre incluilo aunque todos sean null/false.`
 
     const genAI = new GoogleGenerativeAI(geminiApiKey)
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.5-flash",
+      model: "gemini-2.5-flash-lite",
       systemInstruction: systemPrompt,
     })
 
@@ -105,10 +110,10 @@ REGLAS DE METADATA:
 
     let parsed: { message: string; metadata: any }
     try {
-      const cleaned = rawResponse.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim()
-      parsed = JSON.parse(cleaned)
+      const jsonMatch = rawResponse.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) throw new Error("No JSON found")
+      parsed = JSON.parse(jsonMatch[0])
     } catch {
-      // Si falla el parsing, tratar la respuesta entera como el mensaje
       parsed = { message: rawResponse, metadata: { client_name: null, lead_tag: null, needs_handover: false } }
     }
 

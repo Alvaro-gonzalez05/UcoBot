@@ -1121,9 +1121,10 @@ function SectionContent({ section, session }: { section: SidebarItem; session: D
         />
       </div>
     )
-    case "orders":      return <OrdersSection session={session} sectionLabel={section.label} />
-    case "products":    return <ProductsSection session={session} sectionLabel={section.label} />
-    case "forms":       return <FormsSection session={session} sectionLabel={section.label} />
+    case "orders":          return <OrdersSection session={session} sectionLabel={section.label} />
+    case "punto_de_venta":  return <ProductsSection session={session} sectionLabel={section.label} />
+    case "products":        return <ProductsSection session={session} sectionLabel={section.label} />
+    case "forms":           return <FormsSection session={session} sectionLabel={section.label} />
     case "promotions":  return <PromotionsSection sectionLabel={section.label} />
     default: return (
       <div className="flex-1 flex items-center justify-center p-8">

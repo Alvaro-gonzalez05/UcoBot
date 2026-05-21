@@ -35,22 +35,22 @@ const BUILDING_STEPS = [
 
 // Material Symbols names — used for the animated preview sidebar in demo/page.tsx
 const MATERIAL_ICON_MAP: Record<string, string> = {
-  clients:      "group",
-  orders:       "shopping_cart",
-  reservations: "calendar_month",
-  promotions:   "local_offer",
-  forms:        "description",
-  products:     "inventory_2",
+  clients:        "group",
+  orders:         "shopping_cart",
+  reservations:   "calendar_month",
+  promotions:     "local_offer",
+  forms:          "description",
+  punto_de_venta: "point_of_sale",
 }
 
 // Lucide icon names — must match SIDEBAR_ICONS in [sessionId]/page.tsx
 const LUCIDE_ICON_MAP: Record<string, string> = {
-  clients:      "Users",
-  orders:       "ShoppingBag",
-  reservations: "Calendar",
-  promotions:   "Tag",
-  forms:        "FileText",
-  products:     "Package",
+  clients:        "Users",
+  orders:         "ShoppingBag",
+  reservations:   "Calendar",
+  promotions:     "Tag",
+  forms:          "FileText",
+  punto_de_venta: "Package",
 }
 
 const WELCOME_CHIPS = [
@@ -64,7 +64,7 @@ const WELCOME_CHIPS = [
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type ChatStage = "welcome" | "ask_business" | "ask_goals" | "processing" | "done"
+type ChatStage = "welcome" | "ask_business" | "ask_goals" | "ask_followup" | "ask_tags" | "processing" | "done"
 
 interface AiSection {
   id: string
@@ -127,6 +127,8 @@ export default function DemoPage() {
   const [isTyping, setIsTyping] = useState(false)
   const [contactName, setContactName] = useState("")
   const [businessName, setBusinessName] = useState("")
+  const [goalsText, setGoalsText] = useState("")
+  const followupTextRef = useRef("")
   const [buildingStepIndex, setBuildingStepIndex] = useState(-1)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
   const [showBuilding, setShowBuilding] = useState(false)
@@ -192,21 +194,67 @@ export default function DemoPage() {
       await delay(900)
       setIsTyping(false)
       appendBot(
-        `¡Genial, **${text}**! 👏\n\nAhora contame: ¿a qué se dedica el negocio y qué querés lograr usando UcoBot? Por ejemplo: automatizar respuestas, tomar pedidos, agendar citas...\n\nCuanto más detalle, mejor lo configuro.`
+        `¡Genial, **${text}**! 👏\n\n¿A qué se dedica el negocio? Contame lo que hacen, quiénes son sus clientes y qué tipo de consultas o pedidos reciben habitualmente.`
       )
     } else if (stageRef.current === "ask_goals") {
+      setGoalsText(text)
+      stageRef.current = "ask_followup"
+      setStage("ask_followup")
+      setIsTyping(true)
+      try {
+        const res = await fetch("/api/demo/onboarding", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stage: "react_to_goals", contactName, businessName, userMessage: text }),
+        })
+        const data = await res.json()
+        setIsTyping(false)
+        appendBot(data.reply || "¡Perfecto! Contame más: ¿cuál es el mayor problema hoy en la atención al cliente y de dónde te llegan los clientes?")
+      } catch {
+        setIsTyping(false)
+        appendBot("¡Perfecto! Para configurarlo bien: ¿cuál es el mayor problema hoy en la atención al cliente y de dónde te llegan los clientes?")
+      }
+    } else if (stageRef.current === "ask_followup") {
+      followupTextRef.current = text
+      setIsTyping(true)
+      let replyMsg = "Perfecto, con todo esto ya puedo configurarlo bien 🎯\n\nVoy a analizar tu negocio y armar la configuración ahora mismo..."
+      let needsTags = false
+      try {
+        const res = await fetch("/api/demo/onboarding", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ stage: "react_to_followup", contactName, businessName, userMessage: text }),
+        })
+        const data = await res.json()
+        if (data.reply) replyMsg = data.reply
+        needsTags = data.needsTagQuestion === true
+      } catch {}
+      setIsTyping(false)
+      appendBot(replyMsg)
+      if (needsTags) {
+        stageRef.current = "ask_tags"
+        setStage("ask_tags")
+      } else {
+        stageRef.current = "processing"
+        setStage("processing")
+        await delay(400)
+        setShowBuilding(true)
+        scrollBottom()
+        const fullDesc = `${goalsText}\n\nPain points y contexto operativo: ${text}`
+        runProcessing(contactName, businessName, fullDesc)
+      }
+    } else if (stageRef.current === "ask_tags") {
       stageRef.current = "processing"
       setStage("processing")
       setIsTyping(true)
-      await delay(700)
+      await delay(600)
       setIsTyping(false)
-      appendBot(
-        "Perfecto, tengo todo lo que necesito 🎯\n\nVoy a analizar tu negocio y configurar el bot ahora mismo..."
-      )
+      appendBot("Perfecto, lo tengo en cuenta para configurar la calificación de leads 🎯\n\nAhora sí, voy a armar todo...")
       await delay(400)
       setShowBuilding(true)
       scrollBottom()
-      runProcessing(contactName, businessName, text)
+      const fullDesc = `${goalsText}\n\nPain points y contexto operativo: ${followupTextRef.current}\n\nCriterios de calificación de leads: ${text}`
+      runProcessing(contactName, businessName, fullDesc)
     }
 
     inputRef.current?.focus()
@@ -301,9 +349,27 @@ export default function DemoPage() {
         visible: s.visible === true,
       }))
 
-    appendBot(
-      `¡Tu bot **${data.botNameSuggestion}** está listo, **${name.split(" ")[0]}**! 🚀\n\nRevisá las funcionalidades y secciones que configuré. Podés cambiar nombres o desmarcar lo que no necesites:`
-    )
+    const enabledSections = allAiSections.filter((s) => s.visible).map((s) => s.label)
+    const disabledSections = allAiSections.filter((s) => !s.visible).map((s) => s.label)
+    const featureNames = (data.features || []).map((f: string) => FEATURE_LABELS[f] || f)
+
+    let readyMsg = `¡Listo, **${name.split(" ")[0]}**! Configuré **${data.botNameSuggestion}** para **${biz}** 🎯\n\n`
+
+    if (featureNames.length > 0) {
+      readyMsg += `Activé **${featureNames.length} funcionalidad${featureNames.length === 1 ? "" : "es"}**: ${featureNames.join(", ")}.\n\n`
+    }
+
+    if (enabledSections.length > 0) {
+      readyMsg += `Habilité **${enabledSections.length} sección${enabledSections.length === 1 ? "" : "es"}** en tu panel: **${enabledSections.join(", ")}**.`
+    }
+
+    if (disabledSections.length > 0) {
+      readyMsg += ` Desactivé **${disabledSections.join("** y **")}** porque no aplican directamente a este tipo de negocio — pero podés activarlas desde abajo si las necesitás.`
+    }
+
+    readyMsg += `\n\nRevisá el detalle, ajustá nombres o secciones y cuando estés listo tocá "Probar mi bot" 👇`
+
+    appendBot(readyMsg)
     await delay(300)
     appendBot("", {
       type: "summary",
@@ -316,6 +382,15 @@ export default function DemoPage() {
         aiSections: allAiSections,
       },
     })
+
+    const gaps: string[] = data.featureGaps || []
+    if (gaps.length > 0) {
+      await delay(800)
+      const gapList = gaps.map((g: string) => `• ${g}`).join("\n")
+      appendBot(
+        `💡 **Una cosa más:** noté que mencionaste algunas funcionalidades que UcoBot todavía no tiene integradas:\n\n${gapList}\n\nEstas se pueden agregar como nuevas features — cada pedido suma al desarrollo de la plataforma. Si te interesa, nuestro equipo puede evaluarlo para vos.`
+      )
+    }
 
     stageRef.current = "done"
     setStage("done")
@@ -347,7 +422,11 @@ export default function DemoPage() {
       ? "¡Tu bot está listo! 🎉"
       : stage === "ask_business"
       ? "Nombre de tu negocio..."
-      : "Describí tu negocio y qué querés lograr..."
+      : stage === "ask_goals"
+      ? "¿A qué se dedica el negocio y cómo atienden a sus clientes?"
+      : stage === "ask_tags"
+      ? "Ej: Lead Caliente / Frío, Inversor / Comprador Final..."
+      : "Problemas actuales, canales de entrada, ¿tenés algo automatizado?"
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -585,7 +664,11 @@ export default function DemoPage() {
                     Hola, {contactName.split(" ")[0]} 👋
                   </p>
                   <p className="text-zinc-500 text-xs mt-0.5">
-                    {stage === "done" ? "¡Tu bot está listo!" : "Configurando tu bot..."}
+                    {stage === "done"
+                      ? "¡Tu bot está listo!"
+                      : stage === "processing"
+                      ? "Configurando tu bot..."
+                      : "Recopilando información..."}
                   </p>
                 </motion.div>
               )}
@@ -763,6 +846,8 @@ export default function DemoPage() {
 
 // ── Summary Card ───────────────────────────────────────────────────────────────
 
+const RENAMEABLE_SECTIONS = new Set(["orders", "reservations"])
+
 interface SectionState extends AiSection {
   editing: boolean
 }
@@ -777,6 +862,7 @@ function SummaryCard({
   const [sections, setSections] = useState<SectionState[]>(
     data.aiSections.map((s) => ({ ...s, editing: false }))
   )
+  const [loading, setLoading] = useState(false)
 
   const toggle = (id: string) =>
     setSections((prev) => prev.map((s) => (s.id === id ? { ...s, visible: !s.visible } : s)))
@@ -793,6 +879,8 @@ function SummaryCard({
     setSections((prev) => prev.map((s) => (s.id === id ? { ...s, editing: false } : s)))
 
   const handleGo = () => {
+    if (loading) return
+    setLoading(true)
     const confirmed: ConfirmedSection[] = sections
       .filter((s) => s.visible)
       .map((s) => ({ id: s.id, label: s.label, visible: true, icon: s.icon }))
@@ -861,7 +949,7 @@ function SummaryCard({
                 Secciones de tu panel
               </p>
               <p className="text-zinc-600 text-[10px] mb-3">
-                Marcá las que querés incluir · tocá el nombre para cambiarlo
+                Marcá las que querés incluir · podés renombrar Pedidos y Reservas según tu rubro
               </p>
               <div className="space-y-3">
                 {sections.map((section) => (
@@ -899,12 +987,12 @@ function SummaryCard({
                         />
                       ) : (
                         <button
-                          onClick={() => section.visible && startEdit(section.id)}
-                          disabled={!section.visible}
+                          onClick={() => section.visible && RENAMEABLE_SECTIONS.has(section.id) && startEdit(section.id)}
+                          disabled={!section.visible || !RENAMEABLE_SECTIONS.has(section.id)}
                           className="flex items-center gap-1.5 group w-full text-left"
                         >
                           <span className="text-white text-sm font-medium">{section.label}</span>
-                          {section.visible && (
+                          {section.visible && RENAMEABLE_SECTIONS.has(section.id) && (
                             <Pencil className="w-3 h-3 text-zinc-600 group-hover:text-[#CCFF00] transition-colors shrink-0" />
                           )}
                         </button>
@@ -925,10 +1013,20 @@ function SummaryCard({
         {/* CTA */}
         <button
           onClick={handleGo}
-          className="w-full bg-[#CCFF00] text-black font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-[#b8e600] active:scale-95 transition-all text-sm"
+          disabled={loading}
+          className="w-full bg-[#CCFF00] text-black font-semibold py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-[#b8e600] active:scale-95 transition-all text-sm disabled:opacity-70 disabled:cursor-not-allowed"
         >
-          Probar mi bot ahora
-          <ArrowRight className="w-4 h-4" />
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Cargando...
+            </>
+          ) : (
+            <>
+              Probar mi bot ahora
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
         </button>
       </div>
     </motion.div>
