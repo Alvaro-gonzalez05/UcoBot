@@ -64,6 +64,13 @@ const config: Config = {
           ring: 'hsl(var(--sidebar-ring))',
         },
       },
+      spacing: {
+        'card-padding': '1.5rem',
+        'stack-gap': '1rem',
+        'gutter': '1.5rem',
+        'section-gap': '2.5rem',
+        'container-margin': '2rem',
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',

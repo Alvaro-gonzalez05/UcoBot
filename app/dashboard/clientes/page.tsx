@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ClientsManagement } from "@/components/dashboard/clients-management"
-import { PageTransition } from "@/components/ui/page-transition"
 
 interface ClientsPageProps {
   searchParams: {
     page?: string
     search?: string
+    tab?: string
+    leadsPage?: string
   }
 }
 
@@ -18,24 +19,21 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
     redirect("/login")
   }
 
-  // Parse pagination parameters
+  // ── Clients tab ──────────────────────────────────────────────────────────────
   const page = parseInt(searchParams.page || "1")
-  const limit = 10 // Clientes por página
+  const limit = 10
   const search = searchParams.search || ""
   const offset = (page - 1) * limit
 
-  // Build query with search filter
   let query = supabase
     .from("clients")
     .select("*, instagram_username", { count: "exact" })
     .eq("user_id", data.user.id)
 
-  // Apply search filter if provided
   if (search) {
     query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
   }
 
-  // Get clients with pagination
   const { data: clients, count, error: clientsError } = await query
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1)
@@ -44,7 +42,6 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
     console.error("Error fetching clients:", clientsError)
   }
 
-  // Calculate pagination info
   const totalItems = count || 0
   const totalPages = Math.ceil(totalItems / limit)
 
@@ -57,12 +54,58 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
     hasPrevPage: page > 1,
   }
 
+  // ── Leads tab — conversations from bots with lead_qualification ───────────────
+  // Fetch bots that have lead_qualification enabled
+  const { data: allBots } = await supabase
+    .from("bots")
+    .select("id, name, features, allowed_tags")
+    .eq("user_id", data.user.id)
+
+  const leadBotIds = (allBots || [])
+    .filter((b: any) => Array.isArray(b.features) && b.features.includes("lead_qualification"))
+    .map((b: any) => b.id)
+
+  let leads: any[] = []
+  let leadsTotal = 0
+
+  if (leadBotIds.length > 0) {
+    const leadsPage = parseInt(searchParams.leadsPage || "1")
+    const leadsOffset = (leadsPage - 1) * 20
+
+    const { data: leadsData, count: leadsCount } = await supabase
+      .from("conversations")
+      .select(`
+        id,
+        client_name,
+        client_phone,
+        platform,
+        lead_tag,
+        last_message_at,
+        created_at,
+        client:client_id(id, name, phone, email),
+        bot:bot_id(id, name, allowed_tags),
+        orders(id, items, status, created_at)
+      `, { count: "exact" })
+      .eq("user_id", data.user.id)
+      .in("bot_id", leadBotIds)
+      .neq("platform", "test")
+      .order("last_message_at", { ascending: false })
+      .range(leadsOffset, leadsOffset + 19)
+
+    leads = leadsData || []
+    leadsTotal = leadsCount || 0
+  }
+
   return (
-    <ClientsManagement 
-      initialClients={clients || []} 
+    <ClientsManagement
+      initialClients={clients || []}
       userId={data.user.id}
       pagination={paginationInfo}
       searchTerm={search}
+      initialLeads={leads}
+      leadsTotal={leadsTotal}
+      hasLeadBots={leadBotIds.length > 0}
+      initialTab={(searchParams.tab === "leads" ? "leads" : "clientes") as "clientes" | "leads"}
     />
   )
 }

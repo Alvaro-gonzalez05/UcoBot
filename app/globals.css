@@ -114,3 +114,78 @@
   border-bottom: 2px solid hsl(76, 85%, 67%);
   color: hsl(76, 85%, 67%);
 }
+
+/* =============================================
+   ProSeguro Public Form Design System
+   ============================================= */
+
+.glass-panel {
+  background-color: rgba(30, 32, 44, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.primary-gradient {
+  background: linear-gradient(135deg, #b4f577 0%, #00c6b6 100%);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #b4f577 0%, #00c6b6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.input-field {
+  background-color: #0c0e17;
+  border: 1px solid #424939;
+  color: #e1e1ef;
+  transition: all 0.2s ease-in-out;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: #00c6b6;
+  box-shadow: 0 0 0 1px #00c6b6;
+}
+
+.input-label {
+  color: #c2c9b5;
+}
+
+.custom-checkbox {
+  appearance: none;
+  background-color: transparent;
+  margin: 0;
+  font: inherit;
+  color: currentColor;
+  width: 1.15em;
+  height: 1.15em;
+  border: 1px solid #424939;
+  border-radius: 0.15em;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+}
+
+.custom-checkbox::before {
+  content: "";
+  width: 0.65em;
+  height: 0.65em;
+  transform: scale(0);
+  transition: 120ms transform ease-in-out;
+  box-shadow: inset 1em 1em #11131c;
+  background-color: #11131c;
+  transform-origin: center;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+.custom-checkbox:checked::before {
+  transform: scale(1);
+}
+
+.custom-checkbox:checked {
+  background: linear-gradient(135deg, #b4f577 0%, #00c6b6 100%);
+  border-color: transparent;
+}

@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ProSeguro - Cotizador</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-tertiary-fixed-variant": "#5516be",
+                      "outline": "#8c9381",
+                      "inverse-on-surface": "#2e303a",
+                      "outline-variant": "#424939",
+                      "on-secondary-container": "#004c46",
+                      "surface-dim": "#11131c",
+                      "on-tertiary": "#3c0091",
+                      "surface-container-high": "#282933",
+                      "on-primary-fixed": "#0d2000",
+                      "surface-container-lowest": "#0c0e17",
+                      "on-tertiary-container": "#7342dd",
+                      "on-secondary-fixed-variant": "#005049",
+                      "error": "#ffb4ab",
+                      "on-surface": "#e1e1ef",
+                      "on-tertiary-fixed": "#23005c",
+                      "on-secondary-fixed": "#00201d",
+                      "surface-container": "#1d1f29",
+                      "surface": "#11131c",
+                      "surface-container-low": "#191b24",
+                      "surface-tint": "#99d85f",
+                      "on-secondary": "#003732",
+                      "tertiary": "#ffffff",
+                      "on-error-container": "#ffdad6",
+                      "secondary-container": "#00c6b6",
+                      "secondary-fixed-dim": "#3adccc",
+                      "tertiary-fixed-dim": "#d0bcff",
+                      "surface-bright": "#373943",
+                      "tertiary-container": "#e9ddff",
+                      "on-background": "#e1e1ef",
+                      "on-primary-container": "#3d7100",
+                      "inverse-surface": "#e1e1ef",
+                      "primary": "#ffffff",
+                      "on-error": "#690005",
+                      "surface-variant": "#32343e",
+                      "primary-container": "#b4f577",
+                      "inverse-primary": "#396a00",
+                      "on-primary": "#1b3700",
+                      "error-container": "#93000a",
+                      "secondary-fixed": "#61f9e9",
+                      "primary-fixed-dim": "#99d85f",
+                      "on-primary-fixed-variant": "#2a5000",
+                      "tertiary-fixed": "#e9ddff",
+                      "on-surface-variant": "#c2c9b5",
+                      "background": "#11131c",
+                      "primary-fixed": "#b4f577",
+                      "surface-container-highest": "#32343e",
+                      "secondary": "#43e2d2"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "section-gap": "2.5rem",
+                      "gutter": "1.5rem",
+                      "stack-gap": "1rem",
+                      "container-margin": "2rem",
+                      "card-padding": "1.5rem"
+              },
+              "fontFamily": {
+                      "label-sm": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-lg-mobile": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "display-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-lg": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "body-md": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "label-md": [
+                              "Plus Jakarta Sans"
+                      ],
+                      "headline-md": [
+                              "Plus Jakarta Sans"
+                      ]
+              },
+              "fontSize": {
+                      "label-sm": [
+                              "12px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.02em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "28px",
+                              {
+                                      "lineHeight": "36px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "letterSpacing": "-0.01em",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-lg": [
+                              "18px",
+                              {
+                                      "lineHeight": "28px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-md": [
+                              "14px",
+                              {
+                                      "lineHeight": "20px",
+                                      "letterSpacing": "0.01em",
+                                      "fontWeight": "500"
+                              }
+                      ],
+                      "headline-md": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background-color: rgba(30, 32, 44, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .primary-gradient {
+            background: linear-gradient(135deg, theme('colors.primary-container') 0%, theme('colors.secondary-container') 100%);
+        }
+        
+        .text-gradient {
+            background: linear-gradient(135deg, theme('colors.primary-container') 0%, theme('colors.secondary-container') 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Custom Scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: theme('colors.surface-container');
+        }
+        ::-webkit-scrollbar-thumb {
+            background: theme('colors.surface-variant');
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: theme('colors.outline');
+        }
+
+        /* Form Input Styles */
+        .input-field {
+            background-color: theme('colors.surface-container-lowest');
+            border: 1px solid theme('colors.outline-variant');
+            color: theme('colors.on-surface');
+            transition: all 0.2s ease-in-out;
+        }
+        .input-field:focus {
+            outline: none;
+            border-color: theme('colors.secondary-container');
+            box-shadow: 0 0 0 1px theme('colors.secondary-container');
+        }
+        .input-label {
+            color: theme('colors.on-surface-variant');
+        }
+        
+        /* Custom Checkbox */
+        .custom-checkbox {
+            appearance: none;
+            background-color: transparent;
+            margin: 0;
+            font: inherit;
+            color: currentColor;
+            width: 1.15em;
+            height: 1.15em;
+            border: 1px solid theme('colors.outline-variant');
+            border-radius: 0.15em;
+            display: grid;
+            place-content: center;
+        }
+
+        .custom-checkbox::before {
+            content: "";
+            width: 0.65em;
+            height: 0.65em;
+            transform: scale(0);
+            transition: 120ms transform ease-in-out;
+            box-shadow: inset 1em 1em theme('colors.surface-dim');
+            background-color: theme('colors.surface-dim');
+            transform-origin: center;
+            clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+        }
+
+        .custom-checkbox:checked::before {
+            transform: scale(1);
+        }
+
+        .custom-checkbox:checked {
+            background: linear-gradient(135deg, theme('colors.primary-container') 0%, theme('colors.secondary-container') 100%);
+            border-color: transparent;
+        }
+
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-gutter md:p-container-margin relative overflow-x-hidden">
+<!-- Abstract Background Elements to simulate the image depth -->
+<div class="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary-container/5 blur-[120px] pointer-events-none z-0"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-secondary-container/10 blur-[150px] pointer-events-none z-0"></div>
+<div class="w-full max-w-5xl z-10 grid grid-cols-1 lg:grid-cols-12 gap-stack-gap lg:gap-gutter">
+<!-- Left Column: Form Flow -->
+<div class="lg:col-span-8 flex flex-col gap-stack-gap">
+<!-- Header Section -->
+<header class="glass-panel rounded-2xl p-card-padding flex flex-col md:flex-row justify-between items-start md:items-center gap-stack-gap">
+<div>
+<h1 class="font-display-lg text-display-lg text-primary flex items-center gap-2">
+<span class="material-symbols-outlined text-4xl" style="font-variation-settings: 'FILL' 1;">shield</span>
+                        ProSeguro
+                    </h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Get your personalized insurance quote in minutes.</p>
+</div>
+<!-- Progress Indicator -->
+<div class="flex items-center gap-2">
+<div class="flex items-center gap-1">
+<div class="w-8 h-8 rounded-full primary-gradient flex items-center justify-center text-on-primary-container font-label-md">1</div>
+<div class="h-1 w-4 bg-primary-container/30 rounded-full"></div>
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center text-on-surface-variant font-label-md">2</div>
+<div class="h-1 w-4 bg-surface-container-high rounded-full"></div>
+<div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center text-on-surface-variant font-label-md">3</div>
+</div>
+</div>
+</header>
+<!-- Step 1: Personal Data (Active) -->
+<section class="glass-panel rounded-2xl p-card-padding flex flex-col gap-stack-gap">
+<div class="flex items-center gap-3 border-b border-white/10 pb-4">
+<span class="material-symbols-outlined text-secondary-container" style="font-variation-settings: 'FILL' 1;">person</span>
+<h2 class="font-headline-md text-headline-md text-primary">Personal Details</h2>
+</div>
+<form class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap mt-2">
+<!-- First Name -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-sm text-label-sm input-label">First Name</label>
+<input class="input-field rounded-lg px-4 py-3 font-body-md text-body-md w-full" placeholder="John" type="text"/>
+</div>
+<!-- Last Name -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-sm text-label-sm input-label">Last Name</label>
+<input class="input-field rounded-lg px-4 py-3 font-body-md text-body-md w-full" placeholder="Doe" type="text"/>
+</div>
+<!-- Email -->
+<div class="flex flex-col gap-1.5 md:col-span-2">
+<label class="font-label-sm text-label-sm input-label">Email Address</label>
+<input class="input-field rounded-lg px-4 py-3 font-body-md text-body-md w-full" placeholder="john.doe@example.com" type="email"/>
+</div>
+<!-- Phone (For WhatsApp) -->
+<div class="flex flex-col gap-1.5 md:col-span-2">
+<label class="font-label-sm text-label-sm input-label flex items-center justify-between">
+                            Phone Number 
+                            <span class="text-secondary-container flex items-center gap-1 text-[10px] uppercase tracking-wider">
+<span class="material-symbols-outlined text-[14px]">chat</span> WhatsApp Ready
+                            </span>
+</label>
+<div class="flex gap-2">
+<select class="input-field rounded-lg px-3 py-3 font-body-md text-body-md w-24 border-r-0">
+<option>+1</option>
+<option>+44</option>
+<option>+34</option>
+</select>
+<input class="input-field rounded-lg px-4 py-3 font-body-md text-body-md w-full" placeholder="(555) 000-0000" type="tel"/>
+</div>
+</div>
+</form>
+</section>
+<!-- Step 2: Coverage Options (Preview/Next Step) -->
+<section class="glass-panel rounded-2xl p-card-padding flex flex-col gap-stack-gap opacity-60 pointer-events-none relative overflow-hidden">
+<div class="absolute inset-0 bg-surface-container-lowest/50 backdrop-blur-[2px] z-10 flex items-center justify-center">
+<button class="primary-gradient text-on-primary-container px-6 py-3 rounded-full font-label-md text-label-md flex items-center gap-2 shadow-lg hover:shadow-primary-container/20 transition-all pointer-events-auto">
+                        Continue to Coverage
+                        <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+<div class="flex items-center gap-3 border-b border-white/10 pb-4">
+<span class="material-symbols-outlined text-outline-variant" style="font-variation-settings: 'FILL' 1;">security</span>
+<h2 class="font-headline-md text-headline-md text-on-surface-variant">Coverage Options</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-stack-gap mt-2">
+<!-- Dummy Cards for visual structure -->
+<div class="border border-outline-variant rounded-xl p-4 flex gap-3">
+<input class="custom-checkbox mt-1" type="checkbox"/>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Basic Protection</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Essential coverage for daily risks.</p>
+</div>
+</div>
+<div class="border border-outline-variant rounded-xl p-4 flex gap-3">
+<input class="custom-checkbox mt-1" type="checkbox"/>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Premium Shield</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1">Comprehensive global protection.</p>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Real-time Summary & Payment -->
+<div class="lg:col-span-4 flex flex-col gap-stack-gap">
+<!-- Price Calculation Hero Card -->
+<div class="rounded-2xl p-card-padding primary-gradient relative overflow-hidden flex flex-col gap-4 shadow-lg shadow-primary-container/10">
+<!-- Decorative pattern -->
+<div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full translate-x-1/2 -translate-y-1/2 blur-xl"></div>
+<div>
+<p class="font-label-md text-label-md text-on-secondary-container/80 uppercase tracking-wider">Estimated Premium</p>
+<div class="flex items-baseline gap-1 mt-1">
+<span class="font-display-lg text-display-lg text-on-secondary-container font-bold">$0.00</span>
+<span class="font-label-md text-label-md text-on-secondary-container/80">/mo</span>
+</div>
+</div>
+<div class="bg-surface-dim/20 rounded-xl p-3 flex flex-col gap-2 backdrop-blur-sm border border-white/10">
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-secondary-container">Base Rate</span>
+<span class="font-label-sm text-label-sm text-on-secondary-container font-bold">--</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-label-sm text-label-sm text-on-secondary-container">Add-ons</span>
+<span class="font-label-sm text-label-sm text-on-secondary-container font-bold">--</span>
+</div>
+<div class="h-[1px] w-full bg-on-secondary-container/20 my-1"></div>
+<div class="flex justify-between items-center">
+<span class="font-label-md text-label-md text-on-secondary-container font-bold">Total</span>
+<span class="font-label-md text-label-md text-on-secondary-container font-bold">--</span>
+</div>
+</div>
+</div>
+<!-- Payment Section (Locked State) -->
+<div class="glass-panel rounded-2xl p-card-padding flex flex-col gap-stack-gap opacity-50">
+<div class="flex items-center gap-3 border-b border-white/10 pb-4">
+<span class="material-symbols-outlined text-outline-variant" style="font-variation-settings: 'FILL' 1;">credit_card</span>
+<h2 class="font-headline-md text-headline-md text-on-surface-variant">Payment details</h2>
+</div>
+<div class="flex flex-col gap-4 mt-2">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-sm text-label-sm input-label">Card Number</label>
+<div class="relative">
+<input class="input-field rounded-lg px-4 py-3 font-body-md text-body-md w-full pl-10 opacity-50 cursor-not-allowed" disabled="" placeholder="0000 0000 0000 0000" type="text"/>
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline-variant">credit_card</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-stack-gap">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-sm text-label-sm input-label">Expiry</label>
+<input class="input-field rounded-lg px-4 py-3 font-body-md text-body-md w-full opacity-50 cursor-not-allowed" disabled="" placeholder="MM/YY" type="text"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-sm text-label-sm input-label">CVC</label>
+<input class="input-field rounded-lg px-4 py-3 font-body-md text-body-md w-full opacity-50 cursor-not-allowed" disabled="" placeholder="123" type="text"/>
+</div>
+</div>
+</div>
+<button class="bg-surface-container-highest text-on-surface-variant px-6 py-4 rounded-xl font-label-md text-label-md font-bold mt-4 cursor-not-allowed flex items-center justify-center gap-2 transition-all" disabled="">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">lock</span>
+                    Pay Now
+                </button>
+</div>
+<!-- Success / Trust Indicator -->
+<div class="glass-panel rounded-xl p-4 flex items-start gap-3 border-l-2 border-secondary-container">
+<span class="material-symbols-outlined text-secondary-container mt-0.5">verified_user</span>
+<div>
+<p class="font-label-md text-label-md text-primary">Secure Checkout</p>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-1 leading-relaxed">Your data is encrypted. Upon completion, a confirmation will be sent directly to your WhatsApp.</p>
+</div>
+</div>
+</div>
+</div>
+</body></html>

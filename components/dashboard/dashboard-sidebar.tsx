@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -47,12 +48,8 @@ interface DashboardSidebarProps {
 export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile }: DashboardSidebarProps) {
   const pathname = usePathname()
   const [collapsed, setCollapsed] = useState(false)
-  const [navigation, setNavigation] = useState<NavigationItem[]>(() =>
-    baseNavigation.map(item => ({
-      ...item,
-      visible: !item.requiresFeature && !item.requiresAdmin
-    }))
-  )
+  const [navigation, setNavigation] = useState<NavigationItem[]>([])
+  const [isNavReady, setIsNavReady] = useState(false)
   const [hasNewMessages, setHasNewMessages] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const supabase = createClient()
@@ -84,14 +81,31 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
       if (botsError) { console.error('Error fetching bots for sidebar:', botsError); return }
 
       const { data: userProfile } = await supabase
-        .from("user_profiles").select("role").eq("id", authUser.id).single()
+        .from("user_profiles").select("role, sidebar_config").eq("id", authUser.id).single()
       const isAdmin = userProfile?.role === 'admin'
 
-      if (!bots || bots.length === 0) {
-        setNavigation(baseNavigation.map(item => ({
+      type SidebarEntry = { id: string; label: string; visible: boolean }
+      const sidebarConfig: SidebarEntry[] = Array.isArray(userProfile?.sidebar_config)
+        ? userProfile.sidebar_config
+        : []
+      const configById = Object.fromEntries(sidebarConfig.map((s) => [s.id, s]))
+
+      const applyConfig = (item: NavigationItem, featureVisible: boolean): NavigationItem => {
+        const segId = item.href.split("/").pop() || ""
+        const cfg = configById[segId]
+        return {
           ...item,
-          visible: (!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin)
-        })))
+          name: cfg?.label ?? item.name,
+          visible: featureVisible && (cfg ? cfg.visible !== false : true),
+        }
+      }
+
+      if (!bots || bots.length === 0) {
+        setNavigation(baseNavigation.map(item => {
+          const baseVisible = (!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin)
+          return applyConfig(item, baseVisible)
+        }))
+        setIsNavReady(true)
         return
       }
 
@@ -103,14 +117,16 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
       })
 
       setNavigation(baseNavigation.map(item => {
-        let isVisible = true
-        if (item.requiresFeature) isVisible = allFeatures.has(item.requiresFeature)
-        if (item.requiresAdmin) isVisible = isAdmin
-        return { ...item, visible: isVisible }
+        let featureVisible = true
+        if (item.requiresFeature) featureVisible = allFeatures.has(item.requiresFeature)
+        if (item.requiresAdmin) featureVisible = isAdmin
+        return applyConfig(item, featureVisible)
       }))
+      setIsNavReady(true)
     } catch (error) {
       console.error('Error updating navigation:', error)
       setNavigation(baseNavigation.map(item => ({ ...item, visible: true })))
+      setIsNavReady(true)
     }
   }
 
@@ -122,12 +138,14 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
     const handleBotUpdate = () => updateNavigation()
     window.addEventListener('botCreated', handleBotUpdate)
     window.addEventListener('botUpdated', handleBotUpdate)
+    window.addEventListener('sidebarConfigUpdated', handleBotUpdate)
     const handleRouteChange = () => { setTimeout(() => { updateNavigation(); checkNewMessages() }, 500) }
     window.addEventListener('focus', handleRouteChange)
     const messageInterval = setInterval(() => checkNewMessages(), 60000)
     return () => {
       window.removeEventListener('botCreated', handleBotUpdate)
       window.removeEventListener('botUpdated', handleBotUpdate)
+      window.removeEventListener('sidebarConfigUpdated', handleBotUpdate)
       window.removeEventListener('focus', handleRouteChange)
       clearInterval(messageInterval)
     }
@@ -188,39 +206,49 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
 
         {/* Navigation */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto hide-scrollbar pb-4">
-          {navigation
-            .filter(item => item.visible !== false)
-            .map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.name + item.href}
-                  href={item.href}
-                  onClick={onLinkClick}
-                  className={cn(
-                    "flex items-center gap-4 py-3 rounded-2xl transition-all active:scale-95",
-                    isActive
-                      ? "bg-[#D1F366] text-[#1C1C28] font-semibold shadow-lg shadow-[#D1F366]/10"
-                      : "text-gray-400 sidebar-item transition-colors",
-                    isCollapsed ? "justify-center px-3" : "px-4"
-                  )}
-                >
-                  <span className={cn(
-                    "material-symbols-outlined text-xl flex-shrink-0",
-                    isActive ? "text-[#1C1C28]" : ""
-                  )}>{item.icon}</span>
-                  {!isCollapsed && (
-                    <span className="truncate">{item.name}</span>
-                  )}
-                  {!isCollapsed && item.name === "Mensajes" && hasNewMessages && (
-                    <span className="ml-auto h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
-                  )}
-                  {isCollapsed && item.name === "Mensajes" && hasNewMessages && (
-                    <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                  )}
-                </Link>
-              )
-            })}
+          <AnimatePresence initial={false} mode="popLayout">
+            {isNavReady && navigation
+              .filter(item => item.visible !== false)
+              .map((item) => {
+                const isActive = pathname === item.href
+                return (
+                  <motion.div
+                    key={item.href}
+                    initial={{ opacity: 0, x: -16 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -24 }}
+                    transition={{ duration: 0.18, ease: "easeOut" }}
+                    layout
+                  >
+                    <Link
+                      href={item.href}
+                      onClick={onLinkClick}
+                      className={cn(
+                        "flex items-center gap-4 py-3 rounded-2xl transition-all active:scale-95",
+                        isActive
+                          ? "bg-[#D1F366] text-[#1C1C28] font-semibold shadow-lg shadow-[#D1F366]/10"
+                          : "text-gray-400 sidebar-item transition-colors",
+                        isCollapsed ? "justify-center px-3" : "px-4"
+                      )}
+                    >
+                      <span className={cn(
+                        "material-symbols-outlined text-xl flex-shrink-0",
+                        isActive ? "text-[#1C1C28]" : ""
+                      )}>{item.icon}</span>
+                      {!isCollapsed && (
+                        <span className="truncate">{item.name}</span>
+                      )}
+                      {!isCollapsed && item.name === "Mensajes" && hasNewMessages && (
+                        <span className="ml-auto h-2.5 w-2.5 rounded-full bg-blue-500 animate-pulse flex-shrink-0" />
+                      )}
+                      {isCollapsed && item.name === "Mensajes" && hasNewMessages && (
+                        <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                      )}
+                    </Link>
+                  </motion.div>
+                )
+              })}
+          </AnimatePresence>
         </nav>
       </div>
 

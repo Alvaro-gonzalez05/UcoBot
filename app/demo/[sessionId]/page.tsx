@@ -450,48 +450,161 @@ function AutomationsSection({ session }: { session: DemoSession }) {
   )
 }
 
+// ─── Temperature badge ────────────────────────────────────────────────────────
+function TempBadge({ hot }: { hot: boolean }) {
+  return hot ? (
+    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold bg-orange-500/15 text-orange-300 border-orange-500/30">
+      Caliente
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border font-semibold bg-sky-500/15 text-sky-300 border-sky-500/30">
+      Frio
+    </span>
+  )
+}
+
 // ─── CLIENTS section ──────────────────────────────────────────────────────────
 function ClientsSection({ session, sectionLabel }: { session: DemoSession; sectionLabel: string }) {
+  const [activeTab, setActiveTab] = useState<"todos" | "leads">("todos")
+  const hasLeadQual = (session.features || []).includes("lead_qualification")
+
+  // mock clients — hot = last activity < 24h
   const clients = [
-    { name: "María García",   tag: "lead caliente", time: "Hace 10 min",  email: "mariag@gmail.com",  msgs: 8 },
-    { name: "Juan López",     tag: "lead frío",     time: "Hace 2 horas", email: "—",                 msgs: 3 },
-    { name: "Carlos Ruiz",    tag: "comprador",     time: "Ayer",         email: "cruiz@empresa.com", msgs: 15 },
-    { name: "Ana Martínez",   tag: "exploratorio",  time: "Hace 3 días",  email: "ana.m@gmail.com",   msgs: 5 },
+    { name: "María García",  tag: "comprador",    hot: true,  time: "Hace 10 min",  email: "mariag@gmail.com",  msgs: 8  },
+    { name: "Juan López",    tag: "exploratorio", hot: true,  time: "Hace 2 horas", email: "—",                 msgs: 3  },
+    { name: "Carlos Ruiz",   tag: "inversor",     hot: false, time: "Ayer",         email: "cruiz@empresa.com", msgs: 15 },
+    { name: "Ana Martínez",  tag: "exploratorio", hot: false, time: "Hace 3 días",  email: "ana.m@gmail.com",   msgs: 5  },
   ]
+
+  const leads = clients.filter(c => c.tag !== "exploratorio")
+
   return (
     <div className="flex-1 overflow-y-auto">
       <DemoBanner text={`Vista previa de ${sectionLabel}. Cuando tu bot registre clientes reales en conversaciones, aparecerán aquí con todos sus datos.`} />
       <div className="p-6 max-w-3xl mx-auto space-y-4">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-white font-semibold">{sectionLabel}</h3>
-            <p className="text-zinc-600 text-xs mt-0.5">4 registrados · 2 nuevos esta semana</p>
+            <p className="text-zinc-600 text-xs mt-0.5">{clients.length} registrados · 2 nuevos esta semana</p>
           </div>
           <span className="text-xs text-zinc-600 border border-zinc-700 rounded-lg px-3 py-1.5">+ Agregar</span>
         </div>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-800/60">
-          {clients.map((c, i) => {
-            const colors = getTagColor(c.tag)
-            return (
-              <div key={i} className="flex items-center gap-3 px-4 py-3.5">
-                <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 text-sm font-bold text-zinc-400">
-                  {c.name.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-white text-sm font-medium">{c.name}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${colors.bg} ${colors.text} ${colors.border}`}>{c.tag}</span>
+
+        {/* Tabs */}
+        {hasLeadQual && (
+          <div className="flex gap-1 bg-zinc-900 border border-zinc-800 rounded-xl p-1 w-fit">
+            <button
+              onClick={() => setActiveTab("todos")}
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                activeTab === "todos"
+                  ? "bg-zinc-700 text-white"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Todos
+            </button>
+            <button
+              onClick={() => setActiveTab("leads")}
+              className={`px-4 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 ${
+                activeTab === "leads"
+                  ? "bg-zinc-700 text-white"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+            >
+              Leads
+              <span className="bg-[#CCFF00]/20 text-[#CCFF00] text-[9px] px-1.5 py-0.5 rounded-full font-bold">
+                {leads.length}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* All clients */}
+        {activeTab === "todos" && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-800/60">
+            {clients.map((c, i) => {
+              const colors = getTagColor(c.tag)
+              return (
+                <div key={i} className="flex items-center gap-3 px-4 py-3.5">
+                  <div className="w-9 h-9 rounded-full bg-zinc-800 flex items-center justify-center flex-shrink-0 text-sm font-bold text-zinc-400">
+                    {c.name.charAt(0)}
                   </div>
-                  <p className="text-zinc-600 text-xs">{c.email}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-white text-sm font-medium">{c.name}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${colors.bg} ${colors.text} ${colors.border}`}>
+                        {c.tag}
+                      </span>
+                      {hasLeadQual && <TempBadge hot={c.hot} />}
+                    </div>
+                    <p className="text-zinc-600 text-xs">{c.email}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-zinc-500 text-xs">{c.msgs} mens.</p>
+                    <p className="text-zinc-700 text-[10px]">{c.time}</p>
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-zinc-500 text-xs">{c.msgs} mensajes</p>
-                  <p className="text-zinc-700 text-[10px]">{c.time}</p>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Leads tab */}
+        {activeTab === "leads" && (
+          <div className="space-y-3">
+            {/* Stats */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-orange-300 text-xl font-bold">{leads.filter(l => l.hot).length}</p>
+                    <p className="text-orange-400/60 text-xs">Calientes</p>
+                  </div>
                 </div>
               </div>
-            )
-          })}
-        </div>
+              <div className="bg-sky-500/10 border border-sky-500/20 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-sky-300 text-xl font-bold">{leads.filter(l => !l.hot).length}</p>
+                    <p className="text-sky-400/60 text-xs">Frios</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-zinc-600 text-xs">
+              Caliente = escribio en las ultimas 24hs · Frio = sin actividad reciente
+            </p>
+            {/* Lead rows */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-800/60">
+              {leads.map((c, i) => {
+                const colors = getTagColor(c.tag)
+                return (
+                  <div key={i} className="flex items-center gap-3 px-4 py-3.5">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold ${
+                      c.hot ? "bg-orange-500/20 text-orange-300" : "bg-sky-500/20 text-sky-300"
+                    }`}>
+                      {c.name.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-white text-sm font-medium">{c.name}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${colors.bg} ${colors.text} ${colors.border}`}>
+                          {c.tag}
+                        </span>
+                        <TempBadge hot={c.hot} />
+                      </div>
+                      <p className="text-zinc-600 text-xs">{c.msgs} mensajes · {c.time}</p>
+                    </div>
+                    <button className="flex-shrink-0 text-[10px] text-zinc-600 border border-zinc-700 px-2 py-1 rounded-lg hover:text-zinc-400 transition-colors">
+                      Ver conv.
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

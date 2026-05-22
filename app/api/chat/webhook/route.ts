@@ -405,7 +405,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Update conversation status
-    const updateData: any = { 
+    const updateData: any = {
       last_message_at: new Date().toISOString()
     }
 
@@ -421,6 +421,11 @@ export async function POST(request: NextRequest) {
       .from("conversations")
       .update(updateData)
       .eq("id", actualConversationId)
+
+    // Classify lead tag asynchronously when feature is enabled (no await — fire and forget)
+    if (bot.features?.includes('lead_qualification') && bot.allowed_tags?.length > 0 && geminiApiKey) {
+      classifyAndSaveLeadTag(supabase, bot, actualConversationId, message, geminiApiKey).catch(() => {})
+    }
 
     return NextResponse.json({
       response: botResponse,
@@ -2288,5 +2293,79 @@ async function createOrUpdateClient(supabase: any, userId: string, clientData: a
   } catch (error) {
     console.error('Error in createOrUpdateClient:', error)
     return null
+  }
+}
+
+// Classify lead tag using AI and persist to conversation — fire-and-forget
+async function classifyAndSaveLeadTag(
+  supabase: any,
+  bot: any,
+  conversationId: string,
+  lastUserMessage: string,
+  geminiApiKey: string
+) {
+  try {
+    const allowedTags: string[] = bot.allowed_tags || []
+    if (!allowedTags.length) return
+
+    // Get recent conversation messages for context (last 8)
+    const { data: messages } = await supabase
+      .from("messages")
+      .select("sender_type, content")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(8)
+
+    if (!messages || messages.length === 0) return
+
+    const historyText = messages
+      .reverse()
+      .map((m: any) => `${m.sender_type === 'client' ? 'Cliente' : 'Bot'}: ${m.content}`)
+      .join('\n')
+
+    const prompt = `Leé esta conversación y elegí el tag de lead más apropiado de la lista dada.
+
+Conversación:
+${historyText}
+
+Tags permitidos: ${allowedTags.map(t => `"${t}"`).join(', ')}
+
+Reglas:
+- Si hay información suficiente para clasificar al lead, elegí UNO de los tags exactos.
+- Si no hay información suficiente aún, respondé con null.
+- NO inventes tags. Solo usá los de la lista.
+
+Respondé SOLO con JSON: {"lead_tag": "TagExacto"} o {"lead_tag": null}`
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.1 }
+        })
+      }
+    )
+
+    if (!response.ok) return
+
+    const data = await response.json()
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+    if (!text) return
+
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim()
+    const result = JSON.parse(jsonStr)
+
+    if (result.lead_tag && allowedTags.includes(result.lead_tag)) {
+      await supabase
+        .from('conversations')
+        .update({ lead_tag: result.lead_tag })
+        .eq('id', conversationId)
+      console.log(`[lead] classified as "${result.lead_tag}" for conversation ${conversationId}`)
+    }
+  } catch (err) {
+    // Silent — classification is non-critical
   }
 }
