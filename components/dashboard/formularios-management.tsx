@@ -90,6 +90,17 @@ interface FormulariosManagementProps {
   userId: string
 }
 
+const DEFAULT_THEME = {
+  color1: "#b4f577", color2: "#00c6b6",
+  panelBgType: "default" as "default" | "solid" | "gradient",
+  panelBg: "#1e202c", panelBgFrom: "#1e202c", panelBgTo: "#0c0e17", panelBorder: "#424939",
+  inputBg: "#0c0e17", inputBorder: "#424939", inputText: "#e1e1ef",
+  titleType: "solid" as "solid" | "gradient",
+  titleColor: "#ffffff", titleFrom: "#b4f577", titleTo: "#00c6b6",
+  bodyColor: "#e1e1ef", labelColor: "#c2c9b5",
+}
+type ThemeState = typeof DEFAULT_THEME
+
 const DEFAULT_COTIZADOR: CotizadorConfig = {
   enabled: false,
   title: "COTIZACION ESTIMADA",
@@ -148,7 +159,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
   const [editSteps, setEditSteps] = useState<FormStep[]>([])
   const [editCotizador, setEditCotizador] = useState<CotizadorConfig>(DEFAULT_COTIZADOR)
   const [editMeta, setEditMeta] = useState({ name: "", description: "", logo: "" })
-  const [editTheme, setEditTheme] = useState({ color1: "#b4f577", color2: "#00c6b6" })
+  const [editTheme, setEditTheme] = useState<ThemeState>(DEFAULT_THEME)
   const [editorTab, setEditorTab] = useState<"constructor" | "preview">("constructor")
   const [previewStep, setPreviewStep] = useState(0)
   const [isSaving, setIsSaving] = useState(false)
@@ -240,7 +251,16 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
   const openEditor = (form: Form) => {
     setEditingForm(form)
     setEditMeta({ name: form.name, description: form.description || "", logo: form.settings?.logo || "" })
-    setEditTheme({ color1: form.settings?.theme?.color1 || "#b4f577", color2: form.settings?.theme?.color2 || "#00c6b6" })
+    const t = form.settings?.theme || {}
+    setEditTheme({
+      color1: t.color1 || "#b4f577", color2: t.color2 || "#00c6b6",
+      panelBgType: t.panelBgType || "default",
+      panelBg: t.panelBg || "#1e202c", panelBgFrom: t.panelBgFrom || "#1e202c", panelBgTo: t.panelBgTo || "#0c0e17", panelBorder: t.panelBorder || "#424939",
+      inputBg: t.inputBg || "#0c0e17", inputBorder: t.inputBorder || "#424939", inputText: t.inputText || "#e1e1ef",
+      titleType: t.titleType || "solid",
+      titleColor: t.titleColor || "#ffffff", titleFrom: t.titleFrom || "#b4f577", titleTo: t.titleTo || "#00c6b6",
+      bodyColor: t.bodyColor || "#e1e1ef", labelColor: t.labelColor || "#c2c9b5",
+    })
     setEditorTab("constructor")
     setPreviewStep(0)
 
@@ -325,7 +345,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
           settings: {
             ...(editingForm.settings || {}),
             logo: editMeta.logo || null,
-            theme: { color1: editTheme.color1, color2: editTheme.color2 },
+            theme: editTheme,
           },
           updated_at: new Date().toISOString(),
         })
@@ -902,46 +922,143 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                 </div>
               )}
 
-              {/* Design / Colors */}
-              <div className="bg-[#1C1C28] text-white p-6 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.14)] border border-white/5 space-y-4">
+              {/* Design / Colors — full */}
+              <div className="bg-[#1C1C28] text-white p-6 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.14)] border border-white/5 space-y-5">
                 <div className="flex items-center gap-4">
                   <div className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: themeGradient }}>
                     <Palette className="h-5 w-5" style={{ color: themeOnGradient }} />
                   </div>
                   <div>
                     <p className="text-xs text-white/40 font-semibold uppercase tracking-wide">Personalización</p>
-                    <p className="font-bold text-white">Colores del formulario</p>
+                    <p className="font-bold text-white">Diseño del formulario</p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <p className="text-xs text-white/50 font-semibold uppercase tracking-wide">Color 1</p>
-                    <div className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
-                      <input
-                        type="color"
-                        value={editTheme.color1}
-                        onChange={e => setEditTheme(prev => ({ ...prev, color1: e.target.value }))}
-                        className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
-                        style={{ appearance: "none" }}
-                      />
-                      <span className="text-xs font-mono text-white/60">{editTheme.color1}</span>
-                    </div>
+
+                {/* — Botones — */}
+                <div className="space-y-3">
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Botones</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([["color1","Color 1"],["color2","Color 2"]] as const).map(([k,l]) => (
+                      <div key={k} className="space-y-1">
+                        <p className="text-[10px] text-white/40">{l}</p>
+                        <div className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+                          <input type="color" value={editTheme[k]} onChange={e => setEditTheme(p => ({ ...p, [k]: e.target.value }))} className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                          <span className="text-[10px] font-mono text-white/50">{editTheme[k]}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <p className="text-xs text-white/50 font-semibold uppercase tracking-wide">Color 2</p>
+                  <div className="rounded-xl h-7 w-full" style={{ background: themeGradient }} />
+                </div>
+
+                {/* — Paneles — */}
+                <div className="space-y-3">
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Paneles</p>
+                  <div className="flex gap-1 p-1 bg-white/5 rounded-xl">
+                    {(["default","solid","gradient"] as const).map(opt => (
+                      <button key={opt} onClick={() => setEditTheme(p => ({ ...p, panelBgType: opt }))}
+                        className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+                        style={{ backgroundColor: editTheme.panelBgType === opt ? "rgba(255,255,255,0.15)" : "transparent", color: editTheme.panelBgType === opt ? "#fff" : "rgba(255,255,255,0.35)" }}
+                      >
+                        {opt === "default" ? "Auto" : opt === "solid" ? "Sólido" : "Gradiente"}
+                      </button>
+                    ))}
+                  </div>
+                  {editTheme.panelBgType === "solid" && (
                     <div className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
-                      <input
-                        type="color"
-                        value={editTheme.color2}
-                        onChange={e => setEditTheme(prev => ({ ...prev, color2: e.target.value }))}
-                        className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0"
-                        style={{ appearance: "none" }}
-                      />
-                      <span className="text-xs font-mono text-white/60">{editTheme.color2}</span>
+                      <input type="color" value={editTheme.panelBg} onChange={e => setEditTheme(p => ({ ...p, panelBg: e.target.value }))} className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                      <span className="text-[10px] font-mono text-white/50 flex-1">{editTheme.panelBg}</span>
+                      <div className="w-6 h-6 rounded-lg" style={{ backgroundColor: editTheme.panelBg }} />
+                    </div>
+                  )}
+                  {editTheme.panelBgType === "gradient" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      {([["panelBgFrom","Desde"],["panelBgTo","Hasta"]] as const).map(([k,l]) => (
+                        <div key={k} className="space-y-1">
+                          <p className="text-[10px] text-white/40">{l}</p>
+                          <div className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+                            <input type="color" value={editTheme[k]} onChange={e => setEditTheme(p => ({ ...p, [k]: e.target.value }))} className="w-7 h-7 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                            <span className="text-[10px] font-mono text-white/40">{editTheme[k]}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {editTheme.panelBgType !== "default" && editTheme.panelBgType === "gradient" && (
+                    <div className="rounded-xl h-6 w-full" style={{ background: `linear-gradient(135deg,${editTheme.panelBgFrom} 0%,${editTheme.panelBgTo} 100%)` }} />
+                  )}
+                  <div className="space-y-1">
+                    <p className="text-[10px] text-white/40">Borde</p>
+                    <div className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+                      <input type="color" value={editTheme.panelBorder} onChange={e => setEditTheme(p => ({ ...p, panelBorder: e.target.value }))} className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                      <span className="text-[10px] font-mono text-white/50 flex-1">{editTheme.panelBorder}</span>
+                      <div className="w-full h-px flex-1" style={{ backgroundColor: editTheme.panelBorder }} />
                     </div>
                   </div>
                 </div>
-                <div className="rounded-xl h-10 w-full" style={{ background: themeGradient }} />
+
+                {/* — Inputs — */}
+                <div className="space-y-3">
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Inputs</p>
+                  {([["inputBg","Fondo"],["inputBorder","Borde"],["inputText","Texto"]] as const).map(([k,l]) => (
+                    <div key={k} className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+                      <input type="color" value={editTheme[k]} onChange={e => setEditTheme(p => ({ ...p, [k]: e.target.value }))} className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                      <span className="text-xs text-white/40 flex-1">{l}</span>
+                      <span className="text-[10px] font-mono text-white/30">{editTheme[k]}</span>
+                    </div>
+                  ))}
+                  <div className="rounded-xl p-3 flex items-center gap-3" style={{ backgroundColor: editTheme.inputBg, border: `1px solid ${editTheme.inputBorder}` }}>
+                    <span className="text-xs" style={{ color: editTheme.inputText }}>Vista previa del input</span>
+                  </div>
+                </div>
+
+                {/* — Texto — */}
+                <div className="space-y-3">
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest border-b border-white/10 pb-2">Texto</p>
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-white/40">Título</p>
+                    <div className="flex gap-1 p-1 bg-white/5 rounded-xl">
+                      {(["solid","gradient"] as const).map(opt => (
+                        <button key={opt} onClick={() => setEditTheme(p => ({ ...p, titleType: opt }))}
+                          className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold transition-all"
+                          style={{ backgroundColor: editTheme.titleType === opt ? "rgba(255,255,255,0.15)" : "transparent", color: editTheme.titleType === opt ? "#fff" : "rgba(255,255,255,0.35)" }}
+                        >
+                          {opt === "solid" ? "Sólido" : "Gradiente"}
+                        </button>
+                      ))}
+                    </div>
+                    {editTheme.titleType === "solid" ? (
+                      <div className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+                        <input type="color" value={editTheme.titleColor} onChange={e => setEditTheme(p => ({ ...p, titleColor: e.target.value }))} className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                        <span className="text-sm font-bold" style={{ color: editTheme.titleColor }}>Título de ejemplo</span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([["titleFrom","Desde"],["titleTo","Hasta"]] as const).map(([k,l]) => (
+                            <div key={k} className="space-y-1">
+                              <p className="text-[10px] text-white/40">{l}</p>
+                              <div className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+                                <input type="color" value={editTheme[k]} onChange={e => setEditTheme(p => ({ ...p, [k]: e.target.value }))} className="w-7 h-7 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                                <span className="text-[10px] font-mono text-white/40">{editTheme[k]}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-sm font-bold" style={{ background: `linear-gradient(135deg,${editTheme.titleFrom} 0%,${editTheme.titleTo} 100%)`, WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+                          Título de ejemplo
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  {([["bodyColor","Texto cuerpo"],["labelColor","Labels"]] as const).map(([k,l]) => (
+                    <div key={k} className="flex items-center gap-2 bg-white/5 rounded-xl p-2">
+                      <input type="color" value={editTheme[k]} onChange={e => setEditTheme(p => ({ ...p, [k]: e.target.value }))} className="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent p-0" />
+                      <span className="text-xs flex-1" style={{ color: editTheme[k] }}>{l}</span>
+                      <span className="text-[10px] font-mono text-white/30">{editTheme[k]}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="bg-[#D1F366]/10 border border-[#D1F366]/20 rounded-3xl p-6 space-y-4">
