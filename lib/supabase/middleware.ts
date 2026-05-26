@@ -42,7 +42,8 @@ export async function updateSession(request: NextRequest) {
     (route) =>
       request.nextUrl.pathname === route ||
       request.nextUrl.pathname.startsWith("/register/") ||
-      request.nextUrl.pathname.startsWith("/demo/"),
+      request.nextUrl.pathname.startsWith("/demo/") ||
+      request.nextUrl.pathname.startsWith("/f/"),
   )
 
   if (!user && !isPublicRoute) {
