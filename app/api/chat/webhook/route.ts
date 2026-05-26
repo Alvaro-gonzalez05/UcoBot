@@ -692,7 +692,8 @@ INFORMACIÓN ADICIONAL PARA RESPUESTAS SOBRE MENÚ:
         .limit(10)
 
       if (activeForms && activeForms.length > 0) {
-        const baseUrl = request.nextUrl.origin
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
         const formsList = activeForms.map((f: any) =>
           `- "${f.name}"${f.description ? ` (${f.description})` : ''}: ${baseUrl}/f/${f.slug}?conv=${conversationId}`
         ).join('\n')
