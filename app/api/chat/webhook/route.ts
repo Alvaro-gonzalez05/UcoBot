@@ -695,7 +695,7 @@ INFORMACIÓN ADICIONAL PARA RESPUESTAS SOBRE MENÚ:
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL ||
           (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
         const formsList = activeForms.map((f: any) =>
-          `- "${f.name}"${f.description ? ` (${f.description})` : ''}: ${baseUrl}/f/${f.slug}?conv=${conversationId}`
+          `- "${f.name}"${f.description ? ` (${f.description})` : ''}: ${baseUrl}/f/${f.slug}?conv=${conversation.id}`
         ).join('\n')
         formsInfo = `FORMULARIOS DISPONIBLES:
 ${formsList}
