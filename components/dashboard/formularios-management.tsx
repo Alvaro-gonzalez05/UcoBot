@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,7 +19,8 @@ import {
   Link2, ExternalLink, Settings, ListChecks, BarChart3,
   AlignLeft, CircleDot, CheckSquare, SlidersHorizontal,
   Hash, Mail, Phone, Type, Calendar, Clock, ChevronDown,
-  Calculator, CreditCard, Shield, Layers, ImagePlus, Palette,
+  Calculator, CreditCard, Shield, Layers, ImagePlus, Palette, Package,
+  Zap, Users,
 } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -27,13 +28,15 @@ import { es } from "date-fns/locale"
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface FormField {
   label: string
-  type: "text" | "email" | "phone" | "textarea" | "radio" | "checkbox" | "slider" | "number" | "date" | "time" | "select"
+  type: "text" | "email" | "phone" | "textarea" | "radio" | "checkbox" | "slider" | "number" | "date" | "time" | "select" | "product_selector"
   required: boolean
   placeholder?: string
   options?: string[]
   min?: number
   max?: number
   step?: number
+  product_category?: string
+  conditional?: { fieldLabel: string; value: string }
 }
 
 interface FormStep {
@@ -42,21 +45,23 @@ interface FormStep {
   fields: FormField[]
 }
 
-interface CotizadorLineItem {
-  id: string
-  label: string
-  value: number | null
-}
-
 interface CotizadorConfig {
   enabled: boolean
-  title: string
-  currency: string
-  mainSuffix: string
-  lineItems: CotizadorLineItem[]
   showPayment: boolean
-  secureText: string
 }
+
+interface ProductOption {
+  id: string
+  name: string
+  category?: string
+}
+
+interface AfterSubmitConfig {
+  action: "none" | "message" | "message_handover"
+  message: string
+}
+
+const DEFAULT_AFTER_SUBMIT: AfterSubmitConfig = { action: "none", message: "" }
 
 interface Form {
   id: string
@@ -103,15 +108,7 @@ type ThemeState = typeof DEFAULT_THEME
 
 const DEFAULT_COTIZADOR: CotizadorConfig = {
   enabled: false,
-  title: "COTIZACION ESTIMADA",
-  currency: "$",
-  mainSuffix: "/mes",
-  lineItems: [
-    { id: "base", label: "Tarifa base", value: null },
-    { id: "extras", label: "Adicionales", value: null },
-  ],
   showPayment: false,
-  secureText: "Tus datos estan encriptados y protegidos.",
 }
 
 const FIELD_TYPE_CONFIG: Record<string, {
@@ -132,7 +129,8 @@ const FIELD_TYPE_CONFIG: Record<string, {
   number:   { label: "Numero",           icon: Hash,               border: "border-l-teal-400",   badge: "bg-teal-100 dark:bg-teal-900/40",   badgeText: "text-teal-600 dark:text-teal-400",   iconColor: "text-teal-500" },
   date:     { label: "Fecha",            icon: Calendar,           border: "border-l-sky-400",    badge: "bg-sky-100 dark:bg-sky-900/40",     badgeText: "text-sky-600 dark:text-sky-400",     iconColor: "text-sky-500" },
   time:     { label: "Hora",             icon: Clock,              border: "border-l-violet-400", badge: "bg-violet-100 dark:bg-violet-900/40", badgeText: "text-violet-600 dark:text-violet-400", iconColor: "text-violet-500" },
-  select:   { label: "Lista desplegable",icon: ChevronDown,        border: "border-l-pink-400",   badge: "bg-pink-100 dark:bg-pink-900/40",   badgeText: "text-pink-600 dark:text-pink-400",   iconColor: "text-pink-500" },
+  select:            { label: "Lista desplegable",  icon: ChevronDown,  border: "border-l-pink-400",   badge: "bg-pink-100 dark:bg-pink-900/40",   badgeText: "text-pink-600 dark:text-pink-400",   iconColor: "text-pink-500" },
+  product_selector:  { label: "Selector de producto", icon: Package,    border: "border-l-lime-400",   badge: "bg-lime-100 dark:bg-lime-900/40",   badgeText: "text-lime-600 dark:text-lime-400",   iconColor: "text-lime-500" },
 }
 
 function hexLuminance(hex: string): number {
@@ -166,6 +164,18 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
   const supabase = createClient()
 
   const [newFormData, setNewFormData] = useState({ name: "", type: "link" as "link" | "conversacional" })
+  const [availableProducts, setAvailableProducts] = useState<ProductOption[]>([])
+  const [editAfterSubmit, setEditAfterSubmit] = useState<AfterSubmitConfig>(DEFAULT_AFTER_SUBMIT)
+
+  useEffect(() => {
+    if (!editingForm) return
+    supabase
+      .from("products")
+      .select("id, name, category")
+      .eq("user_id", userId)
+      .eq("is_available", true)
+      .then(({ data }) => { if (data) setAvailableProducts(data) })
+  }, [editingForm?.id])
 
   const generateSlug = (name: string) =>
     name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
@@ -280,6 +290,8 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
     }
 
     setEditCotizador(form.cotizador_config || DEFAULT_COTIZADOR)
+    const savedAfterSubmit = (form.settings as any)?.after_submit
+    setEditAfterSubmit(savedAfterSubmit || DEFAULT_AFTER_SUBMIT)
   }
 
   // Step management
@@ -346,6 +358,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
             ...(editingForm.settings || {}),
             logo: editMeta.logo || null,
             theme: editTheme,
+            after_submit: editAfterSubmit.action !== "none" ? editAfterSubmit : null,
           },
           updated_at: new Date().toISOString(),
         })
@@ -374,7 +387,6 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
       ? `${window.location.origin}/f/${editingForm.slug}`
       : `/f/${editingForm.slug}`
     const totalFields = editSteps.reduce((acc, s) => acc + s.fields.length, 0)
-    const cotizadorTotal = editCotizador.lineItems.reduce((acc, item) => acc + (item.value ?? 0), 0)
     const themeGradient = `linear-gradient(135deg, ${editTheme.color1} 0%, ${editTheme.color2} 100%)`
     const themeOnGradient = hexLuminance(editTheme.color1) > 0.35 ? darkenHex(editTheme.color1, 0.25) : "#f0f0f0"
     const themeOnGradientDim = hexLuminance(editTheme.color1) > 0.35 ? darkenHex(editTheme.color1, 0.3) + "cc" : "rgba(240,240,240,0.8)"
@@ -552,7 +564,8 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                         const hasOptions = field.type === "radio" || field.type === "checkbox" || field.type === "select"
                         const isSlider = field.type === "slider"
                         const isDateOrTime = field.type === "date" || field.type === "time"
-                        const hasPlaceholder = !hasOptions && !isSlider && !isDateOrTime
+                        const isProductSelector = field.type === "product_selector"
+                        const hasPlaceholder = !hasOptions && !isSlider && !isDateOrTime && !isProductSelector
 
                         return (
                           <div
@@ -702,6 +715,72 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                                   </div>
                                 </div>
                               )}
+                              {isProductSelector && (
+                                <div className="space-y-3 pt-1">
+                                  <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Filtrar por categoría</Label>
+                                    <Select
+                                      value={field.product_category || "__all__"}
+                                      onValueChange={v => updateFieldInStep(stepIdx, fieldIdx, { product_category: v === "__all__" ? undefined : v })}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs rounded-xl">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__all__" className="text-xs">Todos los productos</SelectItem>
+                                        {[...new Set(availableProducts.map(p => p.category).filter(Boolean))].map(cat => (
+                                          <SelectItem key={cat!} value={cat!} className="text-xs">{cat}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-2 p-3 bg-muted/40 rounded-xl">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Condición de visibilidad</span>
+                                      <Switch
+                                        checked={!!field.conditional?.fieldLabel}
+                                        onCheckedChange={v => updateFieldInStep(stepIdx, fieldIdx, { conditional: v ? { fieldLabel: "", value: "" } : undefined })}
+                                        className="scale-75 origin-right"
+                                      />
+                                    </div>
+                                    {field.conditional !== undefined && (
+                                      <div className="space-y-2">
+                                        <p className="text-xs text-muted-foreground">Mostrar solo cuando el campo:</p>
+                                        <Select
+                                          value={field.conditional.fieldLabel || "__none__"}
+                                          onValueChange={v => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, fieldLabel: v === "__none__" ? "" : v } })}
+                                        >
+                                          <SelectTrigger className="h-8 text-xs rounded-xl">
+                                            <SelectValue placeholder="Elegir campo..." />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="__none__" className="text-xs">— Elegir campo —</SelectItem>
+                                            {editSteps.flatMap(s => s.fields)
+                                              .filter(f => f.label && f !== field && f.type !== "product_selector")
+                                              .map(f => (
+                                                <SelectItem key={f.label} value={f.label} className="text-xs">{f.label}</SelectItem>
+                                              ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-xs text-muted-foreground shrink-0">sea igual a:</span>
+                                          <Input
+                                            placeholder="valor..."
+                                            value={field.conditional.value}
+                                            onChange={e => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, value: e.target.value } })}
+                                            className="h-7 text-xs rounded-xl flex-1"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {availableProducts.length > 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                      <span className="font-semibold text-[#D1F366]">{availableProducts.filter(p => !field.product_category || p.category === field.product_category).length}</span> producto(s) disponible(s)
+                                    </p>
+                                  )}
+                                </div>
+                              )}
                               <div className="flex items-center gap-2 pt-1">
                                 <Switch
                                   checked={field.required}
@@ -747,96 +826,21 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                 </div>
 
                 {editCotizador.enabled && (
-                  <div className="space-y-4 pt-2 border-t border-border">
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Titulo</Label>
-                        <Input
-                          value={editCotizador.title}
-                          onChange={e => setEditCotizador(p => ({ ...p, title: e.target.value }))}
-                          className="rounded-xl h-9 text-sm"
-                          placeholder="COTIZACION ESTIMADA"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Moneda</Label>
-                        <Input
-                          value={editCotizador.currency}
-                          onChange={e => setEditCotizador(p => ({ ...p, currency: e.target.value }))}
-                          className="rounded-xl h-9 text-sm"
-                          placeholder="$"
-                          maxLength={3}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Items del cotizador</Label>
-                        <button
-                          onClick={() => setEditCotizador(p => ({
-                            ...p,
-                            lineItems: [...p.lineItems, { id: `item-${Date.now()}`, label: "", value: null }]
-                          }))}
-                          className="text-xs text-[#D1F366] hover:text-[#B3D93C] font-semibold flex items-center gap-1"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Agregar item
-                        </button>
-                      </div>
-                      <div className="space-y-2">
-                        {editCotizador.lineItems.map((item, idx) => (
-                          <div key={item.id} className="flex items-center gap-2">
-                            <Input
-                              placeholder="Concepto..."
-                              value={item.label}
-                              onChange={e => {
-                                const updated = editCotizador.lineItems.map((li, i) => i === idx ? { ...li, label: e.target.value } : li)
-                                setEditCotizador(p => ({ ...p, lineItems: updated }))
-                              }}
-                              className="flex-1 h-8 text-sm rounded-xl"
-                            />
-                            <Input
-                              type="number"
-                              placeholder="0"
-                              value={item.value ?? ""}
-                              onChange={e => {
-                                const updated = editCotizador.lineItems.map((li, i) => i === idx ? { ...li, value: e.target.value === "" ? null : Number(e.target.value) } : li)
-                                setEditCotizador(p => ({ ...p, lineItems: updated }))
-                              }}
-                              className="w-28 h-8 text-sm rounded-xl text-center"
-                            />
-                            {editCotizador.lineItems.length > 1 && (
-                              <button
-                                onClick={() => setEditCotizador(p => ({ ...p, lineItems: p.lineItems.filter((_, i) => i !== idx) }))}
-                                className="text-muted-foreground hover:text-destructive transition-colors"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
+                  <div className="space-y-3 pt-2 border-t border-border">
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      El panel de cotización aparece automáticamente cuando el cliente selecciona un producto en el formulario.
+                    </p>
                     <div className="flex items-center justify-between p-3 bg-muted/40 rounded-2xl">
                       <div className="flex items-center gap-2">
                         <CreditCard className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-semibold">Mostrar formulario de pago</span>
+                        <div>
+                          <span className="text-sm font-semibold">Mostrar formulario de pago</span>
+                          <p className="text-xs text-muted-foreground">Solicitar datos de tarjeta al cliente</p>
+                        </div>
                       </div>
                       <Switch
                         checked={editCotizador.showPayment}
                         onCheckedChange={v => setEditCotizador(p => ({ ...p, showPayment: v }))}
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Texto de seguridad</Label>
-                      <Input
-                        value={editCotizador.secureText}
-                        onChange={e => setEditCotizador(p => ({ ...p, secureText: e.target.value }))}
-                        className="rounded-xl h-9 text-sm"
-                        placeholder="Tus datos estan protegidos."
                       />
                     </div>
                   </div>
@@ -921,6 +925,87 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                   </div>
                 </div>
               )}
+
+              {/* ── After Form ── */}
+              <div className="bg-[#1C1C28] text-white p-6 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.14)] border border-white/5 space-y-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-violet-900/40 text-violet-400 rounded-2xl flex items-center justify-center flex-shrink-0">
+                    <Zap className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-white/40 font-semibold uppercase tracking-wide">Acción automática</p>
+                    <p className="font-bold text-white">After Form</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-white/40 leading-relaxed">
+                  Qué hace el bot automáticamente cuando el cliente completa el formulario (la conversación de WhatsApp ya está abierta).
+                </p>
+
+                {/* Action selector */}
+                <div className="flex flex-col gap-2">
+                  {([
+                    { value: "none",             icon: null,           label: "Sin acción",                   desc: "Solo guarda la respuesta" },
+                    { value: "message",          icon: MessageSquare,  label: "Enviar mensaje",                desc: "El bot envía un mensaje al cliente" },
+                    { value: "message_handover", icon: Users,          label: "Mensaje + Derivar a humano",    desc: "Envía mensaje y abre alerta de atención" },
+                  ] as const).map(opt => {
+                    const isActive = editAfterSubmit.action === opt.value
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setEditAfterSubmit(p => ({ ...p, action: opt.value }))}
+                        className="flex items-center gap-3 p-3 rounded-2xl text-left transition-all"
+                        style={{
+                          backgroundColor: isActive ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.04)",
+                          border: isActive ? "1px solid rgba(167,139,250,0.4)" : "1px solid rgba(255,255,255,0.06)",
+                        }}
+                      >
+                        <div
+                          className="w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center"
+                          style={{ borderColor: isActive ? "#a78bfa" : "rgba(255,255,255,0.2)" }}
+                        >
+                          {isActive && <div className="w-2.5 h-2.5 rounded-full bg-violet-400" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold" style={{ color: isActive ? "#a78bfa" : "#ffffff" }}>
+                            {opt.label}
+                          </p>
+                          <p className="text-xs mt-0.5" style={{ color: "rgba(255,255,255,0.35)" }}>
+                            {opt.desc}
+                          </p>
+                        </div>
+                        {opt.icon && (
+                          <opt.icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? "#a78bfa" : "rgba(255,255,255,0.3)" }} />
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Message textarea */}
+                {editAfterSubmit.action !== "none" && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-white/40 uppercase tracking-wide">Mensaje a enviar</p>
+                    <textarea
+                      rows={4}
+                      placeholder={"Ej: ¡Gracias por completar el formulario! En breve nos comunicamos contigo."}
+                      value={editAfterSubmit.message}
+                      onChange={e => setEditAfterSubmit(p => ({ ...p, message: e.target.value }))}
+                      className="w-full rounded-2xl text-sm resize-none focus:outline-none focus:ring-1 focus:ring-violet-500/50 placeholder:text-white/20"
+                      style={{ backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#e1e1ef", padding: "12px 16px" }}
+                    />
+                    {editAfterSubmit.action === "message_handover" && (
+                      <div className="flex items-start gap-2 p-3 rounded-xl" style={{ backgroundColor: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)" }}>
+                        <span className="text-amber-400 text-xs mt-0.5">⚠</span>
+                        <p className="text-xs text-amber-300/80 leading-relaxed">
+                          La conversación quedará marcada como <strong className="text-amber-300">necesita atención</strong>. El equipo verá la alerta en el dashboard.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* Design / Colors — full */}
               <div className="bg-[#1C1C28] text-white p-6 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.14)] border border-white/5 space-y-5">
@@ -1153,7 +1238,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                         </div>
                       ) : (
                         editSteps[previewStep].fields.map((field, fi) => {
-                          const isWide = ["textarea","slider","radio","checkbox"].includes(field.type)
+                          const isWide = ["textarea","slider","radio","checkbox","product_selector"].includes(field.type)
                           return (
                             <div key={fi} className={`flex flex-col gap-1.5 ${isWide ? "md:col-span-2" : ""}`}>
                               <label className="input-label text-xs font-medium">
@@ -1180,6 +1265,18 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                               ) : field.type === "textarea" ? (
                                 <div className="input-field rounded-lg px-4 py-3 text-sm" style={{ minHeight: 80, color: "#c2c9b5", opacity: 0.5 }}>
                                   {field.placeholder || "Escribe aquí..."}
+                                </div>
+                              ) : field.type === "product_selector" ? (
+                                <div className="grid grid-cols-2 gap-2 opacity-60">
+                                  {[1,2].map(i => (
+                                    <div key={i} className="rounded-xl overflow-hidden" style={{ backgroundColor: "#0c0e17", border: "1px solid #424939" }}>
+                                      <div style={{ height: 60, backgroundColor: "#1a1c25" }} />
+                                      <div className="p-2">
+                                        <div className="h-3 rounded mb-1" style={{ backgroundColor: "#282933", width: "70%" }} />
+                                        <div className="h-2 rounded" style={{ backgroundColor: "#282933", width: "40%" }} />
+                                      </div>
+                                    </div>
+                                  ))}
                                 </div>
                               ) : (
                                 <div className="input-field rounded-lg px-4 py-3 text-sm" style={{ color: "#c2c9b5", opacity: 0.5 }}>
@@ -1257,43 +1354,30 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
               {editCotizador.enabled && (
                 <div className="lg:col-span-4 flex flex-col gap-4">
 
-                  {/* Price card */}
+                  {/* Price card preview */}
                   <div
                     className="rounded-2xl p-6 flex flex-col gap-4 relative overflow-hidden"
                     style={{ background: themeGradient, boxShadow: `0 8px 32px ${editTheme.color1}1a` }}
                   >
                     <div className="absolute rounded-full pointer-events-none" style={{ top: 0, right: 0, width: 128, height: 128, backgroundColor: "rgba(255,255,255,0.1)", transform: "translate(50%,-50%)", filter: "blur(24px)" }} />
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wider" style={{ color: themeOnGradientDim }}>
-                        {editCotizador.title}
-                      </p>
+                      <p className="text-xs font-medium uppercase tracking-wider" style={{ color: themeOnGradientDim }}>Cotización estimada</p>
                       <div className="flex items-baseline gap-1 mt-1">
-                        <span className="font-bold" style={{ fontSize: 44, color: themeOnGradient, lineHeight: 1.1 }}>
-                          {editCotizador.currency}{cotizadorTotal.toLocaleString()}
-                        </span>
-                        <span className="text-sm font-medium" style={{ color: themeOnGradientDim }}>{editCotizador.mainSuffix}</span>
+                        <span className="font-bold" style={{ fontSize: 44, color: themeOnGradient, lineHeight: 1.1 }}>$0</span>
                       </div>
                     </div>
-                    <div
-                      className="rounded-xl p-3 flex flex-col gap-2 border border-white/10"
-                      style={{ backgroundColor: "rgba(17,19,28,0.2)", backdropFilter: "blur(8px)" }}
-                    >
-                      {editCotizador.lineItems.map(item => (
-                        <div key={item.id} className="flex justify-between items-center">
-                          <span className="text-xs" style={{ color: themeOnGradient }}>{item.label || "Item"}</span>
-                          <span className="text-xs font-bold" style={{ color: themeOnGradient }}>
-                            {item.value !== null ? `${editCotizador.currency}${item.value.toLocaleString()}` : "--"}
-                          </span>
-                        </div>
-                      ))}
+                    <div className="rounded-xl p-3 flex flex-col gap-2 border border-white/10" style={{ backgroundColor: "rgba(17,19,28,0.2)", backdropFilter: "blur(8px)" }}>
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs" style={{ color: themeOnGradient }}>Producto seleccionado</span>
+                        <span className="text-xs font-bold" style={{ color: themeOnGradient }}>—</span>
+                      </div>
                       <div className="h-px my-1" style={{ backgroundColor: "rgba(0,0,0,0.15)" }} />
                       <div className="flex justify-between items-center">
                         <span className="text-sm font-bold" style={{ color: themeOnGradient }}>Total</span>
-                        <span className="text-sm font-bold" style={{ color: themeOnGradient }}>
-                          {editCotizador.currency}{cotizadorTotal.toLocaleString()}
-                        </span>
+                        <span className="text-sm font-bold" style={{ color: themeOnGradient }}>$0</span>
                       </div>
                     </div>
+                    <p className="text-xs text-center opacity-60" style={{ color: themeOnGradient }}>El precio se actualiza al seleccionar un producto</p>
                   </div>
 
                   {/* Payment locked preview */}
@@ -1303,37 +1387,25 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                         <span className="material-symbols-outlined" style={{ color: "#424939", fontVariationSettings: "'FILL' 1" }}>credit_card</span>
                         <span className="text-lg font-semibold" style={{ color: "#c2c9b5" }}>Datos de pago</span>
                       </div>
-                      <div className="flex flex-col gap-3">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="input-label text-xs font-medium">Número de tarjeta</label>
-                          <div className="input-field rounded-lg px-4 py-3 text-sm" style={{ color: "#8c9381", opacity: 0.5 }}>0000 0000 0000 0000</div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          {[["Vencimiento","MM/AA"],["CVV","123"]].map(([lbl,ph]) => (
-                            <div key={lbl} className="flex flex-col gap-1.5">
-                              <label className="input-label text-xs font-medium">{lbl}</label>
-                              <div className="input-field rounded-lg px-4 py-3 text-sm" style={{ color: "#8c9381", opacity: 0.5 }}>{ph}</div>
-                            </div>
-                          ))}
-                        </div>
-                        <button className="flex items-center justify-center gap-2 px-6 py-4 rounded-xl text-sm font-bold mt-1" style={{ backgroundColor: "#32343e", color: "#c2c9b5", border: "none", cursor: "not-allowed" }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}>lock</span>
-                          Pagar ahora
-                        </button>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[["Titular","Juan García"],["Número de tarjeta","•••• •••• •••• ••••"],["Vencimiento","MM/AA"],["CVV","•••"]].map(([lbl,ph]) => (
+                          <div key={lbl} className="flex flex-col gap-1.5">
+                            <label className="input-label text-xs font-medium">{lbl}</label>
+                            <div className="input-field rounded-lg px-4 py-3 text-sm" style={{ color: "#8c9381", opacity: 0.5 }}>{ph}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
 
                   {/* Trust badge */}
-                  {editCotizador.secureText && (
-                    <div className="glass-panel rounded-xl p-4 flex items-start gap-3" style={{ borderLeft: "2px solid #00c6b6" }}>
-                      <span className="material-symbols-outlined mt-0.5" style={{ color: "#00c6b6" }}>verified_user</span>
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: "#ffffff" }}>Pago seguro</p>
-                        <p className="text-xs mt-1 leading-relaxed" style={{ color: "#c2c9b5" }}>{editCotizador.secureText}</p>
-                      </div>
+                  <div className="glass-panel rounded-xl p-4 flex items-start gap-3" style={{ borderLeft: "2px solid #00c6b6" }}>
+                    <span className="material-symbols-outlined mt-0.5" style={{ color: "#00c6b6" }}>verified_user</span>
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: "#ffffff" }}>Seguro y confiable</p>
+                      <p className="text-xs mt-1 leading-relaxed" style={{ color: "#c2c9b5" }}>Tus datos están protegidos.</p>
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>

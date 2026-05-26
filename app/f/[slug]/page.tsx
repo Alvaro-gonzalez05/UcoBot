@@ -4,9 +4,10 @@ import { PublicFormRenderer } from "@/components/forms/public-form-renderer"
 
 interface PageProps {
   params: { slug: string }
+  searchParams: { conv?: string }
 }
 
-export default async function PublicFormPage({ params }: PageProps) {
+export default async function PublicFormPage({ params, searchParams }: PageProps) {
   const supabase = await createClient()
 
   const { data: form, error } = await supabase
@@ -17,5 +18,13 @@ export default async function PublicFormPage({ params }: PageProps) {
 
   if (error || !form || !form.is_active) notFound()
 
-  return <PublicFormRenderer form={form} />
+  const { data: products } = await supabase
+    .from("products")
+    .select("id, name, description, price, category, image_url")
+    .eq("user_id", form.user_id)
+    .eq("is_available", true)
+    .order("category", { ascending: true })
+    .order("name", { ascending: true })
+
+  return <PublicFormRenderer form={form} products={products || []} conversationId={searchParams.conv} />
 }

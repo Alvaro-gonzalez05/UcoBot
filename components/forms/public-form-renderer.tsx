@@ -17,12 +17,23 @@ function darkenHex(hex: string, factor: number): string {
 // ---- Types ----
 interface FormField {
   id?: string
-  type: "text" | "email" | "tel" | "phone" | "number" | "date" | "select" | "radio" | "checkbox" | "textarea"
+  type: "text" | "email" | "tel" | "phone" | "number" | "date" | "select" | "radio" | "checkbox" | "textarea" | "product_selector"
   label: string
   placeholder?: string
   required?: boolean
   fullWidth?: boolean
   options?: Array<string | { label: string; value: string }>
+  product_category?: string
+  conditional?: { fieldLabel: string; value: string }
+}
+
+interface Product {
+  id: string
+  name: string
+  description?: string
+  price: number
+  category?: string
+  image_url?: string
 }
 
 function normalizeOptions(options: FormField["options"]): { label: string; value: string }[] {
@@ -33,7 +44,13 @@ function normalizeOptions(options: FormField["options"]): { label: string; value
 interface FormStep { id: string; title: string; fields: FormField[] }
 
 interface CotizadorConfig {
-  enabled: boolean; basePrice: number; currency: string; priceLabel: string; unit?: string
+  enabled: boolean
+  showPayment?: boolean
+  // legacy fields kept for backward compat (ignored in new UI)
+  basePrice?: number
+  currency?: string
+  priceLabel?: string
+  unit?: string
   rules?: Array<{ fieldId: string; value: string; delta: number }>
   breakdown?: Array<{ label: string; fieldId?: string; amount?: number }>
 }
@@ -100,10 +117,11 @@ const KEYFRAMES = `
 `
 
 // ---- Main component ----
-export function PublicFormRenderer({ form }: { form: FormModel }) {
+export function PublicFormRenderer({ form, products = [], conversationId }: { form: FormModel; products?: Product[]; conversationId?: string }) {
   const steps = resolveSteps(form)
   const cotizador = form.cotizador_config
   const hasCotizador = !!cotizador?.enabled
+  const showPayment = !!cotizador?.showPayment
   const logo = form.settings?.logo
   const theme = form.settings?.theme
 
@@ -124,24 +142,9 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState<"fwd" | "bwd">("fwd")
   const [values, setValues] = useState<Record<string, string>>({})
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
-
-  const pageBg = isDark ? "#000000" : "#ffffff"
-
-  const computePrice = useCallback(() => {
-    if (!hasCotizador || !cotizador) return 0
-    let total = cotizador.basePrice ?? 0
-    for (const rule of cotizador.rules ?? []) {
-      if (values[rule.fieldId] === rule.value) total += rule.delta
-    }
-    return Math.max(0, total)
-  }, [hasCotizador, cotizador, values])
-
-  const price = computePrice()
-  const currency = cotizador?.currency ?? "$"
-  const priceLabel = cotizador?.priceLabel ?? "Precio estimado"
-  const unit = cotizador?.unit ?? "/mes"
 
   const handleChange = (id: string, val: string) => setValues(prev => ({ ...prev, [id]: val }))
   const handleNext = () => { setAnimDir("fwd"); setAnimKey(k => k + 1); setStep(s => Math.min(s + 1, steps.length - 1)) }
@@ -150,10 +153,23 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const handleSubmit = async () => {
     setSubmitting(true)
     try {
+      const submissionData = {
+        ...values,
+        ...(selectedProduct ? {
+          producto_seleccionado: selectedProduct.name,
+          producto_precio: String(selectedProduct.price),
+          producto_id: selectedProduct.id,
+        } : {}),
+      }
       const res = await fetch("/api/forms/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ form_id: form.id, user_id: form.user_id, data: values }),
+        body: JSON.stringify({
+          form_id: form.id,
+          user_id: form.user_id,
+          data: submissionData,
+          conversation_id: conversationId,
+        }),
       })
       if (!res.ok) throw new Error()
       setDone(true)
@@ -163,6 +179,13 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Check if a field should be visible based on its conditional
+  const isFieldVisible = (field: FormField): boolean => {
+    if (!field.conditional?.fieldLabel) return true
+    const condValue = values[field.conditional.fieldLabel] ?? ""
+    return condValue === field.conditional.value
   }
 
   const toggleBtn = (
@@ -187,7 +210,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: pageBg, fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "background-color 0.3s ease" }}>
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: isDark ? "#000" : "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "background-color 0.3s ease" }}>
         <style>{KEYFRAMES}</style>
         {toggleBtn}
         <div className="glass-panel rounded-2xl text-center" style={{ padding: 40, maxWidth: 480, ...getPanelStyle(theme, isDark) }}>
@@ -206,6 +229,13 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const stepAnim = animDir === "fwd"
     ? "stepEnterRight 0.32s cubic-bezier(0.22,1,0.36,1)"
     : "stepEnterLeft 0.32s cubic-bezier(0.22,1,0.36,1)"
+  const pageBg = isDark ? "#000000" : "#ffffff"
+
+  // Visible fields in active step (respecting conditionals)
+  const visibleFields = activeStep?.fields.filter(isFieldVisible) ?? []
+
+  // Whether we should show the cotizador panel
+  const showCotizador = hasCotizador && selectedProduct !== null
 
   return (
     <div
@@ -219,9 +249,9 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
       <div className="absolute rounded-full pointer-events-none" style={{ top: "-10%", left: "-10%", width: "40%", height: "40%", background: "rgba(180,245,119,0.05)", filter: "blur(120px)", zIndex: 0 }} />
       <div className="absolute rounded-full pointer-events-none" style={{ bottom: "-10%", right: "-10%", width: "50%", height: "50%", background: "rgba(0,198,182,0.10)", filter: "blur(150px)", zIndex: 0 }} />
 
-      <div className={`w-full max-w-5xl relative z-10 grid grid-cols-1 gap-4 ${hasCotizador ? "lg:grid-cols-12" : ""}`}>
+      <div className={`w-full max-w-5xl relative z-10 grid grid-cols-1 gap-4 ${showCotizador ? "lg:grid-cols-12" : ""}`}>
 
-        <div className={`flex flex-col gap-4 ${hasCotizador ? "lg:col-span-8" : ""}`}>
+        <div className={`flex flex-col gap-4 ${showCotizador ? "lg:col-span-8" : ""}`}>
 
           {/* Header */}
           <header className="glass-panel rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4" style={panelStyleFn()}>
@@ -273,16 +303,38 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                 <h2 className="text-xl font-semibold" style={titleStyle}>{activeStep.title}</h2>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-                {activeStep.fields.map((field, fi) => (
-                  <div key={field.id ?? fi} className={`flex flex-col gap-1.5 ${field.fullWidth || field.type === "textarea" ? "md:col-span-2" : ""}`}>
-                    <label className="input-label text-xs font-medium" style={{ color: labelColor }}>
-                      {field.label}
-                      {field.required && <span className="ml-0.5" style={{ color: color1 }}>*</span>}
-                    </label>
-                    <FieldInput field={field} value={values[field.label] ?? ""} onChange={handleChange} accentColor={color1} inputOverride={inputOverride} />
-                  </div>
-                ))}
+              <div className="flex flex-col gap-4 mt-2">
+                {visibleFields.map((field, fi) => {
+                  const isProductSelector = field.type === "product_selector"
+                  return (
+                    <div key={field.id ?? fi} className={`flex flex-col gap-1.5 ${!isProductSelector && (field.fullWidth || field.type === "textarea") ? "" : ""}`}>
+                      {!isProductSelector && (
+                        <label className="input-label text-xs font-medium" style={{ color: labelColor }}>
+                          {field.label}
+                          {field.required && <span className="ml-0.5" style={{ color: color1 }}>*</span>}
+                        </label>
+                      )}
+                      {isProductSelector ? (
+                        <ProductSelector
+                          field={field}
+                          products={products}
+                          selectedProduct={selectedProduct}
+                          onSelect={(p) => {
+                            setSelectedProduct(p)
+                            setValues(prev => ({ ...prev, [field.label]: p ? p.name : "" }))
+                          }}
+                          accentColor={color1}
+                          accentColor2={color2}
+                          labelColor={labelColor}
+                          bodyColor={bodyColor}
+                          panelStyle={panelStyleFn()}
+                        />
+                      ) : (
+                        <FieldInput field={field} value={values[field.label] ?? ""} onChange={handleChange} accentColor={color1} inputOverride={inputOverride} />
+                      )}
+                    </div>
+                  )
+                })}
               </div>
 
               <div className="flex items-center justify-between pt-2">
@@ -307,35 +359,60 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
               </div>
             </section>
           )}
+
+          {/* Payment form (shown when cotizador + showPayment + product selected) */}
+          {showCotizador && showPayment && (
+            <section className="glass-panel rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn()}>
+              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 22, color: color1, fontVariationSettings: "'FILL' 1" }}>credit_card</span>
+                <h2 className="text-lg font-semibold" style={titleStyle}>Datos de pago</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {[
+                  { key: "__card_name", label: "Titular de la tarjeta", placeholder: "Juan García", type: "text" },
+                  { key: "__card_number", label: "Número de tarjeta", placeholder: "1234 5678 9012 3456", type: "text" },
+                  { key: "__card_expiry", label: "Vencimiento", placeholder: "MM/AA", type: "text" },
+                  { key: "__card_cvv", label: "CVV", placeholder: "123", type: "text" },
+                ].map(({ key, label, placeholder, type }) => (
+                  <div key={key} className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium" style={{ color: labelColor }}>{label}</label>
+                    <input
+                      type={type}
+                      placeholder={placeholder}
+                      value={values[key] ?? ""}
+                      onChange={e => handleChange(key, e.target.value)}
+                      className="input-field"
+                      style={{ borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block", ...inputOverride }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
 
-        {/* Cotizador */}
-        {hasCotizador && (
+        {/* Cotizador panel */}
+        {showCotizador && selectedProduct && (
           <div className="lg:col-span-4 flex flex-col gap-4">
             <div className="rounded-2xl p-6 flex flex-col gap-4 relative overflow-hidden" style={{ background: themeGradient, boxShadow: `0 8px 32px ${color1}1a` }}>
               <div className="absolute rounded-full" style={{ top: 0, right: 0, width: 128, height: 128, backgroundColor: "rgba(255,255,255,0.1)", transform: "translate(50%,-50%)", filter: "blur(24px)" }} />
               <div>
-                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: onGradientDim }}>{priceLabel}</p>
+                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: onGradientDim }}>Cotización estimada</p>
                 <div className="flex items-baseline gap-1 mt-1">
-                  <span className="font-bold" style={{ fontSize: 44, color: onGradient, lineHeight: 1.1 }}>{currency}{price.toLocaleString("es-AR")}</span>
-                  <span className="text-sm font-medium" style={{ color: onGradientDim }}>{unit}</span>
+                  <span className="font-bold" style={{ fontSize: 44, color: onGradient, lineHeight: 1.1 }}>
+                    ${selectedProduct.price.toLocaleString("es-AR")}
+                  </span>
                 </div>
               </div>
               <div className="rounded-xl p-3 flex flex-col gap-2 border border-white/10" style={{ backgroundColor: "rgba(17,19,28,0.2)", backdropFilter: "blur(8px)" }}>
                 <div className="flex justify-between items-center">
-                  <span className="text-xs" style={{ color: onGradient }}>Precio base</span>
-                  <span className="text-xs font-bold" style={{ color: onGradient }}>{currency}{(cotizador?.basePrice ?? 0).toLocaleString("es-AR")}</span>
+                  <span className="text-xs" style={{ color: onGradient }}>{selectedProduct.name}</span>
+                  <span className="text-xs font-bold" style={{ color: onGradient }}>${selectedProduct.price.toLocaleString("es-AR")}</span>
                 </div>
-                {(cotizador?.breakdown ?? []).map((line, j) => (
-                  <div key={j} className="flex justify-between items-center">
-                    <span className="text-xs" style={{ color: onGradient }}>{line.label}</span>
-                    <span className="text-xs font-bold" style={{ color: onGradient }}>{line.amount !== undefined ? `${currency}${line.amount}` : "--"}</span>
-                  </div>
-                ))}
                 <div className="h-px my-1" style={{ backgroundColor: "rgba(0,0,0,0.15)" }} />
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-bold" style={{ color: onGradient }}>Total</span>
-                  <span className="text-sm font-bold" style={{ color: onGradient }}>{currency}{price.toLocaleString("es-AR")}</span>
+                  <span className="text-sm font-bold" style={{ color: onGradient }}>${selectedProduct.price.toLocaleString("es-AR")}</span>
                 </div>
               </div>
             </div>
@@ -350,29 +427,100 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
               </div>
             </div>
 
-            {/* Powered by CODEA */}
             <a
               href="https://codeadesarrollos.com"
               target="_blank"
               rel="noopener noreferrer"
               style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}
             >
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>
-                powered by
-              </span>
-              <span style={{
-                fontSize: "clamp(48px, 8vw, 80px)",
-                fontWeight: 900,
-                letterSpacing: "-0.03em",
-                textTransform: "uppercase",
-                lineHeight: 1,
-                color: isDark ? "#ffffff" : "#000000",
-              }}>
-                CODEA
-              </span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
+              <span style={{ fontSize: "clamp(48px, 8vw, 80px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: isDark ? "#ffffff" : "#000000" }}>CODEA</span>
             </a>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ---- Product selector ----
+function ProductSelector({
+  field, products, selectedProduct, onSelect,
+  accentColor, accentColor2, labelColor, bodyColor, panelStyle,
+}: {
+  field: FormField
+  products: Product[]
+  selectedProduct: Product | null
+  onSelect: (p: Product | null) => void
+  accentColor: string
+  accentColor2: string
+  labelColor: string
+  bodyColor: string
+  panelStyle: CSSProperties
+}) {
+  const filtered = field.product_category
+    ? products.filter(p => p.category === field.product_category)
+    : products
+
+  if (filtered.length === 0) {
+    return (
+      <div className="rounded-xl p-4 text-center text-sm" style={{ ...panelStyle, color: bodyColor, opacity: 0.6 }}>
+        No hay productos disponibles
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-xs font-medium" style={{ color: labelColor }}>
+        {field.label}
+        {field.required && <span className="ml-0.5" style={{ color: accentColor }}>*</span>}
+      </label>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {filtered.map(product => {
+          const isSelected = selectedProduct?.id === product.id
+          return (
+            <button
+              key={product.id}
+              type="button"
+              onClick={() => onSelect(isSelected ? null : product)}
+              style={{
+                textAlign: "left",
+                padding: 0,
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                borderRadius: 16,
+                outline: isSelected ? `2px solid ${accentColor}` : "2px solid transparent",
+                outlineOffset: 2,
+                transition: "outline 0.2s ease, transform 0.15s ease",
+                transform: isSelected ? "scale(1.02)" : "scale(1)",
+              }}
+            >
+              <div className="rounded-2xl overflow-hidden flex flex-col" style={{ ...panelStyle, border: isSelected ? `1px solid ${accentColor}40` : undefined }}>
+                {product.image_url && (
+                  <div style={{ width: "100%", height: 140, overflow: "hidden", flexShrink: 0 }}>
+                    <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                )}
+                <div className="p-3 flex flex-col gap-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="text-sm font-bold leading-tight" style={{ color: isSelected ? accentColor : bodyColor }}>{product.name}</span>
+                    {isSelected && (
+                      <span className="material-symbols-outlined flex-shrink-0" style={{ fontSize: 18, color: accentColor, fontVariationSettings: "'FILL' 1" }}>check_circle</span>
+                    )}
+                  </div>
+                  {product.description && (
+                    <p className="text-xs leading-snug line-clamp-2" style={{ color: labelColor }}>{product.description}</p>
+                  )}
+                  <span className="text-sm font-black mt-1" style={{ color: accentColor }}>
+                    ${product.price.toLocaleString("es-AR")}
+                  </span>
+                </div>
+              </div>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

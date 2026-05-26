@@ -547,6 +547,7 @@ async function generateBotResponse(
     let productsInfo = ''
     let botCapabilities = ''
     let deliveryModesInfo = ''
+    let formsInfo = ''
     
     if (userProfile) {
       console.log('🏢 User profile loaded:', userProfile)
@@ -681,6 +682,26 @@ INFORMACIÓN ADICIONAL PARA RESPUESTAS SOBRE MENÚ:
         }
       }
 
+      // Load active forms for this user to include in the bot context
+      const { data: activeForms } = await supabase
+        .from("forms")
+        .select("name, slug, description, type")
+        .eq("user_id", bot.user_id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(10)
+
+      if (activeForms && activeForms.length > 0) {
+        const baseUrl = request.nextUrl.origin
+        const formsList = activeForms.map((f: any) =>
+          `- "${f.name}"${f.description ? ` (${f.description})` : ''}: ${baseUrl}/f/${f.slug}?conv=${conversationId}`
+        ).join('\n')
+        formsInfo = `FORMULARIOS DISPONIBLES:
+${formsList}
+Las instrucciones sobre cuándo usar cada formulario están en la sección PERSONALIDAD.
+Al compartir un formulario, enviá el enlace directamente sin formatearlo como hipervínculo.`
+      }
+
       // Define bot capabilities based on features
       const features = bot.features || []
       if (features.includes('take_orders') || features.includes('take_reservations')) {
@@ -747,6 +768,7 @@ ${productsInfo}
 
 ${deliveryModesInfo}
 
+${formsInfo ? formsInfo + '\n' : ''}
 INFORMACIÓN DEL CLIENTE ACTUAL:
 ${(() => {
   const currentPlatform = platform || conversation.platform
