@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
+import { createServiceClient } from "@/lib/supabase/service"
 import { PublicFormRenderer } from "@/components/forms/public-form-renderer"
 
 interface PageProps {
@@ -8,7 +8,7 @@ interface PageProps {
 }
 
 export default async function PublicFormPage({ params, searchParams }: PageProps) {
-  const supabase = await createClient()
+  const supabase = createServiceClient()
 
   const { data: form, error } = await supabase
     .from("forms")

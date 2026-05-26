@@ -123,6 +123,7 @@ async function executeAfterSubmit(supabase: any, form_id: string, conversation_i
   }
   if (afterSubmit.action === "message_handover") {
     updates.needs_attention = true
+    updates.status = "paused"
   }
   await supabase.from("conversations").update(updates).eq("id", conversation_id)
 }
