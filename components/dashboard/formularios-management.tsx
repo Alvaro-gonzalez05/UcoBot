@@ -343,7 +343,9 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
     try {
       const cleanSteps = editSteps.map(s => ({
         ...s,
-        fields: s.fields.filter(f => f.label.trim()),
+        fields: s.fields
+          .filter(f => f.label.trim() || f.type === "product_selector")
+          .map(f => ({ ...f, label: f.label.trim() || (f.type === "product_selector" ? "Seleccionar producto" : f.label) })),
       }))
       const allFields = cleanSteps.flatMap(s => s.fields)
       const { data, error } = await supabase
