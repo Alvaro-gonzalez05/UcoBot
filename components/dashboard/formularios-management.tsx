@@ -36,6 +36,7 @@ interface FormField {
   max?: number
   step?: number
   product_category?: string
+  product_ids?: string[]
   conditional?: { fieldLabel: string; value: string }
 }
 
@@ -48,6 +49,7 @@ interface FormStep {
 interface CotizadorConfig {
   enabled: boolean
   showPayment: boolean
+  extraCosts?: Array<{ label: string; amount: number }>
 }
 
 interface ProductOption {
@@ -719,24 +721,70 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                               )}
                               {isProductSelector && (
                                 <div className="space-y-3 pt-1">
-                                  <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Filtrar por categoría</Label>
-                                    <Select
-                                      value={field.product_category || "__all__"}
-                                      onValueChange={v => updateFieldInStep(stepIdx, fieldIdx, { product_category: v === "__all__" ? undefined : v })}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs rounded-xl">
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__all__" className="text-xs">Todos los productos</SelectItem>
-                                        {[...new Set(availableProducts.map(p => p.category).filter(Boolean))].map(cat => (
-                                          <SelectItem key={cat!} value={cat!} className="text-xs">{cat}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                                  {/* Mode: category vs specific */}
+                                  <div className="flex gap-2">
+                                    {[{ v: "category", label: "Por categoría" }, { v: "specific", label: "Específicos" }].map(opt => {
+                                      const active = opt.v === "specific" ? field.product_ids !== undefined : field.product_ids === undefined
+                                      return (
+                                        <button
+                                          key={opt.v}
+                                          type="button"
+                                          onClick={() => updateFieldInStep(stepIdx, fieldIdx, { product_ids: opt.v === "specific" ? [] : undefined, product_category: opt.v === "specific" ? undefined : field.product_category })}
+                                          className={`flex-1 h-8 rounded-xl text-xs font-semibold border transition-all ${active ? "bg-[#D1F366] text-[#1C1C28] border-[#D1F366]" : "bg-transparent text-muted-foreground border-border hover:border-foreground/30"}`}
+                                        >{opt.label}</button>
+                                      )
+                                    })}
                                   </div>
-                                  {availableProducts.length > 0 && (
+
+                                  {!(field.product_ids?.length !== undefined && field.product_ids !== undefined) ? (
+                                    <div className="space-y-1.5">
+                                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Categoría</Label>
+                                      <Select
+                                        value={field.product_category || "__all__"}
+                                        onValueChange={v => updateFieldInStep(stepIdx, fieldIdx, { product_category: v === "__all__" ? undefined : v })}
+                                      >
+                                        <SelectTrigger className="h-8 text-xs rounded-xl">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value="__all__" className="text-xs">Todos los productos</SelectItem>
+                                          {[...new Set(availableProducts.map(p => p.category).filter(Boolean))].map(cat => (
+                                            <SelectItem key={cat!} value={cat!} className="text-xs">{cat}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Elegir productos</Label>
+                                      <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                                        {availableProducts.map(p => {
+                                          const checked = (field.product_ids || []).includes(p.id)
+                                          return (
+                                            <label key={p.id} className="flex items-center gap-2 cursor-pointer p-2 rounded-xl hover:bg-muted/40 transition-colors">
+                                              <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={() => updateFieldInStep(stepIdx, fieldIdx, {
+                                                  product_ids: checked
+                                                    ? (field.product_ids || []).filter(id => id !== p.id)
+                                                    : [...(field.product_ids || []), p.id]
+                                                })}
+                                                className="rounded"
+                                              />
+                                              <span className="text-xs flex-1 truncate">{p.name}</span>
+                                              {p.category && <span className="text-[10px] text-muted-foreground">{p.category}</span>}
+                                            </label>
+                                          )
+                                        })}
+                                      </div>
+                                      {(field.product_ids?.length || 0) > 0 && (
+                                        <p className="text-xs text-[#D1F366] font-semibold">{field.product_ids!.length} producto(s) seleccionado(s)</p>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {availableProducts.length > 0 && field.product_ids === undefined && (
                                     <p className="text-xs text-muted-foreground">
                                       <span className="font-semibold text-[#D1F366]">{availableProducts.filter(p => !field.product_category || p.category === field.product_category).length}</span> producto(s) disponible(s)
                                     </p>
@@ -804,6 +852,39 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                         checked={editCotizador.showPayment}
                         onCheckedChange={v => setEditCotizador(p => ({ ...p, showPayment: v }))}
                       />
+                    </div>
+
+                    {/* Extra costs */}
+                    <div className="space-y-2 pt-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Costos extras opcionales</p>
+                        <button
+                          onClick={() => setEditCotizador(p => ({ ...p, extraCosts: [...(p.extraCosts || []), { label: "", amount: 0 }] }))}
+                          className="text-xs text-[#D1F366] hover:underline font-semibold flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" /> Agregar
+                        </button>
+                      </div>
+                      {(editCotizador.extraCosts || []).map((ec, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <Input
+                            placeholder="Ej: Envío a domicilio"
+                            value={ec.label}
+                            onChange={e => setEditCotizador(p => ({ ...p, extraCosts: (p.extraCosts || []).map((c, ci) => ci === i ? { ...c, label: e.target.value } : c) }))}
+                            className="h-8 text-xs rounded-xl flex-1"
+                          />
+                          <Input
+                            type="number"
+                            placeholder="Precio"
+                            value={ec.amount || ""}
+                            onChange={e => setEditCotizador(p => ({ ...p, extraCosts: (p.extraCosts || []).map((c, ci) => ci === i ? { ...c, amount: Number(e.target.value) } : c) }))}
+                            className="h-8 text-xs rounded-xl w-28"
+                          />
+                          <button onClick={() => setEditCotizador(p => ({ ...p, extraCosts: (p.extraCosts || []).filter((_, ci) => ci !== i) }))} className="text-muted-foreground hover:text-destructive transition-colors">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
