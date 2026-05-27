@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useRef, type CSSProperties } from "react"
-import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
 // ---- Color helpers ----
@@ -119,8 +118,11 @@ const KEYFRAMES = `
 
 // ---- Main component ----
 export function PublicFormRenderer({ form }: { form: FormModel }) {
-  const searchParams = useSearchParams()
-  const conversationId = searchParams.get("conv") ?? undefined
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    setConversationId(p.get("conv") ?? undefined)
+  }, [])
   const steps = resolveSteps(form)
   const cotizador = form.cotizador_config
   const hasCotizador = !!cotizador?.enabled
