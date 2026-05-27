@@ -1,30 +1,78 @@
 import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
-import { 
-  User, 
-  Bot, 
-  CreditCard, 
-  Activity, 
-  Calendar, 
-  MessageSquare, 
+import {
+  Bot,
+  CreditCard,
+  Activity,
+  MessageSquare,
   Settings,
-  Shield,
-  Ban,
-  CheckCircle
+  ArrowLeft,
+  MapPin,
+  Mail,
+  Phone,
+  Globe,
+  Hash,
+  Calendar,
+  ShieldAlert,
+  Store,
+  Clock,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Separator } from "@/components/ui/separator"
 import Link from "next/link"
 import { BusinessDetailsCard } from "@/components/dashboard/admin/business-details-card"
 import { UserSuspendButton } from "@/components/dashboard/admin/user-suspend-button"
+import { UserActionsMenu } from "@/components/dashboard/admin/user-actions-menu"
 
-export default async function AdminUserDetailsPage({ params }: { params: { id: string } }) {
+function getInitials(name: string) {
+  return (name || "U")
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
+}
+
+const STATUS_CONFIG: Record<
+  string,
+  { label: string; dot: string; badge: string }
+> = {
+  active: {
+    label: "Activo",
+    dot: "bg-green-500",
+    badge: "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400",
+  },
+  suspended: {
+    label: "Suspendido",
+    dot: "bg-red-500",
+    badge: "bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400",
+  },
+  trialing: {
+    label: "En prueba",
+    dot: "bg-amber-500",
+    badge: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400",
+  },
+  past_due: {
+    label: "Pago pendiente",
+    dot: "bg-orange-500",
+    badge: "bg-orange-50 text-orange-700 border-orange-200",
+  },
+  canceled: {
+    label: "Cancelado",
+    dot: "bg-gray-400",
+    badge: "bg-gray-100 text-gray-600 border-gray-200",
+  },
+}
+
+export default async function AdminUserDetailsPage({
+  params,
+}: {
+  params: { id: string }
+}) {
   const supabase = await createClient()
-  
-  // Fetch user profile
+
   const { data: profile, error: profileError } = await supabase
     .from("user_profiles")
     .select("*")
@@ -35,262 +83,353 @@ export default async function AdminUserDetailsPage({ params }: { params: { id: s
     notFound()
   }
 
-  // Fetch user's bots
   const { data: bots } = await supabase
     .from("bots")
     .select("*")
     .eq("user_id", params.id)
     .order("created_at", { ascending: false })
 
-  // Fetch usage logs (recent activity)
   const { data: usageLogs } = await supabase
     .from("usage_logs")
     .select("*")
     .eq("user_id", params.id)
     .order("created_at", { ascending: false })
-    .limit(10)
+    .limit(15)
+
+  const statusCfg =
+    STATUS_CONFIG[profile.subscription_status || "trialing"] ||
+    STATUS_CONFIG.trialing
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Link href="/dashboard/admin/users" className="text-muted-foreground hover:text-foreground">
-              Usuarios
+      <div className="flex items-start justify-between gap-4 px-1 pt-2">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            className="rounded-xl h-9 w-9 flex-shrink-0"
+          >
+            <Link href="/dashboard/admin/users">
+              <ArrowLeft className="h-4 w-4" />
             </Link>
-            <span className="text-muted-foreground">/</span>
-            <h2 className="text-3xl font-bold tracking-tight">{profile.business_name || "Usuario"}</h2>
+          </Button>
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-lg flex-shrink-0">
+              {getInitials(profile.business_name || "U")}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-2xl font-bold dark:text-white">
+                  {profile.business_name || "Sin nombre"}
+                </h2>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${statusCfg.badge}`}
+                >
+                  <span
+                    className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${statusCfg.dot}`}
+                  />
+                  {statusCfg.label}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                {profile.email}
+              </p>
+            </div>
           </div>
-          <p className="text-muted-foreground mt-1">ID: {profile.id}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" asChild>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button variant="outline" size="sm" asChild className="rounded-xl">
             <Link href={`/dashboard/admin/users/${params.id}/chat`}>
               <MessageSquare className="h-4 w-4 mr-2" />
               Ver Chat
             </Link>
           </Button>
-          <UserSuspendButton 
+          <UserSuspendButton
             userId={profile.id}
-            currentStatus={profile.subscription_status || 'trialing'}
-            userName={profile.business_name || 'Usuario'}
+            currentStatus={profile.subscription_status || "trialing"}
+            userName={profile.business_name || "Usuario"}
+          />
+          <UserActionsMenu
+            userId={profile.id}
+            currentPlan={profile.plan_type || "free"}
+            currentStatus={profile.subscription_status || "trialing"}
+            userName={profile.business_name || "Usuario"}
           />
         </div>
       </div>
 
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Plan Actual</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold capitalize">{profile.plan_type || "Free"}</div>
-            <div className="flex items-center mt-1">
-              <div className={`w-2 h-2 rounded-full mr-2 ${profile.subscription_status === 'active' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-              <p className="text-xs text-muted-foreground capitalize">
-                {profile.subscription_status || "Trial"}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Bots Creados</CardTitle>
-            <Bot className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{bots?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              Límite: {profile.max_bots || 1}
+      {/* Overview stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 text-blue-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+            <CreditCard className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+              Plan
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Saldo de Uso</CardTitle>
-            <Activity className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${profile.usage_balance || "0.00"}</div>
-            <p className="text-xs text-muted-foreground">
-              Crédito disponible
+            <p className="text-lg font-bold dark:text-white capitalize">
+              {profile.plan_type || "Free"}
             </p>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center gap-4">
+          <div className="w-12 h-12 bg-violet-50 dark:bg-violet-900/30 text-violet-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+            <Bot className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+              Bots
+            </p>
+            <p className="text-2xl font-bold dark:text-white">
+              {bots?.length || 0}
+              <span className="text-sm font-normal text-muted-foreground">
+                /{profile.max_bots || 1}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center gap-4">
+          <div className="w-12 h-12 bg-green-50 dark:bg-green-900/30 text-green-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+            <Activity className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+              Saldo uso
+            </p>
+            <p className="text-2xl font-bold dark:text-white">
+              ${profile.usage_balance || "0"}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center gap-4">
+          <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/30 text-amber-500 rounded-2xl flex items-center justify-center flex-shrink-0">
+            <Calendar className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+              Registro
+            </p>
+            <p className="text-sm font-bold dark:text-white">
+              {new Date(profile.created_at).toLocaleDateString("es-AR", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
+            </p>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Tabs (1 col wide) */}
-        <div className="space-y-4">
-          <Tabs defaultValue="bots" className="space-y-4">
-            <TabsList className="w-full grid grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-              <TabsTrigger value="bots">Bots</TabsTrigger>
-              <TabsTrigger value="billing">Fact.</TabsTrigger>
-              <TabsTrigger value="activity">Act.</TabsTrigger>
-              <TabsTrigger value="details">Det.</TabsTrigger>
+      {/* Main content: Tabs + Business info */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Tabs (left 1 col) */}
+        <div className="lg:col-span-1">
+          <Tabs defaultValue="bots" className="w-full">
+            <TabsList className="w-full grid grid-cols-3 rounded-2xl mb-4">
+              <TabsTrigger value="bots" className="rounded-xl text-xs">
+                Bots
+              </TabsTrigger>
+              <TabsTrigger value="activity" className="rounded-xl text-xs">
+                Actividad
+              </TabsTrigger>
+              <TabsTrigger value="billing" className="rounded-xl text-xs">
+                Facturación
+              </TabsTrigger>
             </TabsList>
 
-            {/* Bots Tab */}
-            <TabsContent value="bots" className="space-y-4">
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium">Bots Activos</h3>
-                {bots?.map((bot) => (
-                  <Card key={bot.id}>
-                    <CardHeader className="pb-2">
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-lg">{bot.name}</CardTitle>
-                        <Badge variant={bot.is_active ? "default" : "secondary"}>
-                          {bot.is_active ? "Activo" : "Inactivo"}
-                        </Badge>
+            {/* Bots tab */}
+            <TabsContent value="bots" className="space-y-3 mt-0">
+              {bots && bots.length > 0 ? (
+                bots.map((bot) => (
+                  <div
+                    key={bot.id}
+                    className="bg-card rounded-2xl p-4 border border-border shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-violet-50 dark:bg-violet-900/30 text-violet-500 flex items-center justify-center flex-shrink-0">
+                          <Bot className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">{bot.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {bot.platform || "WhatsApp"}
+                          </p>
+                        </div>
                       </div>
-                      <CardDescription>{bot.platform || "WhatsApp"}</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-sm text-muted-foreground mb-4">
-                        Modelo: {bot.model || "Gemini Flash"}
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/dashboard/admin/users/${params.id}/bots`}>
-                            <Settings className="h-4 w-4 mr-1" />
-                            Config
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-                {(!bots || bots.length === 0) && (
-                  <div className="text-center py-8 text-muted-foreground border rounded-lg border-dashed">
-                    Este usuario no tiene bots creados.
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex-shrink-0 ${
+                          bot.is_active
+                            ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400"
+                            : "bg-gray-100 text-gray-600 border-gray-200"
+                        }`}
+                      >
+                        {bot.is_active ? "Activo" : "Inactivo"}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Modelo: {bot.model || "Gemini Flash"}
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full rounded-xl text-xs h-8"
+                      asChild
+                    >
+                      <Link
+                        href={`/dashboard/admin/users/${params.id}/bots`}
+                      >
+                        <Settings className="h-3 w-3 mr-1.5" />
+                        Configurar
+                      </Link>
+                    </Button>
                   </div>
-                )}
+                ))
+              ) : (
+                <div className="bg-card rounded-2xl border border-dashed border-border p-10 flex flex-col items-center justify-center text-center gap-2">
+                  <Bot className="h-8 w-8 text-muted-foreground opacity-20" />
+                  <p className="text-sm text-muted-foreground">
+                    Sin bots creados.
+                  </p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* Activity tab */}
+            <TabsContent value="activity" className="mt-0">
+              <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
+                <div className="divide-y divide-border">
+                  {usageLogs && usageLogs.length > 0 ? (
+                    usageLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="flex items-center gap-3 px-4 py-3"
+                      >
+                        <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                          <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold truncate">
+                            {log.description || log.type}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(log.created_at).toLocaleDateString(
+                              "es-AR",
+                              {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "2-digit",
+                              }
+                            )}
+                          </p>
+                        </div>
+                        <p
+                          className={`text-xs font-bold flex-shrink-0 ${
+                            log.amount > 0
+                              ? "text-green-500"
+                              : "text-red-500"
+                          }`}
+                        >
+                          {log.amount > 0
+                            ? `+$${log.amount}`
+                            : `-$${Math.abs(log.amount)}`}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-2">
+                      <Activity className="h-7 w-7 opacity-20" />
+                      <p className="text-xs">Sin actividad registrada.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </TabsContent>
 
-            {/* Billing Tab */}
-            <TabsContent value="billing" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Suscripción</CardTitle>
-                  <CardDescription>Detalles del plan</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">ID Cliente Stripe</span>
-                      <p className="font-mono text-sm truncate">{profile.stripe_customer_id || "No registrado"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">ID Suscripción</span>
-                      <p className="font-mono text-sm truncate">{profile.stripe_subscription_id || "Sin suscripción"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">Método de Pago</span>
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="h-4 w-4" />
-                        <span className="text-sm">
-                          {profile.pm_brand ? `${profile.pm_brand} •••• ${profile.pm_last_4}` : "No hay tarjeta"}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">Fin de Prueba</span>
-                      <p className="text-sm">
-                        {profile.trial_ends_at 
-                          ? new Date(profile.trial_ends_at).toLocaleDateString() 
-                          : "N/A"}
-                      </p>
-                    </div>
+            {/* Billing tab */}
+            <TabsContent value="billing" className="mt-0">
+              <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                    ID Cliente Stripe
+                  </p>
+                  <p className="font-mono text-xs truncate bg-muted px-3 py-2 rounded-xl">
+                    {profile.stripe_customer_id || "No registrado"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                    ID Suscripción
+                  </p>
+                  <p className="font-mono text-xs truncate bg-muted px-3 py-2 rounded-xl">
+                    {profile.stripe_subscription_id || "Sin suscripción"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                    Método de Pago
+                  </p>
+                  <div className="flex items-center gap-2 bg-muted px-3 py-2 rounded-xl">
+                    <CreditCard className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs">
+                      {profile.pm_brand
+                        ? `${profile.pm_brand} •••• ${profile.pm_last_4}`
+                        : "No hay tarjeta registrada"}
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Activity Tab */}
-            <TabsContent value="activity" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Registro de Uso</CardTitle>
-                  <CardDescription>Últimas actividades</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {usageLogs?.map((log) => (
-                      <div key={log.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium leading-none truncate max-w-[150px]">{log.description || log.type}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(log.created_at).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div className="font-medium text-sm">
-                          {log.amount > 0 ? `+$${log.amount}` : `-$${Math.abs(log.amount)}`}
-                        </div>
-                      </div>
-                    ))}
-                    {(!usageLogs || usageLogs.length === 0) && (
-                      <div className="text-center py-4 text-muted-foreground text-sm">
-                        No hay registros.
-                      </div>
-                    )}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                    Fin de Prueba
+                  </p>
+                  <p className="text-sm bg-muted px-3 py-2 rounded-xl">
+                    {profile.trial_ends_at
+                      ? new Date(profile.trial_ends_at).toLocaleDateString(
+                          "es-AR"
+                        )
+                      : "N/A"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                    API Key (BYOK)
+                  </p>
+                  <p className="font-mono text-xs bg-muted px-3 py-2 rounded-xl">
+                    {profile.gemini_api_key
+                      ? "••••••••" + profile.gemini_api_key.slice(-4)
+                      : "No configurada"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                    Rol
+                  </p>
+                  <div className="bg-muted px-3 py-2 rounded-xl">
+                    <span
+                      className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                        profile.role === "admin"
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-gray-100 text-gray-600 border-gray-200"
+                      }`}
+                    >
+                      <ShieldAlert className="h-3 w-3" />
+                      {profile.role || "user"}
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Details Tab */}
-            <TabsContent value="details" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Detalles</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">Nombre del Negocio</span>
-                      <p className="text-sm">{profile.business_name}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">Email</span>
-                      <p className="text-sm truncate">{profile.email || "No disponible"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">Teléfono</span>
-                      <p className="text-sm">{profile.business_info?.phone || "No disponible"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">Ubicación</span>
-                      <p className="text-sm">{profile.location || "No especificada"}</p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">Rol</span>
-                      <div>
-                        <Badge variant={profile.role === 'admin' ? 'destructive' : 'outline'}>
-                          {profile.role || 'user'}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-sm font-medium text-muted-foreground">API Key (BYOK)</span>
-                      <p className="font-mono text-xs truncate">
-                        {profile.gemini_api_key ? "••••••••" + profile.gemini_api_key.slice(-4) : "No configurada"}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             </TabsContent>
           </Tabs>
         </div>
 
-        {/* Right Column: Business Info (Sticky, 2 cols wide) */}
-        <div className="lg:col-span-2 h-full">
+        {/* Business details (right 2 cols) */}
+        <div className="lg:col-span-2">
           <div className="sticky top-6">
             <BusinessDetailsCard profile={profile} />
           </div>
