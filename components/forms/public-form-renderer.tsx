@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useCallback, type CSSProperties } from "react"
+import { useState, useEffect, useRef, type CSSProperties } from "react"
+import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 
 // ---- Color helpers ----
@@ -117,7 +118,9 @@ const KEYFRAMES = `
 `
 
 // ---- Main component ----
-export function PublicFormRenderer({ form, products = [], conversationId }: { form: FormModel; products?: Product[]; conversationId?: string }) {
+export function PublicFormRenderer({ form }: { form: FormModel }) {
+  const searchParams = useSearchParams()
+  const conversationId = searchParams.get("conv") ?? undefined
   const steps = resolveSteps(form)
   const cotizador = form.cotizador_config
   const hasCotizador = !!cotizador?.enabled
@@ -317,7 +320,7 @@ export function PublicFormRenderer({ form, products = [], conversationId }: { fo
                       {isProductSelector ? (
                         <ProductSelector
                           field={field}
-                          products={products}
+                          userId={form.user_id}
                           selectedProduct={selectedProduct}
                           onSelect={(p) => {
                             setSelectedProduct(p)
@@ -444,12 +447,14 @@ export function PublicFormRenderer({ form, products = [], conversationId }: { fo
 }
 
 // ---- Product selector ----
+const PAGE_SIZE = 5
+
 function ProductSelector({
-  field, products, selectedProduct, onSelect,
+  field, userId, selectedProduct, onSelect,
   accentColor, accentColor2, labelColor, bodyColor, panelStyle,
 }: {
   field: FormField
-  products: Product[]
+  userId: string
   selectedProduct: Product | null
   onSelect: (p: Product | null) => void
   accentColor: string
@@ -458,11 +463,61 @@ function ProductSelector({
   bodyColor: string
   panelStyle: CSSProperties
 }) {
-  const filtered = field.product_category
-    ? products.filter(p => p.category === field.product_category)
-    : products
+  const [products, setProducts] = useState<Product[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement>(null)
 
-  if (filtered.length === 0) {
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const params = new URLSearchParams({ user_id: userId, limit: String(PAGE_SIZE), offset: "0" })
+    if (field.product_category) params.set("category", field.product_category)
+    fetch(`/api/forms/products?${params}`)
+      .then(r => r.json())
+      .then(({ products: p, total: t }) => {
+        if (!cancelled) { setProducts(p || []); setTotal(t || 0) }
+      })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [userId, field.product_category])
+
+  const loadMore = () => {
+    if (loadingMore || products.length >= total) return
+    setLoadingMore(true)
+    const params = new URLSearchParams({ user_id: userId, limit: String(PAGE_SIZE), offset: String(products.length) })
+    if (field.product_category) params.set("category", field.product_category)
+    fetch(`/api/forms/products?${params}`)
+      .then(r => r.json())
+      .then(({ products: more }) => setProducts(prev => [...prev, ...(more || [])]))
+      .finally(() => setLoadingMore(false))
+  }
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    if (!sentinelRef.current) return
+    const obs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) loadMore()
+    }, { threshold: 0.1 })
+    obs.observe(sentinelRef.current)
+    return () => obs.disconnect()
+  }, [products.length, total, loadingMore])
+
+  if (loading) {
+    return (
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium" style={{ color: labelColor }}>{field.label}</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="rounded-2xl animate-pulse" style={{ ...panelStyle, height: 180 }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (products.length === 0) {
     return (
       <div className="rounded-xl p-4 text-center text-sm" style={{ ...panelStyle, color: bodyColor, opacity: 0.6 }}>
         No hay productos disponibles
@@ -477,7 +532,7 @@ function ProductSelector({
         {field.required && <span className="ml-0.5" style={{ color: accentColor }}>*</span>}
       </label>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {filtered.map(product => {
+        {products.map(product => {
           const isSelected = selectedProduct?.id === product.id
           return (
             <button
@@ -485,11 +540,7 @@ function ProductSelector({
               type="button"
               onClick={() => onSelect(isSelected ? null : product)}
               style={{
-                textAlign: "left",
-                padding: 0,
-                background: "none",
-                border: "none",
-                cursor: "pointer",
+                textAlign: "left", padding: 0, background: "none", border: "none", cursor: "pointer",
                 borderRadius: 16,
                 outline: isSelected ? `2px solid ${accentColor}` : "2px solid transparent",
                 outlineOffset: 2,
@@ -522,6 +573,17 @@ function ProductSelector({
           )
         })}
       </div>
+
+      {products.length < total && (
+        <div ref={sentinelRef} className="flex justify-center py-3">
+          {loadingMore && (
+            <div className="flex items-center gap-2 text-xs" style={{ color: labelColor }}>
+              <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: `${accentColor} transparent transparent transparent` }} />
+              Cargando más...
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
