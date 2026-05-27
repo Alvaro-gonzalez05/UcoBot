@@ -245,7 +245,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
   const visibleFields = activeStep?.fields ?? []
 
-  const showCotizador = hasCotizador && selectedProducts.length > 0
+  const showCotizador = hasCotizador
 
   return (
     <div
@@ -480,8 +480,8 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
               rel="noopener noreferrer"
               style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}
             >
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(0,0,0,0.3)" }}>powered by</span>
-              <span style={{ fontSize: "clamp(48px, 8vw, 80px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: "#000000" }}>CODEA</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
+              <span style={{ fontSize: "clamp(48px, 8vw, 80px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: isDark ? "#ffffff" : "#000000" }}>CODEA</span>
             </a>
           </div>
         )}
