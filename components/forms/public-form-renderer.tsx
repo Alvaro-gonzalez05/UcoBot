@@ -135,18 +135,22 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const onGradient = hexLuminance(color1) > 0.35 ? darkenHex(color1, 0.25) : "#f0f0f0"
   const onGradientDim = hexLuminance(color1) > 0.35 ? darkenHex(color1, 0.3) + "cc" : "rgba(240,240,240,0.8)"
 
-  // Fixed light design system
-  const pageBg = "#f4f6f8"
-  const panelBase: CSSProperties = { backgroundColor: "#ffffff", border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }
-  const textPrimary = "#111827"
-  const textSecondary = "#374151"
-  const labelColor = "#6b7280"
-  const bodyColor = "#374151"
-  const inputBase: CSSProperties = { backgroundColor: "#f9fafb", border: "1px solid rgba(0,0,0,0.12)", color: "#111827", borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block" }
+  const [isDark, setIsDark] = useState(false)
+
+  // Fixed design system (light/dark, not user-configurable)
+  const pageBg = isDark ? "#11131d" : "#f4f6f8"
+  const panelBase: CSSProperties = isDark
+    ? { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }
+    : { backgroundColor: "#ffffff", border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }
+  const textPrimary = isDark ? "#e1e1ef" : "#111827"
+  const textSecondary = isDark ? "#c2c9b5" : "#374151"
+  const labelColor = isDark ? "#8b9478" : "#6b7280"
+  const bodyColor = isDark ? "#c2c9b5" : "#374151"
+  const inputBase: CSSProperties = isDark
+    ? { backgroundColor: "#0c0e17", border: "1px solid rgba(255,255,255,0.1)", color: "#e1e1ef", borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block" }
+    : { backgroundColor: "#f9fafb", border: "1px solid rgba(0,0,0,0.12)", color: "#111827", borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block" }
   const panelStyleFn = (extra?: CSSProperties): CSSProperties => ({ ...panelBase, ...extra })
   const inputOverride: CSSProperties = inputBase
-
-  const [isDark] = useState(false)
   const [step, setStep] = useState(0)
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState<"fwd" | "bwd">("fwd")
@@ -264,7 +268,16 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
               {form.description && <p className="text-sm mt-1" style={{ color: textSecondary }}>{form.description}</p>}
             </div>
 
-            {steps.length > 1 && (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsDark(d => !d)}
+                style={{ width: 36, height: 36, borderRadius: "50%", border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"}`, background: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18, color: isDark ? "#c2c9b5" : "#6b7280", fontVariationSettings: "'FILL' 1" }}>
+                  {isDark ? "light_mode" : "dark_mode"}
+                </span>
+              </button>
+              {steps.length > 1 && (
               <div className="flex items-center gap-1">
                 {steps.map((s, i) => {
                   const isActive = i === step
@@ -277,7 +290,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                         style={{
                           ...(isActive || isDone
                             ? { background: themeGradient, color: onGradient }
-                            : { backgroundColor: "#f3f4f6", border: "1px solid rgba(0,0,0,0.1)", color: "#9ca3af" }),
+                            : { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)", color: isDark ? "#6b7280" : "#9ca3af" }),
                           transition: "transform 0.3s ease",
                           transform: isActive ? "scale(1.12)" : "scale(1)",
                           animation: isActive ? "dotPop 0.4s cubic-bezier(0.22,1,0.36,1)" : "none",
@@ -288,19 +301,20 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                           : i + 1}
                       </div>
                       {i < steps.length - 1 && (
-                        <div className="h-1 w-5 rounded-full" style={{ background: isDone ? themeGradient : "#e5e7eb", transition: "background 0.4s ease" }} />
+                        <div className="h-1 w-5 rounded-full" style={{ background: isDone ? themeGradient : (isDark ? "rgba(255,255,255,0.1)" : "#e5e7eb"), transition: "background 0.4s ease" }} />
                       )}
                     </div>
                   )
                 })}
               </div>
             )}
+            </div>
           </header>
 
           {/* Active step */}
           {activeStep && (
             <section key={animKey} className="rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn({ animation: stepAnim })}>
-              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.07)" }}>
                 <h2 className="text-xl font-semibold" style={{ color: textPrimary }}>{activeStep.title}</h2>
               </div>
 
@@ -342,7 +356,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
               <div className="flex items-center justify-between pt-2">
                 {step > 0 ? (
-                  <button onClick={handleBack} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-medium transition-all" style={{ backgroundColor: "#f3f4f6", color: "#374151", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer" }}>
+                  <button onClick={handleBack} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-medium transition-all" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", color: bodyColor, border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)", cursor: "pointer" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
                     Atrás
                   </button>
