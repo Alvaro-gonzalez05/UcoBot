@@ -48,7 +48,6 @@ interface CotizadorConfig {
   enabled: boolean
   showPayment?: boolean
   extraCosts?: Array<{ label: string; amount: number }>
-  // legacy
   basePrice?: number; currency?: string; priceLabel?: string; unit?: string
   rules?: Array<{ fieldId: string; value: string; delta: number }>
   breakdown?: Array<{ label: string; fieldId?: string; amount?: number }>
@@ -77,40 +76,10 @@ function resolveSteps(form: FormModel): FormStep[] {
   return []
 }
 
-// ---- Theme helpers ----
-function getPanelStyle(theme: FormTheme | undefined, isDark: boolean): CSSProperties {
-  const type = theme?.panelBgType || "default"
-  const border = theme?.panelBorder ? { border: `1px solid ${theme.panelBorder}` } : {}
-  if (type === "solid") return { backgroundColor: theme?.panelBg || "#1e202c", ...border }
-  if (type === "gradient") return { background: `linear-gradient(135deg, ${theme?.panelBgFrom || "#1e202c"} 0%, ${theme?.panelBgTo || "#0c0e17"} 100%)`, ...border }
-  return { ...(isDark ? {} : { backgroundColor: "rgb(30,32,44)" }), ...border }
-}
-
-function getTitleStyle(theme: FormTheme | undefined): CSSProperties {
-  if (theme?.titleType === "gradient" && theme?.titleFrom && theme?.titleTo) {
-    return {
-      background: `linear-gradient(135deg, ${theme.titleFrom} 0%, ${theme.titleTo} 100%)`,
-      WebkitBackgroundClip: "text",
-      WebkitTextFillColor: "transparent",
-      backgroundClip: "text",
-      display: "inline-block",
-    }
-  }
-  return { color: theme?.titleColor || "#ffffff" }
-}
-
-function getInputOverride(theme: FormTheme | undefined): CSSProperties {
-  const s: CSSProperties = {}
-  if (theme?.inputBg) s.backgroundColor = theme.inputBg
-  if (theme?.inputBorder) s.borderColor = theme.inputBorder
-  if (theme?.inputText) s.color = theme.inputText
-  return s
-}
-
 const KEYFRAMES = `
-  @keyframes stepEnterRight { from{opacity:0;transform:translateX(28px)} to{opacity:1;transform:translateX(0)} }
-  @keyframes stepEnterLeft  { from{opacity:0;transform:translateX(-28px)} to{opacity:1;transform:translateX(0)} }
-  @keyframes dotPop { 0%{transform:scale(1)} 45%{transform:scale(1.38)} 70%{transform:scale(0.9)} 100%{transform:scale(1)} }
+  @keyframes stepEnterRight { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes stepEnterLeft  { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes dotPop { 0%{transform:scale(1)} 45%{transform:scale(1.35)} 70%{transform:scale(0.92)} 100%{transform:scale(1)} }
   html,body{scrollbar-width:none;-ms-overflow-style:none}
   html::-webkit-scrollbar,body::-webkit-scrollbar{display:none}
 `
@@ -122,6 +91,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
     const p = new URLSearchParams(window.location.search)
     setConversationId(p.get("conv") ?? undefined)
   }, [])
+
   const steps = resolveSteps(form)
   const cotizador = form.cotizador_config
   const hasCotizador = !!cotizador?.enabled
@@ -147,10 +117,11 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const labelColor = isDark ? "#8b9478" : "#6b7280"
   const bodyColor = isDark ? "#c2c9b5" : "#374151"
   const inputBase: CSSProperties = isDark
-    ? { backgroundColor: "#0c0e17", border: "1px solid rgba(255,255,255,0.1)", color: "#e1e1ef", borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block" }
-    : { backgroundColor: "#f9fafb", border: "1px solid rgba(0,0,0,0.12)", color: "#111827", borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block" }
+    ? { backgroundColor: "#0c0e17", border: "1px solid rgba(255,255,255,0.1)", color: "#e1e1ef", borderRadius: 8, padding: "10px 14px", fontSize: 15, width: "100%", display: "block" }
+    : { backgroundColor: "#f9fafb", border: "1px solid rgba(0,0,0,0.12)", color: "#111827", borderRadius: 8, padding: "10px 14px", fontSize: 15, width: "100%", display: "block" }
   const panelStyleFn = (extra?: CSSProperties): CSSProperties => ({ ...panelBase, ...extra })
   const inputOverride: CSSProperties = inputBase
+
   const [step, setStep] = useState(0)
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState<"fwd" | "bwd">("fwd")
@@ -167,6 +138,8 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const cotizadorTotal = productsTotal + extraCostsTotal
 
   const handleChange = (id: string, val: string) => setValues(prev => ({ ...prev, [id]: val }))
+
+  const activeStep = steps[step]
 
   const validateStep = () => {
     const requiredFields = (activeStep?.fields ?? []).filter(f => f.required)
@@ -205,12 +178,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
       const res = await fetch("/api/forms/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          form_id: form.id,
-          user_id: form.user_id,
-          data: submissionData,
-          conversation_id: conversationId,
-        }),
+        body: JSON.stringify({ form_id: form.id, user_id: form.user_id, data: submissionData, conversation_id: conversationId }),
       })
       if (!res.ok) throw new Error()
       setDone(true)
@@ -224,11 +192,11 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: pageBg, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ backgroundColor: pageBg, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         <style>{KEYFRAMES}</style>
-        <div className="rounded-2xl text-center" style={{ padding: 40, maxWidth: 480, ...panelBase }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 64, color: color1, fontVariationSettings: "'FILL' 1", display: "block", marginBottom: 16 }}>check_circle</span>
-          <h2 className="text-2xl font-bold mb-2" style={{ color: textPrimary }}>¡Formulario enviado!</h2>
+        <div className="rounded-2xl text-center w-full" style={{ padding: "32px 24px", maxWidth: 440, ...panelBase }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 56, color: color1, fontVariationSettings: "'FILL' 1", display: "block", marginBottom: 14 }}>check_circle</span>
+          <h2 className="text-xl font-bold mb-2" style={{ color: textPrimary }}>¡Formulario enviado!</h2>
           <p className="text-sm leading-relaxed" style={{ color: textSecondary }}>
             Gracias por completar el formulario. Nos pondremos en contacto contigo pronto.
           </p>
@@ -237,48 +205,71 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
     )
   }
 
-  const activeStep = steps[step]
   const isLast = step === steps.length - 1
   const stepAnim = animDir === "fwd"
-    ? "stepEnterRight 0.32s cubic-bezier(0.22,1,0.36,1)"
-    : "stepEnterLeft 0.32s cubic-bezier(0.22,1,0.36,1)"
+    ? "stepEnterRight 0.3s cubic-bezier(0.22,1,0.36,1)"
+    : "stepEnterLeft 0.3s cubic-bezier(0.22,1,0.36,1)"
 
   const visibleFields = activeStep?.fields ?? []
-
   const showCotizador = hasCotizador
+
+  // Mini cotizador bar shown on mobile when products are selected
+  const showMiniBar = hasCotizador && selectedProducts.length > 0
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-6 md:p-8"
+      className="min-h-screen flex flex-col items-center justify-start lg:justify-center py-4 px-3 sm:py-6 sm:px-4 md:px-6"
       style={{ backgroundColor: pageBg, fontFamily: "'Plus Jakarta Sans', sans-serif", color: bodyColor }}
     >
       <style>{KEYFRAMES}</style>
 
-      <div className={`w-full max-w-5xl relative z-10 grid grid-cols-1 gap-4 ${showCotizador ? "lg:grid-cols-12" : ""}`}>
+      {/* Mobile cotizador bar — fixed at bottom, only when products selected */}
+      {showMiniBar && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-3 lg:hidden"
+          style={{ background: themeGradient, boxShadow: "0 -4px 24px rgba(0,0,0,0.15)" }}
+        >
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: onGradientDim }}>Cotización</p>
+            <p className="text-lg font-black leading-tight" style={{ color: onGradient }}>${cotizadorTotal.toLocaleString("es-AR")}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium px-2 py-1 rounded-full" style={{ backgroundColor: "rgba(0,0,0,0.15)", color: onGradient }}>
+              {selectedProducts.length} producto{selectedProducts.length > 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+      )}
 
-        <div className={`flex flex-col gap-4 ${showCotizador ? "lg:col-span-8" : ""}`}>
+      <div className={`w-full max-w-5xl relative z-10 grid grid-cols-1 gap-3 sm:gap-4 ${showCotizador ? "lg:grid-cols-12" : ""} ${showMiniBar ? "pb-16 lg:pb-0" : ""}`}>
+
+        <div className={`flex flex-col gap-3 sm:gap-4 ${showCotizador ? "lg:col-span-8" : ""}`}>
 
           {/* Header */}
-          <header className="rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4" style={panelStyleFn()}>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: textPrimary }}>
-                {logo && <img src={logo} alt="Logo" style={{ width: 34, height: 34, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />}
-                {form.name}
-              </h1>
-              {form.description && <p className="text-sm mt-1" style={{ color: textSecondary }}>{form.description}</p>}
+          <header className="rounded-2xl p-4 sm:p-5" style={panelStyleFn()}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2 leading-tight" style={{ color: textPrimary }}>
+                  {logo && <img src={logo} alt="Logo" style={{ width: 30, height: 30, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />}
+                  <span className="truncate">{form.name}</span>
+                </h1>
+                {form.description && <p className="text-xs sm:text-sm mt-1 leading-relaxed" style={{ color: textSecondary }}>{form.description}</p>}
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  onClick={() => setIsDark(d => !d)}
+                  style={{ width: 34, height: 34, borderRadius: "50%", border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"}`, background: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: 17, color: isDark ? "#c2c9b5" : "#6b7280", fontVariationSettings: "'FILL' 1" }}>
+                    {isDark ? "light_mode" : "dark_mode"}
+                  </span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setIsDark(d => !d)}
-                style={{ width: 36, height: 36, borderRadius: "50%", border: `1px solid ${isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.1)"}`, background: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: 18, color: isDark ? "#c2c9b5" : "#6b7280", fontVariationSettings: "'FILL' 1" }}>
-                  {isDark ? "light_mode" : "dark_mode"}
-                </span>
-              </button>
-              {steps.length > 1 && (
-              <div className="flex items-center gap-1">
+            {steps.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1 mt-3 pt-3" style={{ borderTop: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(0,0,0,0.06)" }}>
                 {steps.map((s, i) => {
                   const isActive = i === step
                   const isDone = i < step
@@ -286,43 +277,43 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                     <div key={s.id} className="flex items-center gap-1">
                       <div
                         key={isActive ? `dot-${animKey}` : `dot-${i}`}
-                        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium"
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium"
                         style={{
                           ...(isActive || isDone
                             ? { background: themeGradient, color: onGradient }
                             : { backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)", color: isDark ? "#6b7280" : "#9ca3af" }),
                           transition: "transform 0.3s ease",
-                          transform: isActive ? "scale(1.12)" : "scale(1)",
+                          transform: isActive ? "scale(1.1)" : "scale(1)",
                           animation: isActive ? "dotPop 0.4s cubic-bezier(0.22,1,0.36,1)" : "none",
                         }}
                       >
                         {isDone
-                          ? <span className="material-symbols-outlined" style={{ fontSize: 16, fontVariationSettings: "'FILL' 1" }}>check</span>
+                          ? <span className="material-symbols-outlined" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1" }}>check</span>
                           : i + 1}
                       </div>
                       {i < steps.length - 1 && (
-                        <div className="h-1 w-5 rounded-full" style={{ background: isDone ? themeGradient : (isDark ? "rgba(255,255,255,0.1)" : "#e5e7eb"), transition: "background 0.4s ease" }} />
+                        <div className="h-0.5 w-4 rounded-full" style={{ background: isDone ? themeGradient : (isDark ? "rgba(255,255,255,0.1)" : "#e5e7eb"), transition: "background 0.4s ease" }} />
                       )}
                     </div>
                   )
                 })}
+                <span className="text-xs ml-1" style={{ color: labelColor }}>{step + 1} de {steps.length}</span>
               </div>
             )}
-            </div>
           </header>
 
           {/* Active step */}
           {activeStep && (
-            <section key={animKey} className="rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn({ animation: stepAnim })}>
-              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.07)" }}>
-                <h2 className="text-xl font-semibold" style={{ color: textPrimary }}>{activeStep.title}</h2>
+            <section key={animKey} className="rounded-2xl p-4 sm:p-6 flex flex-col gap-4" style={panelStyleFn({ animation: stepAnim })}>
+              <div className="pb-3" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.07)" }}>
+                <h2 className="text-base sm:text-xl font-semibold" style={{ color: textPrimary }}>{activeStep.title}</h2>
               </div>
 
-              <div className="flex flex-col gap-4 mt-2">
+              <div className="flex flex-col gap-4">
                 {visibleFields.map((field, fi) => {
                   const isProductSelector = field.type === "product_selector"
                   return (
-                    <div key={field.id ?? fi} className={`flex flex-col gap-1.5 ${!isProductSelector && (field.fullWidth || field.type === "textarea") ? "" : ""}`}>
+                    <div key={field.id ?? fi} className="flex flex-col gap-1.5">
                       {!isProductSelector && (
                         <label className="text-xs font-semibold" style={{ color: labelColor }}>
                           {field.label}
@@ -354,23 +345,23 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                 })}
               </div>
 
-              <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center justify-between pt-1">
                 {step > 0 ? (
-                  <button onClick={handleBack} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-medium transition-all" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", color: bodyColor, border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)", cursor: "pointer" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
+                  <button onClick={handleBack} className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-all" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", color: bodyColor, border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)", cursor: "pointer" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 17 }}>arrow_back</span>
                     Atrás
                   </button>
                 ) : <div />}
 
                 {isLast ? (
-                  <button onClick={handleSubmit} disabled={submitting} className="flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold shadow-lg transition-all" style={{ background: themeGradient, color: onGradient, border: "none", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
+                  <button onClick={handleSubmit} disabled={submitting} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-all" style={{ background: themeGradient, color: onGradient, border: "none", cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.7 : 1 }}>
                     {submitting ? "Enviando..." : "Enviar formulario"}
-                    {!submitting && <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>}
+                    {!submitting && <span className="material-symbols-outlined" style={{ fontSize: 17 }}>send</span>}
                   </button>
                 ) : (
-                  <button onClick={handleNext} className="flex items-center gap-2 px-6 py-3 rounded-full text-sm font-semibold shadow-lg transition-all" style={{ background: themeGradient, color: onGradient, border: "none", cursor: "pointer" }}>
+                  <button onClick={handleNext} className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold shadow-lg transition-all" style={{ background: themeGradient, color: onGradient, border: "none", cursor: "pointer" }}>
                     Continuar
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_forward</span>
+                    <span className="material-symbols-outlined" style={{ fontSize: 17 }}>arrow_forward</span>
                   </button>
                 )}
               </div>
@@ -379,12 +370,12 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
           {/* Payment form */}
           {showCotizador && showPayment && (
-            <section className="rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn()}>
-              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22, color: color1, fontVariationSettings: "'FILL' 1" }}>credit_card</span>
-                <h2 className="text-lg font-semibold" style={{ color: textPrimary }}>Datos de pago</h2>
+            <section className="rounded-2xl p-4 sm:p-6 flex flex-col gap-4" style={panelStyleFn()}>
+              <div className="flex items-center gap-3 pb-3" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.07)" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 20, color: color1, fontVariationSettings: "'FILL' 1" }}>credit_card</span>
+                <h2 className="text-base sm:text-lg font-semibold" style={{ color: textPrimary }}>Datos de pago</h2>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 {[
                   { key: "__card_name", label: "Titular de la tarjeta", placeholder: "Juan García", type: "text" },
                   { key: "__card_number", label: "Número de tarjeta", placeholder: "1234 5678 9012 3456", type: "text" },
@@ -393,14 +384,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                 ].map(({ key, label, placeholder, type }) => (
                   <div key={key} className="flex flex-col gap-1.5">
                     <label className="text-xs font-medium" style={{ color: labelColor }}>{label}</label>
-                    <input
-                      type={type}
-                      placeholder={placeholder}
-                      value={values[key] ?? ""}
-                      onChange={e => handleChange(key, e.target.value)}
-                      className="input-field"
-                      style={{ borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block", ...inputOverride }}
-                    />
+                    <input type={type} placeholder={placeholder} value={values[key] ?? ""} onChange={e => handleChange(key, e.target.value)} style={{ ...inputOverride }} />
                   </div>
                 ))}
               </div>
@@ -408,84 +392,148 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
           )}
         </div>
 
-        {/* Cotizador panel */}
+        {/* Cotizador panel — desktop sidebar, hidden on mobile (mini bar handles it) */}
         {showCotizador && (
-          <div className="lg:col-span-4 flex flex-col gap-4">
-            <div className="rounded-2xl p-6 flex flex-col gap-4 relative overflow-hidden" style={{ background: themeGradient, boxShadow: `0 8px 32px ${color1}1a` }}>
-              <div className="absolute rounded-full" style={{ top: 0, right: 0, width: 128, height: 128, backgroundColor: "rgba(255,255,255,0.1)", transform: "translate(50%,-50%)", filter: "blur(24px)" }} />
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wider" style={{ color: onGradientDim }}>Cotización estimada</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="font-bold" style={{ fontSize: 44, color: onGradient, lineHeight: 1.1 }}>
-                    ${cotizadorTotal.toLocaleString("es-AR")}
-                  </span>
-                </div>
-              </div>
-              <div className="rounded-xl p-3 flex flex-col gap-2 border border-white/10" style={{ backgroundColor: "rgba(17,19,28,0.2)", backdropFilter: "blur(8px)" }}>
-                {selectedProducts.map(p => (
-                  <div key={p.id} className="flex justify-between items-center">
-                    <span className="text-xs" style={{ color: onGradient }}>{p.name}</span>
-                    <span className="text-xs font-bold" style={{ color: onGradient }}>${p.price.toLocaleString("es-AR")}</span>
-                  </div>
-                ))}
-                {cotizador?.extraCosts && cotizador.extraCosts.length > 0 && (
-                  <>
-                    <div className="h-px my-1" style={{ backgroundColor: "rgba(255,255,255,0.15)" }} />
-                    <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: onGradientDim }}>Costos extras</p>
-                    {cotizador.extraCosts.map(ec => {
-                      const checked = checkedExtraCosts.includes(ec.label)
-                      return (
-                        <label key={ec.label} className="flex items-center justify-between gap-2 cursor-pointer">
-                          <div className="flex items-center gap-2">
-                            <div
-                              onClick={() => setCheckedExtraCosts(prev => checked ? prev.filter(l => l !== ec.label) : [...prev, ec.label])}
-                              style={{
-                                width: 16, height: 16, borderRadius: 4, flexShrink: 0, cursor: "pointer",
-                                border: `2px solid ${checked ? onGradient : "rgba(255,255,255,0.4)"}`,
-                                background: checked ? onGradient : "transparent",
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                              }}
-                            >
-                              {checked && <span className="material-symbols-outlined" style={{ fontSize: 11, color: color1, fontVariationSettings: "'FILL' 1" }}>check</span>}
-                            </div>
-                            <span className="text-xs" style={{ color: onGradient }}>{ec.label}</span>
-                          </div>
-                          <span className="text-xs font-bold" style={{ color: onGradient }}>+${ec.amount.toLocaleString("es-AR")}</span>
-                        </label>
-                      )
-                    })}
-                  </>
-                )}
-                <div className="h-px my-1" style={{ backgroundColor: "rgba(0,0,0,0.2)" }} />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold" style={{ color: onGradient }}>Total</span>
-                  <span className="text-sm font-bold" style={{ color: onGradient }}>${cotizadorTotal.toLocaleString("es-AR")}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-xl p-4 flex items-start gap-3" style={{ ...panelBase, borderLeft: `3px solid ${color2}` }}>
-              <span style={{ fontFamily: "'Material Symbols Outlined'", fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24", fontSize: 20, color: color2, lineHeight: 1, display: "inline-block", userSelect: "none", flexShrink: 0, marginTop: 2 }}>verified_user</span>
-              <div>
-                <p className="text-sm font-semibold" style={{ color: textPrimary }}>Seguro y confiable</p>
-                <p className="text-xs mt-1 leading-relaxed" style={{ color: bodyColor }}>
-                  Tus datos están protegidos. Al completar recibirás una confirmación por WhatsApp.
-                </p>
-              </div>
-            </div>
-
-            <a
-              href="https://codeadesarrollos.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}
-            >
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
-              <span style={{ fontSize: "clamp(48px, 8vw, 80px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: isDark ? "#ffffff" : "#000000" }}>CODEA</span>
-            </a>
+          <div className="hidden lg:flex lg:col-span-4 flex-col gap-4">
+            <CotizadorSidebar
+              cotizador={cotizador}
+              selectedProducts={selectedProducts}
+              checkedExtraCosts={checkedExtraCosts}
+              onToggleExtraCost={(label) => setCheckedExtraCosts(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label])}
+              cotizadorTotal={cotizadorTotal}
+              themeGradient={themeGradient}
+              color1={color1}
+              color2={color2}
+              onGradient={onGradient}
+              onGradientDim={onGradientDim}
+              panelBase={panelBase}
+              textPrimary={textPrimary}
+              bodyColor={bodyColor}
+              isDark={isDark}
+            />
           </div>
         )}
       </div>
+
+      {/* Mobile full cotizador — shown below form when products selected */}
+      {showCotizador && selectedProducts.length > 0 && (
+        <div className="w-full max-w-5xl mt-3 lg:hidden">
+          <CotizadorSidebar
+            cotizador={cotizador}
+            selectedProducts={selectedProducts}
+            checkedExtraCosts={checkedExtraCosts}
+            onToggleExtraCost={(label) => setCheckedExtraCosts(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label])}
+            cotizadorTotal={cotizadorTotal}
+            themeGradient={themeGradient}
+            color1={color1}
+            color2={color2}
+            onGradient={onGradient}
+            onGradientDim={onGradientDim}
+            panelBase={panelBase}
+            textPrimary={textPrimary}
+            bodyColor={bodyColor}
+            isDark={isDark}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---- Cotizador sidebar (shared between desktop and mobile) ----
+function CotizadorSidebar({
+  cotizador, selectedProducts, checkedExtraCosts, onToggleExtraCost,
+  cotizadorTotal, themeGradient, color1, color2, onGradient, onGradientDim,
+  panelBase, textPrimary, bodyColor, isDark,
+}: {
+  cotizador: CotizadorConfig | undefined
+  selectedProducts: Product[]
+  checkedExtraCosts: string[]
+  onToggleExtraCost: (label: string) => void
+  cotizadorTotal: number
+  themeGradient: string
+  color1: string
+  color2: string
+  onGradient: string
+  onGradientDim: string
+  panelBase: CSSProperties
+  textPrimary: string
+  bodyColor: string
+  isDark: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-3 sm:gap-4">
+      <div className="rounded-2xl p-4 sm:p-6 flex flex-col gap-4 relative overflow-hidden" style={{ background: themeGradient, boxShadow: `0 8px 32px ${color1}1a` }}>
+        <div className="absolute rounded-full pointer-events-none" style={{ top: 0, right: 0, width: 100, height: 100, backgroundColor: "rgba(255,255,255,0.1)", transform: "translate(50%,-50%)", filter: "blur(20px)" }} />
+        <div>
+          <p className="text-[10px] font-medium uppercase tracking-wider" style={{ color: onGradientDim }}>Cotización estimada</p>
+          <div className="flex items-baseline gap-1 mt-1">
+            <span className="font-bold" style={{ fontSize: "clamp(30px, 5vw, 44px)", color: onGradient, lineHeight: 1.1 }}>
+              ${cotizadorTotal.toLocaleString("es-AR")}
+            </span>
+          </div>
+        </div>
+        <div className="rounded-xl p-3 flex flex-col gap-2 border border-white/10" style={{ backgroundColor: "rgba(17,19,28,0.2)", backdropFilter: "blur(8px)" }}>
+          {selectedProducts.length === 0 ? (
+            <p className="text-xs text-center opacity-60" style={{ color: onGradient }}>Seleccioná un producto para ver el precio</p>
+          ) : (
+            selectedProducts.map(p => (
+              <div key={p.id} className="flex justify-between items-center gap-2">
+                <span className="text-xs truncate" style={{ color: onGradient }}>{p.name}</span>
+                <span className="text-xs font-bold flex-shrink-0" style={{ color: onGradient }}>${p.price.toLocaleString("es-AR")}</span>
+              </div>
+            ))
+          )}
+          {cotizador?.extraCosts && cotizador.extraCosts.length > 0 && (
+            <>
+              <div className="h-px my-1" style={{ backgroundColor: "rgba(255,255,255,0.15)" }} />
+              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: onGradientDim }}>Costos extras</p>
+              {cotizador.extraCosts.map(ec => {
+                const checked = checkedExtraCosts.includes(ec.label)
+                return (
+                  <label key={ec.label} className="flex items-center justify-between gap-2 cursor-pointer">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        onClick={() => onToggleExtraCost(ec.label)}
+                        style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, cursor: "pointer", border: `2px solid ${checked ? onGradient : "rgba(255,255,255,0.4)"}`, background: checked ? onGradient : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}
+                      >
+                        {checked && <span className="material-symbols-outlined" style={{ fontSize: 11, color: color1, fontVariationSettings: "'FILL' 1" }}>check</span>}
+                      </div>
+                      <span className="text-xs truncate" style={{ color: onGradient }}>{ec.label}</span>
+                    </div>
+                    <span className="text-xs font-bold flex-shrink-0" style={{ color: onGradient }}>+${ec.amount.toLocaleString("es-AR")}</span>
+                  </label>
+                )
+              })}
+            </>
+          )}
+          <div className="h-px my-1" style={{ backgroundColor: "rgba(0,0,0,0.2)" }} />
+          <div className="flex justify-between items-center">
+            <span className="text-sm font-bold" style={{ color: onGradient }}>Total</span>
+            <span className="text-sm font-bold" style={{ color: onGradient }}>${cotizadorTotal.toLocaleString("es-AR")}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl p-3 sm:p-4 flex items-start gap-3" style={{ ...panelBase, borderLeft: `3px solid ${color2}` }}>
+        <span style={{ fontFamily: "'Material Symbols Outlined'", fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24", fontSize: 18, color: color2, lineHeight: 1, display: "inline-block", userSelect: "none", flexShrink: 0, marginTop: 2 }}>verified_user</span>
+        <div>
+          <p className="text-sm font-semibold" style={{ color: textPrimary }}>Seguro y confiable</p>
+          <p className="text-xs mt-1 leading-relaxed" style={{ color: bodyColor }}>
+            Tus datos están protegidos. Al completar recibirás una confirmación por WhatsApp.
+          </p>
+        </div>
+      </div>
+
+      <a
+        href="https://codeadesarrollos.com"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}
+      >
+        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
+        <span style={{ fontSize: "clamp(40px, 7vw, 72px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: isDark ? "#ffffff" : "#000000" }}>CODEA</span>
+      </a>
     </div>
   )
 }
@@ -563,9 +611,9 @@ function ProductSelector({
     return (
       <div className="flex flex-col gap-3">
         <label className="text-xs font-medium" style={{ color: labelColor }}>{field.label}</label>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="rounded-2xl animate-pulse" style={{ height: 180, background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
+            <div key={i} className="rounded-2xl animate-pulse" style={{ height: 160, background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
           ))}
         </div>
       </div>
@@ -589,12 +637,12 @@ function ProductSelector({
         </label>
         {selectedProducts.length > 0 && (
           <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: `${accentColor}22`, color: accentColor }}>
-            {selectedProducts.length} seleccionado{selectedProducts.length > 1 ? "s" : ""}
+            {selectedProducts.length} sel.
           </span>
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         {products.map(product => {
           const isSelected = selectedProducts.some(sp => sp.id === product.id)
           return (
@@ -602,48 +650,38 @@ function ProductSelector({
               key={product.id}
               type="button"
               onClick={() => onToggle(product)}
-              style={{
-                textAlign: "left", padding: 0, background: "none", border: "none",
-                cursor: "pointer", borderRadius: 18, width: "100%", outline: "none",
-                transition: "transform 0.15s ease",
-                transform: isSelected ? "scale(1.02)" : "scale(1)",
-              }}
+              style={{ textAlign: "left", padding: 0, background: "none", border: "none", cursor: "pointer", borderRadius: 16, width: "100%", outline: "none", transition: "transform 0.15s ease", transform: isSelected ? "scale(1.02)" : "scale(1)" }}
             >
-              <div className="rounded-[18px] overflow-hidden flex flex-col h-full" style={{
-                background: cardBg(isSelected),
-                border: cardBorder(isSelected),
-                boxShadow: isSelected ? `0 4px 20px ${accentColor}28` : "none",
-                transition: "all 0.2s ease",
-              }}>
+              <div className="rounded-2xl overflow-hidden flex flex-col h-full" style={{ background: cardBg(isSelected), border: cardBorder(isSelected), boxShadow: isSelected ? `0 4px 20px ${accentColor}28` : "none", transition: "all 0.2s ease" }}>
                 {product.image_url ? (
-                  <div style={{ width: "100%", height: 130, overflow: "hidden", flexShrink: 0, position: "relative" }}>
+                  <div style={{ width: "100%", height: 110, overflow: "hidden", flexShrink: 0, position: "relative" }}>
                     <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     {isSelected && (
-                      <div style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 8px ${accentColor}60` }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: isDark ? "#000" : "#fff", fontVariationSettings: "'FILL' 1", lineHeight: 1 }}>check</span>
+                      <div style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 8px ${accentColor}60` }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 13, color: "#fff", fontVariationSettings: "'FILL' 1", lineHeight: 1 }}>check</span>
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div style={{ width: "100%", height: 64, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 14px", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 28, opacity: 0.2, color: isDark ? "#fff" : "#000" }}>inventory_2</span>
+                  <div style={{ width: "100%", height: 52, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 24, opacity: 0.2, color: isDark ? "#fff" : "#000" }}>inventory_2</span>
                     {isSelected && (
-                      <div style={{ width: 22, height: 22, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 13, color: isDark ? "#000" : "#fff", fontVariationSettings: "'FILL' 1", lineHeight: 1 }}>check</span>
+                      <div style={{ width: 20, height: 20, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 12, color: "#fff", fontVariationSettings: "'FILL' 1", lineHeight: 1 }}>check</span>
                       </div>
                     )}
                   </div>
                 )}
-                <div className="flex flex-col gap-1" style={{ padding: "10px 12px 12px" }}>
-                  <span className="text-sm font-bold leading-tight" style={{ color: isSelected ? accentColor : (isDark ? "#e1e1ef" : "#1a1a2e") }}>
+                <div className="flex flex-col gap-0.5" style={{ padding: "8px 10px 10px" }}>
+                  <span className="text-xs font-bold leading-tight" style={{ color: isSelected ? accentColor : (isDark ? "#e1e1ef" : "#1a1a2e") }}>
                     {product.name}
                   </span>
                   {product.description && (
-                    <p className="text-xs leading-snug line-clamp-2" style={{ color: isDark ? "rgba(193,201,181,0.75)" : "rgba(0,0,0,0.45)" }}>
+                    <p className="text-[11px] leading-snug line-clamp-2" style={{ color: isDark ? "rgba(193,201,181,0.65)" : "rgba(0,0,0,0.4)" }}>
                       {product.description}
                     </p>
                   )}
-                  <span className="text-base font-black" style={{ color: accentColor, marginTop: 4 }}>
+                  <span className="text-sm font-black" style={{ color: accentColor, marginTop: 2 }}>
                     ${product.price.toLocaleString("es-AR")}
                   </span>
                 </div>
@@ -654,7 +692,7 @@ function ProductSelector({
       </div>
 
       {!hasSpecificIds && products.length < total && (
-        <div ref={sentinelRef} className="flex justify-center py-3">
+        <div ref={sentinelRef} className="flex justify-center py-2">
           {loadingMore && (
             <div className="flex items-center gap-2 text-xs" style={{ color: labelColor }}>
               <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: `${accentColor} transparent transparent transparent` }} />
@@ -676,7 +714,7 @@ function FieldInput({ field, value, onChange, accentColor, inputOverride }: {
 }) {
   const key = field.label
   const opts = normalizeOptions(field.options)
-  const baseStyle: CSSProperties = { borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block", ...inputOverride }
+  const baseStyle: CSSProperties = { borderRadius: 8, padding: "10px 14px", fontSize: 15, width: "100%", display: "block", ...inputOverride }
 
   if (field.type === "select") {
     return (
@@ -710,7 +748,7 @@ function FieldInput({ field, value, onChange, accentColor, inputOverride }: {
   }
 
   if (field.type === "textarea") {
-    return <textarea className="input-field" style={{ ...baseStyle, minHeight: 100, resize: "vertical" }} placeholder={field.placeholder} value={value} onChange={e => onChange(key, e.target.value)} rows={3} />
+    return <textarea className="input-field" style={{ ...baseStyle, minHeight: 90, resize: "vertical" }} placeholder={field.placeholder} value={value} onChange={e => onChange(key, e.target.value)} rows={3} />
   }
 
   const htmlType = field.type === "phone" ? "tel" : field.type
