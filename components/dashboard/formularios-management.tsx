@@ -736,46 +736,6 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                                       </SelectContent>
                                     </Select>
                                   </div>
-                                  <div className="space-y-2 p-3 bg-muted/40 rounded-xl">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Condición de visibilidad</span>
-                                      <Switch
-                                        checked={!!field.conditional?.fieldLabel}
-                                        onCheckedChange={v => updateFieldInStep(stepIdx, fieldIdx, { conditional: v ? { fieldLabel: "", value: "" } : undefined })}
-                                        className="scale-75 origin-right"
-                                      />
-                                    </div>
-                                    {field.conditional !== undefined && (
-                                      <div className="space-y-2">
-                                        <p className="text-xs text-muted-foreground">Mostrar solo cuando el campo:</p>
-                                        <Select
-                                          value={field.conditional.fieldLabel || "__none__"}
-                                          onValueChange={v => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, fieldLabel: v === "__none__" ? "" : v } })}
-                                        >
-                                          <SelectTrigger className="h-8 text-xs rounded-xl">
-                                            <SelectValue placeholder="Elegir campo..." />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            <SelectItem value="__none__" className="text-xs">— Elegir campo —</SelectItem>
-                                            {editSteps.flatMap(s => s.fields)
-                                              .filter(f => f.label && f !== field && f.type !== "product_selector")
-                                              .map(f => (
-                                                <SelectItem key={f.label} value={f.label} className="text-xs">{f.label}</SelectItem>
-                                              ))}
-                                          </SelectContent>
-                                        </Select>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xs text-muted-foreground shrink-0">sea igual a:</span>
-                                          <Input
-                                            placeholder="valor..."
-                                            value={field.conditional.value}
-                                            onChange={e => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, value: e.target.value } })}
-                                            className="h-7 text-xs rounded-xl flex-1"
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
                                   {availableProducts.length > 0 && (
                                     <p className="text-xs text-muted-foreground">
                                       <span className="font-semibold text-[#D1F366]">{availableProducts.filter(p => !field.product_category || p.category === field.product_category).length}</span> producto(s) disponible(s)

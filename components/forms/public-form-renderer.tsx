@@ -150,10 +150,34 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const [done, setDone] = useState(false)
 
   const handleChange = (id: string, val: string) => setValues(prev => ({ ...prev, [id]: val }))
-  const handleNext = () => { setAnimDir("fwd"); setAnimKey(k => k + 1); setStep(s => Math.min(s + 1, steps.length - 1)) }
+
+  const handleNext = () => {
+    const requiredFields = (activeStep?.fields ?? []).filter(f => f.required)
+    for (const f of requiredFields) {
+      if (f.type === "product_selector") {
+        if (!selectedProduct) { toast.error(`"${f.label}" es obligatorio`, { description: "Seleccioná un producto para continuar." }); return }
+      } else if (f.type === "checkbox") {
+        if (values[f.label] !== "true") { toast.error(`"${f.label}" es obligatorio`); return }
+      } else {
+        if (!values[f.label]?.trim()) { toast.error(`"${f.label}" es obligatorio`); return }
+      }
+    }
+    setAnimDir("fwd"); setAnimKey(k => k + 1); setStep(s => Math.min(s + 1, steps.length - 1))
+  }
+
   const handleBack = () => { setAnimDir("bwd"); setAnimKey(k => k + 1); setStep(s => Math.max(s - 1, 0)) }
 
   const handleSubmit = async () => {
+    const requiredFields = (activeStep?.fields ?? []).filter(f => f.required)
+    for (const f of requiredFields) {
+      if (f.type === "product_selector") {
+        if (!selectedProduct) { toast.error(`"${f.label}" es obligatorio`, { description: "Seleccioná un producto para continuar." }); return }
+      } else if (f.type === "checkbox") {
+        if (values[f.label] !== "true") { toast.error(`"${f.label}" es obligatorio`); return }
+      } else {
+        if (!values[f.label]?.trim()) { toast.error(`"${f.label}" es obligatorio`); return }
+      }
+    }
     setSubmitting(true)
     try {
       const submissionData = {
