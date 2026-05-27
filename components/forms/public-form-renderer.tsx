@@ -184,13 +184,6 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
     }
   }
 
-  // Check if a field should be visible based on its conditional
-  const isFieldVisible = (field: FormField): boolean => {
-    if (!field.conditional?.fieldLabel) return true
-    const condValue = values[field.conditional.fieldLabel] ?? ""
-    return condValue === field.conditional.value
-  }
-
   const toggleBtn = (
     <button
       onClick={() => setIsDark(d => !d)}
@@ -234,8 +227,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
     : "stepEnterLeft 0.32s cubic-bezier(0.22,1,0.36,1)"
   const pageBg = isDark ? "#000000" : "#ffffff"
 
-  // Visible fields in active step (respecting conditionals)
-  const visibleFields = activeStep?.fields.filter(isFieldVisible) ?? []
+  const visibleFields = activeStep?.fields ?? []
 
   // Whether we should show the cotizador panel
   const showCotizador = hasCotizador && selectedProduct !== null
