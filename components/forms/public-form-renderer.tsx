@@ -135,13 +135,18 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const onGradient = hexLuminance(color1) > 0.35 ? darkenHex(color1, 0.25) : "#f0f0f0"
   const onGradientDim = hexLuminance(color1) > 0.35 ? darkenHex(color1, 0.3) + "cc" : "rgba(240,240,240,0.8)"
 
-  const bodyColor  = theme?.bodyColor  || "#e1e1ef"
-  const labelColor = theme?.labelColor || "#c2c9b5"
-  const titleStyle = getTitleStyle(theme)
-  const panelStyleFn = (extra?: CSSProperties) => ({ ...getPanelStyle(theme, isDark), ...extra })
-  const inputOverride = getInputOverride(theme)
+  // Fixed light design system
+  const pageBg = "#f4f6f8"
+  const panelBase: CSSProperties = { backgroundColor: "#ffffff", border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }
+  const textPrimary = "#111827"
+  const textSecondary = "#374151"
+  const labelColor = "#6b7280"
+  const bodyColor = "#374151"
+  const inputBase: CSSProperties = { backgroundColor: "#f9fafb", border: "1px solid rgba(0,0,0,0.12)", color: "#111827", borderRadius: 8, padding: "10px 16px", fontSize: 15, width: "100%", display: "block" }
+  const panelStyleFn = (extra?: CSSProperties): CSSProperties => ({ ...panelBase, ...extra })
+  const inputOverride: CSSProperties = inputBase
 
-  const [isDark, setIsDark] = useState(true)
+  const [isDark] = useState(false)
   const [step, setStep] = useState(0)
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState<"fwd" | "bwd">("fwd")
@@ -213,35 +218,14 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
     }
   }
 
-  const toggleBtn = (
-    <button
-      onClick={() => setIsDark(d => !d)}
-      title={isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-      style={{
-        position: "fixed", top: 18, right: 18, zIndex: 100,
-        width: 40, height: 40, borderRadius: "50%",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        border: isDark ? "1px solid rgba(255,255,255,0.18)" : "1px solid rgba(0,0,0,0.18)",
-        backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.08)",
-        cursor: "pointer",
-        transition: "background-color 0.3s ease, border-color 0.3s ease",
-      }}
-    >
-      <span className="material-symbols-outlined" style={{ fontSize: 19, color: isDark ? "rgba(255,255,255,0.85)" : "rgba(0,0,0,0.85)", display: "block", lineHeight: "1" }}>
-        {isDark ? "light_mode" : "dark_mode"}
-      </span>
-    </button>
-  )
-
   if (done) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: isDark ? "#000" : "#fff", fontFamily: "'Plus Jakarta Sans', sans-serif", transition: "background-color 0.3s ease" }}>
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ backgroundColor: pageBg, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
         <style>{KEYFRAMES}</style>
-        {toggleBtn}
-        <div className="glass-panel rounded-2xl text-center" style={{ padding: 40, maxWidth: 480, ...getPanelStyle(theme, isDark) }}>
+        <div className="rounded-2xl text-center" style={{ padding: 40, maxWidth: 480, ...panelBase }}>
           <span className="material-symbols-outlined" style={{ fontSize: 64, color: color1, fontVariationSettings: "'FILL' 1", display: "block", marginBottom: 16 }}>check_circle</span>
-          <h2 className="text-2xl font-bold mb-2" style={titleStyle}>¡Formulario enviado!</h2>
-          <p className="text-sm leading-relaxed" style={{ color: bodyColor }}>
+          <h2 className="text-2xl font-bold mb-2" style={{ color: textPrimary }}>¡Formulario enviado!</h2>
+          <p className="text-sm leading-relaxed" style={{ color: textSecondary }}>
             Gracias por completar el formulario. Nos pondremos en contacto contigo pronto.
           </p>
         </div>
@@ -254,7 +238,6 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const stepAnim = animDir === "fwd"
     ? "stepEnterRight 0.32s cubic-bezier(0.22,1,0.36,1)"
     : "stepEnterLeft 0.32s cubic-bezier(0.22,1,0.36,1)"
-  const pageBg = isDark ? "#000000" : "#ffffff"
 
   const visibleFields = activeStep?.fields ?? []
 
@@ -262,28 +245,23 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center justify-center p-6 md:p-8 relative overflow-x-hidden"
-      style={{ backgroundColor: pageBg, fontFamily: "'Plus Jakarta Sans', sans-serif", color: bodyColor, transition: "background-color 0.3s ease" }}
+      className="min-h-screen flex flex-col items-center justify-center p-6 md:p-8"
+      style={{ backgroundColor: pageBg, fontFamily: "'Plus Jakarta Sans', sans-serif", color: bodyColor }}
     >
       <style>{KEYFRAMES}</style>
-      {toggleBtn}
-
-      {/* Background blobs */}
-      <div className="absolute rounded-full pointer-events-none" style={{ top: "-10%", left: "-10%", width: "40%", height: "40%", background: "rgba(180,245,119,0.05)", filter: "blur(120px)", zIndex: 0 }} />
-      <div className="absolute rounded-full pointer-events-none" style={{ bottom: "-10%", right: "-10%", width: "50%", height: "50%", background: "rgba(0,198,182,0.10)", filter: "blur(150px)", zIndex: 0 }} />
 
       <div className={`w-full max-w-5xl relative z-10 grid grid-cols-1 gap-4 ${showCotizador ? "lg:grid-cols-12" : ""}`}>
 
         <div className={`flex flex-col gap-4 ${showCotizador ? "lg:col-span-8" : ""}`}>
 
           {/* Header */}
-          <header className="glass-panel rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4" style={panelStyleFn()}>
+          <header className="rounded-2xl p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4" style={panelStyleFn()}>
             <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2" style={titleStyle}>
+              <h1 className="text-2xl font-bold flex items-center gap-2" style={{ color: textPrimary }}>
                 {logo && <img src={logo} alt="Logo" style={{ width: 34, height: 34, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />}
                 {form.name}
               </h1>
-              {form.description && <p className="text-sm mt-1" style={{ color: bodyColor }}>{form.description}</p>}
+              {form.description && <p className="text-sm mt-1" style={{ color: textSecondary }}>{form.description}</p>}
             </div>
 
             {steps.length > 1 && (
@@ -299,7 +277,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                         style={{
                           ...(isActive || isDone
                             ? { background: themeGradient, color: onGradient }
-                            : { backgroundColor: "#282933", border: "1px solid #424939", color: "#c2c9b5" }),
+                            : { backgroundColor: "#f3f4f6", border: "1px solid rgba(0,0,0,0.1)", color: "#9ca3af" }),
                           transition: "transform 0.3s ease",
                           transform: isActive ? "scale(1.12)" : "scale(1)",
                           animation: isActive ? "dotPop 0.4s cubic-bezier(0.22,1,0.36,1)" : "none",
@@ -310,7 +288,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                           : i + 1}
                       </div>
                       {i < steps.length - 1 && (
-                        <div className="h-1 w-5 rounded-full" style={{ background: isDone ? themeGradient : "#282933", transition: "background 0.4s ease" }} />
+                        <div className="h-1 w-5 rounded-full" style={{ background: isDone ? themeGradient : "#e5e7eb", transition: "background 0.4s ease" }} />
                       )}
                     </div>
                   )
@@ -321,9 +299,9 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
           {/* Active step */}
           {activeStep && (
-            <section key={animKey} className="glass-panel rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn({ animation: stepAnim })}>
-              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                <h2 className="text-xl font-semibold" style={titleStyle}>{activeStep.title}</h2>
+            <section key={animKey} className="rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn({ animation: stepAnim })}>
+              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+                <h2 className="text-xl font-semibold" style={{ color: textPrimary }}>{activeStep.title}</h2>
               </div>
 
               <div className="flex flex-col gap-4 mt-2">
@@ -332,7 +310,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                   return (
                     <div key={field.id ?? fi} className={`flex flex-col gap-1.5 ${!isProductSelector && (field.fullWidth || field.type === "textarea") ? "" : ""}`}>
                       {!isProductSelector && (
-                        <label className="input-label text-xs font-medium" style={{ color: labelColor }}>
+                        <label className="text-xs font-semibold" style={{ color: labelColor }}>
                           {field.label}
                           {field.required && <span className="ml-0.5" style={{ color: color1 }}>*</span>}
                         </label>
@@ -364,7 +342,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
               <div className="flex items-center justify-between pt-2">
                 {step > 0 ? (
-                  <button onClick={handleBack} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-medium transition-all" style={{ backgroundColor: "#282933", color: "#c2c9b5", border: "1px solid #424939", cursor: "pointer" }}>
+                  <button onClick={handleBack} className="flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm font-medium transition-all" style={{ backgroundColor: "#f3f4f6", color: "#374151", border: "1px solid rgba(0,0,0,0.1)", cursor: "pointer" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
                     Atrás
                   </button>
@@ -385,12 +363,12 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
             </section>
           )}
 
-          {/* Payment form (shown when cotizador + showPayment + product selected) */}
+          {/* Payment form */}
           {showCotizador && showPayment && (
-            <section className="glass-panel rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn()}>
-              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+            <section className="rounded-2xl p-6 flex flex-col gap-4" style={panelStyleFn()}>
+              <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 22, color: color1, fontVariationSettings: "'FILL' 1" }}>credit_card</span>
-                <h2 className="text-lg font-semibold" style={titleStyle}>Datos de pago</h2>
+                <h2 className="text-lg font-semibold" style={{ color: textPrimary }}>Datos de pago</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
@@ -472,10 +450,10 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
               </div>
             </div>
 
-            <div className="glass-panel rounded-xl p-4 flex items-start gap-3" style={{ ...getPanelStyle(theme, isDark), borderLeft: `2px solid ${color2}` }}>
+            <div className="rounded-xl p-4 flex items-start gap-3" style={{ ...panelBase, borderLeft: `3px solid ${color2}` }}>
               <span style={{ fontFamily: "'Material Symbols Outlined'", fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24", fontSize: 20, color: color2, lineHeight: 1, display: "inline-block", userSelect: "none", flexShrink: 0, marginTop: 2 }}>verified_user</span>
               <div>
-                <p className="text-sm font-semibold" style={{ color: theme?.titleColor || "#ffffff" }}>Seguro y confiable</p>
+                <p className="text-sm font-semibold" style={{ color: textPrimary }}>Seguro y confiable</p>
                 <p className="text-xs mt-1 leading-relaxed" style={{ color: bodyColor }}>
                   Tus datos están protegidos. Al completar recibirás una confirmación por WhatsApp.
                 </p>
@@ -488,8 +466,8 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
               rel="noopener noreferrer"
               style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}
             >
-              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
-              <span style={{ fontSize: "clamp(48px, 8vw, 80px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: isDark ? "#ffffff" : "#000000" }}>CODEA</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(0,0,0,0.3)" }}>powered by</span>
+              <span style={{ fontSize: "clamp(48px, 8vw, 80px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: "#000000" }}>CODEA</span>
             </a>
           </div>
         )}
@@ -699,7 +677,7 @@ function FieldInput({ field, value, onChange, accentColor, inputOverride }: {
     return (
       <div className="flex flex-col gap-2 mt-1">
         {opts.map(o => (
-          <label key={o.value} className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: inputOverride.color || "#e1e1ef" }}>
+          <label key={o.value} className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: inputOverride.color || "#374151" }}>
             <input type="radio" name={key} value={o.value} checked={value === o.value} onChange={() => onChange(key, o.value)} style={{ accentColor }} />
             {o.label}
           </label>
@@ -710,7 +688,7 @@ function FieldInput({ field, value, onChange, accentColor, inputOverride }: {
 
   if (field.type === "checkbox") {
     return (
-      <label className="flex items-center gap-2 cursor-pointer text-sm mt-1" style={{ color: inputOverride.color || "#e1e1ef" }}>
+      <label className="flex items-center gap-2 cursor-pointer text-sm mt-1" style={{ color: inputOverride.color || "#374151" }}>
         <input type="checkbox" className="custom-checkbox" checked={value === "true"} onChange={e => onChange(key, e.target.checked ? "true" : "false")} />
         {field.placeholder ?? field.label}
       </label>
