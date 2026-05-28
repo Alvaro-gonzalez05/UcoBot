@@ -332,7 +332,6 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                             })
                           }}
                           accentColor={color1}
-                          accentColor2={color2}
                           labelColor={labelColor}
                           bodyColor={bodyColor}
                           isDark={isDark}
@@ -543,14 +542,13 @@ const PAGE_SIZE = 5
 
 function ProductSelector({
   field, userId, selectedProducts, onToggle,
-  accentColor, accentColor2, labelColor, bodyColor, isDark,
+  accentColor, labelColor, bodyColor, isDark,
 }: {
   field: FormField
   userId: string
   selectedProducts: Product[]
   onToggle: (p: Product) => void
   accentColor: string
-  accentColor2: string
   labelColor: string
   bodyColor: string
   isDark: boolean
@@ -602,10 +600,8 @@ function ProductSelector({
     return () => obs.disconnect()
   }, [products.length, total, loadingMore])
 
-  const cardBg = (sel: boolean) => sel
-    ? (isDark ? `${accentColor}1a` : `${accentColor}18`)
-    : (isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)")
-  const cardBorder = (sel: boolean) => `1.5px solid ${sel ? accentColor : (isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)")}`
+  const defaultBorder = isDark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.08)"
+  const defaultCardBg = isDark ? "#16182a" : "#ffffff"
 
   if (loading) {
     return (
@@ -613,7 +609,7 @@ function ProductSelector({
         <label className="text-xs font-medium" style={{ color: labelColor }}>{field.label}</label>
         <div className="grid grid-cols-2 gap-2 sm:gap-3">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="rounded-2xl animate-pulse" style={{ height: 160, background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
+            <div key={i} className="rounded-[20px] animate-pulse" style={{ aspectRatio: "3/4", background: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" }} />
           ))}
         </div>
       </div>
@@ -622,7 +618,7 @@ function ProductSelector({
 
   if (products.length === 0) {
     return (
-      <div className="rounded-xl p-4 text-center text-sm" style={{ background: cardBg(false), border: cardBorder(false), color: bodyColor, opacity: 0.6 }}>
+      <div className="rounded-2xl p-4 text-center text-sm" style={{ background: isDark ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.03)", border: `1px solid ${defaultBorder}`, color: bodyColor, opacity: 0.6 }}>
         No hay productos disponibles
       </div>
     )
@@ -631,13 +627,13 @@ function ProductSelector({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <label className="text-xs font-medium" style={{ color: labelColor }}>
+        <label className="text-xs font-semibold" style={{ color: labelColor }}>
           {field.label}
           {field.required && <span className="ml-0.5" style={{ color: accentColor }}>*</span>}
         </label>
         {selectedProducts.length > 0 && (
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: `${accentColor}22`, color: accentColor }}>
-            {selectedProducts.length} sel.
+          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full" style={{ background: `${accentColor}20`, color: accentColor }}>
+            {selectedProducts.length} seleccionado{selectedProducts.length > 1 ? "s" : ""}
           </span>
         )}
       </div>
@@ -650,40 +646,98 @@ function ProductSelector({
               key={product.id}
               type="button"
               onClick={() => onToggle(product)}
-              style={{ textAlign: "left", padding: 0, background: "none", border: "none", cursor: "pointer", borderRadius: 16, width: "100%", outline: "none", transition: "transform 0.15s ease", transform: isSelected ? "scale(1.02)" : "scale(1)" }}
+              style={{ textAlign: "left", padding: 0, background: "none", border: "none", cursor: "pointer", borderRadius: 20, width: "100%", outline: "none" }}
             >
-              <div className="rounded-2xl overflow-hidden flex flex-col h-full" style={{ background: cardBg(isSelected), border: cardBorder(isSelected), boxShadow: isSelected ? `0 4px 20px ${accentColor}28` : "none", transition: "all 0.2s ease" }}>
-                {product.image_url ? (
-                  <div style={{ width: "100%", height: 110, overflow: "hidden", flexShrink: 0, position: "relative" }}>
-                    <img src={product.image_url} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <div style={{
+                borderRadius: 20,
+                overflow: "hidden",
+                display: "flex",
+                flexDirection: "column",
+                background: isSelected ? (isDark ? `${accentColor}12` : `${accentColor}08`) : defaultCardBg,
+                border: `${isSelected ? "2px" : "1px"} solid ${isSelected ? accentColor : defaultBorder}`,
+                boxShadow: isSelected
+                  ? `0 0 0 3px ${accentColor}18, 0 6px 24px ${accentColor}20`
+                  : isDark ? "none" : "0 1px 6px rgba(0,0,0,0.06)",
+                transition: "all 0.2s ease",
+                transform: isSelected ? "translateY(-1px)" : "none",
+              }}>
+
+                {/* Top area: image or styled placeholder */}
+                <div style={{ position: "relative", width: "100%", paddingBottom: "65%" }}>
+                  <div style={{ position: "absolute", inset: 0 }}>
+                    {product.image_url ? (
+                      <>
+                        <img
+                          src={product.image_url}
+                          alt={product.name}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                        {/* Bottom gradient so price text is readable */}
+                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "55%", background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)" }} />
+                        {/* Price over image */}
+                        <div style={{ position: "absolute", bottom: 8, left: 10 }}>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.4)", letterSpacing: "-0.02em" }}>
+                            ${product.price.toLocaleString("es-AR")}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      /* Placeholder: gradient bg + big initial */
+                      <div style={{
+                        width: "100%", height: "100%",
+                        background: isSelected
+                          ? `linear-gradient(135deg, ${accentColor}35 0%, ${accentColor}12 100%)`
+                          : isDark ? "rgba(255,255,255,0.05)" : "linear-gradient(135deg, #f0f2f5 0%, #e8eaed 100%)",
+                        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6,
+                      }}>
+                        <span style={{
+                          fontSize: 34, fontWeight: 900, lineHeight: 1, letterSpacing: "-0.02em",
+                          color: isSelected ? accentColor : (isDark ? "rgba(255,255,255,0.18)" : "rgba(0,0,0,0.14)"),
+                          userSelect: "none",
+                        }}>
+                          {product.name.charAt(0).toUpperCase()}
+                        </span>
+                        <span style={{ fontSize: 14, fontWeight: 900, letterSpacing: "-0.02em", color: isSelected ? accentColor : (isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.35)") }}>
+                          ${product.price.toLocaleString("es-AR")}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Check badge */}
                     {isSelected && (
-                      <div style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 2px 8px ${accentColor}60` }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 13, color: "#fff", fontVariationSettings: "'FILL' 1", lineHeight: 1 }}>check</span>
+                      <div style={{
+                        position: "absolute", top: 8, right: 8,
+                        width: 24, height: 24, borderRadius: "50%",
+                        background: accentColor,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        boxShadow: `0 2px 8px ${accentColor}55`,
+                      }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: 14, color: "#fff", fontVariationSettings: "'FILL' 1", lineHeight: 1 }}>check</span>
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div style={{ width: "100%", height: 52, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", borderBottom: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)"}` }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 24, opacity: 0.2, color: isDark ? "#fff" : "#000" }}>inventory_2</span>
-                    {isSelected && (
-                      <div style={{ width: 20, height: 20, borderRadius: "50%", background: accentColor, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <span className="material-symbols-outlined" style={{ fontSize: 12, color: "#fff", fontVariationSettings: "'FILL' 1", lineHeight: 1 }}>check</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-                <div className="flex flex-col gap-0.5" style={{ padding: "8px 10px 10px" }}>
-                  <span className="text-xs font-bold leading-tight" style={{ color: isSelected ? accentColor : (isDark ? "#e1e1ef" : "#1a1a2e") }}>
+                </div>
+
+                {/* Info bottom */}
+                <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 3 }}>
+                  <span style={{
+                    fontSize: 12, fontWeight: 700, lineHeight: 1.35,
+                    color: isSelected ? accentColor : (isDark ? "#e1e1ef" : "#111827"),
+                    display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden",
+                  }}>
                     {product.name}
                   </span>
                   {product.description && (
-                    <p className="text-[11px] leading-snug line-clamp-2" style={{ color: isDark ? "rgba(193,201,181,0.65)" : "rgba(0,0,0,0.4)" }}>
+                    <p style={{
+                      fontSize: 11, lineHeight: 1.4, margin: 0,
+                      color: isDark ? "rgba(255,255,255,0.35)" : "rgba(0,0,0,0.38)",
+                      display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" as const, overflow: "hidden",
+                    }}>
                       {product.description}
                     </p>
                   )}
-                  <span className="text-sm font-black" style={{ color: accentColor, marginTop: 2 }}>
-                    ${product.price.toLocaleString("es-AR")}
-                  </span>
+                  {/* Show price in info only when no image (image shows it overlaid) */}
+                  {!product.image_url && null}
                 </div>
               </div>
             </button>
