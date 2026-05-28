@@ -165,114 +165,104 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
   const loadDashboardData = async () => {
     try {
       setIsLoading(true)
-      
-      // Load Business Info
-      const { data: profileData } = await supabase.from("user_profiles").select("business_info").eq("id", user.id).single()
-      if (profileData?.business_info) {
-        setBusinessInfo({
-          ...profileData.business_info,
-          social_media: profileData.business_info.social_media || {},
-          opening_hours: typeof profileData.business_info.opening_hours === "string" 
-            ? businessInfo.opening_hours 
-            : profileData.business_info.opening_hours || businessInfo.opening_hours
-        })
-      }
 
-      // Load Stats
       const now = new Date()
       const startOfCurrentMonth = startOfMonth(now).toISOString()
       const startOfLastMonth = startOfMonth(subMonths(now, 1)).toISOString()
-
-      const { count: totalClients } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id)
-      const { count: lastMonthClients } = await supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id).lt('created_at', startOfCurrentMonth)
-      
-      const clientsGrowth = lastMonthClients && lastMonthClients > 0
-        ? ((totalClients || 0) - lastMonthClients) / lastMonthClients * 100 : 0
-
-      const { count: activeBots } = await supabase.from('bots').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_active', true)
-
-      const { data: userConversations } = await supabase.from('conversations').select('id, status, last_message_at').eq('user_id', user.id)
-      const conversationIds = userConversations?.map(c => c.id) || []
       const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
-      const activeConversations = userConversations?.filter(c => c.last_message_at && c.last_message_at >= oneDayAgo).length || 0
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-      let monthlyMessages = 0; let lastMonthMessages = 0
-      if (conversationIds.length > 0) {
-        const { count: currentMonthCount } = await supabase.from('messages').select('*', { count: 'exact', head: true }).in('conversation_id', conversationIds).gte('created_at', startOfCurrentMonth)
-        const { count: lastMonthCount } = await supabase.from('messages').select('*', { count: 'exact', head: true }).in('conversation_id', conversationIds).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth)
-        monthlyMessages = currentMonthCount || 0
-        lastMonthMessages = lastMonthCount || 0
+      // ── Round 1: all independent queries in parallel ──
+      const [
+        profileRes,
+        totalClientsRes,
+        lastMonthClientsRes,
+        activeBotsCountRes,
+        conversationsRes,
+        thisMonthConvRes,
+        lastMonthConvRes,
+        pendingRes,
+        botsListRes,
+        automationsRes,
+      ] = await Promise.allSettled([
+        supabase.from("user_profiles").select("business_info").eq("id", user.id).single(),
+        supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
+        supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id).lt('created_at', startOfCurrentMonth),
+        supabase.from('bots').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_active', true),
+        supabase.from('conversations').select('id, last_message_at').eq('user_id', user.id),
+        supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfCurrentMonth),
+        supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
+        supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('needs_attention', true),
+        supabase.from('bots').select('id, name, platform').eq('user_id', user.id).eq('is_active', true).limit(3),
+        supabase.from('automations').select('id, name, is_active, trigger_type').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
+      ])
+
+      // Business info
+      const profileData = profileRes.status === 'fulfilled' ? profileRes.value.data : null
+      if (profileData?.business_info) {
+        setBusinessInfo(prev => ({
+          ...profileData.business_info,
+          social_media: profileData.business_info.social_media || {},
+          opening_hours: typeof profileData.business_info.opening_hours === "string"
+            ? prev.opening_hours
+            : profileData.business_info.opening_hours || prev.opening_hours,
+        }))
       }
-      const messagesGrowth = lastMonthMessages > 0 ? (monthlyMessages - lastMonthMessages) / lastMonthMessages * 100 : 0
 
-      // Conversations growth (this month vs last month)
-      const { count: thisMonthConvCount } = await supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfCurrentMonth)
-      const { count: lastMonthConvCount } = await supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth)
-      const conversationsGrowth = lastMonthConvCount && lastMonthConvCount > 0
-        ? ((thisMonthConvCount || 0) - lastMonthConvCount) / lastMonthConvCount * 100 : 0
+      // Extract values safely
+      const totalClients = totalClientsRes.status === 'fulfilled' ? (totalClientsRes.value.count || 0) : 0
+      const lastMonthClients = lastMonthClientsRes.status === 'fulfilled' ? (lastMonthClientsRes.value.count || 0) : 0
+      const activeBots = activeBotsCountRes.status === 'fulfilled' ? (activeBotsCountRes.value.count || 0) : 0
+      const userConversations = conversationsRes.status === 'fulfilled' ? (conversationsRes.value.data || []) : []
+      const thisMonthConvCount = thisMonthConvRes.status === 'fulfilled' ? (thisMonthConvRes.value.count || 0) : 0
+      const lastMonthConvCount = lastMonthConvRes.status === 'fulfilled' ? (lastMonthConvRes.value.count || 0) : 0
+      const pendingCount = pendingRes.status === 'fulfilled' ? (pendingRes.value.count || 0) : 0
+      const botsList = botsListRes.status === 'fulfilled' ? (botsListRes.value.data || []) : []
+      const automationsList = automationsRes.status === 'fulfilled' ? (automationsRes.value.data || []) : []
 
-      setStats({
-        totalClients: totalClients || 0, clientsGrowth,
-        activeBots: activeBots || 0, monthlyMessages, messagesGrowth,
-        activeConversations, totalConversations: conversationIds.length,
-        conversationsGrowth,
-      })
+      const conversationIds = userConversations.map((c: any) => c.id)
+      const activeConversations = userConversations.filter((c: any) => c.last_message_at && c.last_message_at >= oneDayAgo).length
+      const clientsGrowth = lastMonthClients > 0 ? (totalClients - lastMonthClients) / lastMonthClients * 100 : 0
+      const conversationsGrowth = lastMonthConvCount > 0 ? (thisMonthConvCount - lastMonthConvCount) / lastMonthConvCount * 100 : 0
 
-      // Weekly chart data — messages per day for last 7 days
+      // ── Round 2: queries that depend on conversationIds ──
+      let monthlyMessages = 0, lastMonthMessages = 0
+      let weeklyChart: { name: string; value: number }[] = []
+
       if (conversationIds.length > 0) {
-        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
-        const { data: recentMsgs } = await supabase
-          .from('messages')
-          .select('created_at')
-          .in('conversation_id', conversationIds)
-          .gte('created_at', sevenDaysAgo)
+        const [currentMsgRes, lastMsgRes, recentMsgRes] = await Promise.allSettled([
+          supabase.from('messages').select('*', { count: 'exact', head: true }).in('conversation_id', conversationIds).gte('created_at', startOfCurrentMonth),
+          supabase.from('messages').select('*', { count: 'exact', head: true }).in('conversation_id', conversationIds).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
+          supabase.from('messages').select('created_at').in('conversation_id', conversationIds).gte('created_at', sevenDaysAgo),
+        ])
+        monthlyMessages = currentMsgRes.status === 'fulfilled' ? (currentMsgRes.value.count || 0) : 0
+        lastMonthMessages = lastMsgRes.status === 'fulfilled' ? (lastMsgRes.value.count || 0) : 0
+        const recentMsgs = recentMsgRes.status === 'fulfilled' ? (recentMsgRes.value.data || []) : []
 
-        const weekly = Array.from({ length: 7 }, (_, i) => {
+        weeklyChart = Array.from({ length: 7 }, (_, i) => {
           const date = new Date(now)
           date.setDate(date.getDate() - (6 - i))
           const dateStr = date.toISOString().split('T')[0]
-          const count = recentMsgs?.filter(m => m.created_at.startsWith(dateStr)).length || 0
-          return { name: DAY_NAMES[date.getDay()], value: count, dateStr }
+          return { name: DAY_NAMES[date.getDay()], value: recentMsgs.filter((m: any) => m.created_at.startsWith(dateStr)).length }
         })
-        setChartData(weekly.map(({ name, value }) => ({ name, value })))
-
-        // Peak day
-        const peak = weekly.reduce((a, b) => b.value > a.value ? b : a, weekly[0])
-        setPeakDay(peak.value > 0 ? peak.name : null)
       } else {
-        setChartData(Array.from({ length: 7 }, (_, i) => {
+        weeklyChart = Array.from({ length: 7 }, (_, i) => {
           const date = new Date(now)
           date.setDate(date.getDate() - (6 - i))
           return { name: DAY_NAMES[date.getDay()], value: 0 }
-        }))
-        setPeakDay(null)
+        })
       }
 
-      // Pending leads (needs attention)
-      const { count: pendingCount } = await supabase
-        .from('conversations')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('needs_attention', true)
-      setPendingLeads(pendingCount || 0)
+      const messagesGrowth = lastMonthMessages > 0 ? (monthlyMessages - lastMonthMessages) / lastMonthMessages * 100 : 0
+      const peak = weeklyChart.reduce((a, b) => b.value > a.value ? b : a, weeklyChart[0])
 
-      // Active bots list (max 3)
-      const { data: bots } = await supabase
-        .from('bots')
-        .select('id, name, platform')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .limit(3)
-      setActiveBotsList(bots || [])
-
-      // Automations list (last 5)
-      const { data: automations } = await supabase
-        .from('automations')
-        .select('id, name, is_active, trigger_type')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5)
-      setAutomationsList(automations || [])
+      // Commit all state at once
+      setStats({ totalClients, clientsGrowth, activeBots, monthlyMessages, messagesGrowth, activeConversations, totalConversations: conversationIds.length, conversationsGrowth })
+      setChartData(weeklyChart)
+      setPeakDay(peak?.value > 0 ? peak.name : null)
+      setPendingLeads(pendingCount)
+      setActiveBotsList(botsList)
+      setAutomationsList(automationsList)
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
