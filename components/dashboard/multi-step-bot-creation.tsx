@@ -56,7 +56,6 @@ interface UserSubscription {
   plan_type: string
   trial_end_date: string | null
   subscription_end_date: string | null
-  max_bots: number
   max_automations: number
 }
 
@@ -110,8 +109,6 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   const [metaBusinessSetupCompleted, setMetaBusinessSetupCompleted] = useState(false)
   const [tokensConfigured, setTokensConfigured] = useState(false)
   const [userSubscription, setUserSubscription] = useState<UserSubscription | null>(null)
-  const [currentBotCount, setCurrentBotCount] = useState(0)
-  const [canCreateBot, setCanCreateBot] = useState(true)
   const [tagInput, setTagInput] = useState("")
   const supabase = createClient()
 
@@ -134,7 +131,6 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   useEffect(() => {
     if (isOpen && userId) {
       fetchUserSubscription()
-      checkBotLimits()
     }
   }, [isOpen, userId])
 
@@ -147,30 +143,20 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         .single()
 
       if (error) {
-        console.log("[v0] Subscription columns not found, using trial defaults:", error.message)
+        console.log("[v0] Subscription columns not found, using defaults:", error.message)
         setUserSubscription({
           subscription_status: "trial",
           plan_type: "trial",
           trial_end_date: null,
           subscription_end_date: null,
-          max_bots: 1,
           max_automations: 0,
         })
         return
       }
 
-      const planLimits = {
-        trial: { max_bots: 1, max_automations: 0 },
-        basic: { max_bots: 1, max_automations: 1 },
-        premium: { max_bots: 5, max_automations: 10 },
-        enterprise: { max_bots: -1, max_automations: -1 }, // unlimited
-      }
-
-      const limits = planLimits[data.plan_type as keyof typeof planLimits] || planLimits.trial
-
       setUserSubscription({
         ...data,
-        ...limits,
+        max_automations: 999,
       })
     } catch (error) {
       console.error("Error fetching subscription:", error)
@@ -179,26 +165,8 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         plan_type: "trial",
         trial_end_date: null,
         subscription_end_date: null,
-        max_bots: 1,
         max_automations: 0,
       })
-    }
-  }
-
-  const checkBotLimits = async () => {
-    try {
-      const { data: bots, error } = await supabase.from("bots").select("id").eq("user_id", userId)
-
-      if (error) throw error
-
-      const botCount = bots?.length || 0
-      setCurrentBotCount(botCount)
-
-      const maxBots = userSubscription?.max_bots || 1
-      setCanCreateBot(botCount < maxBots)
-    } catch (error) {
-      console.error("Error checking bot limits:", error)
-      setCanCreateBot(false)
     }
   }
 
@@ -262,14 +230,6 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   }
 
   const handleCreateBot = async () => {
-    if (!canCreateBot) {
-      toast.error("Límite de bots alcanzado", {
-        description: `Has alcanzado el límite de ${userSubscription?.max_bots || 1} bot(s) para tu plan. Actualiza tu suscripción para crear más bots.`,
-        duration: 4000,
-      })
-      return
-    }
-
     setIsLoading(true)
 
     try {
@@ -426,34 +386,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
           <DialogDescription className="text-sm sm:text-base">
             Configura tu chatbot paso a paso para obtener los mejores resultados
           </DialogDescription>
-          {userSubscription && (
-            <div className="mt-2 text-xs sm:text-sm text-muted-foreground">
-              Bots: {currentBotCount}/{userSubscription.max_bots || 1} utilizados
-            </div>
-          )}
         </DialogHeader>
-
-        {!canCreateBot && (
-          <div className="px-4 sm:px-6">
-            <Card className="border-red-200 bg-red-50">
-              <CardContent className="p-3 sm:p-4">
-                <div className="flex items-start gap-2 sm:gap-3">
-                  <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 mt-0.5 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <h4 className="text-sm sm:text-base font-medium text-red-800">Límite de bots alcanzado</h4>
-                    <p className="text-xs sm:text-sm text-red-700 mt-1">
-                      Has alcanzado el límite de {userSubscription?.max_bots || 1} bot(s) para tu plan actual. Actualiza
-                      tu suscripción para crear más bots.
-                    </p>
-                    <Button variant="outline" size="sm" className="mt-2 bg-transparent w-full sm:w-auto text-xs sm:text-sm" onClick={handleClose}>
-                      Ver Planes
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
 
         {/* Progress indicator */}
         <motion.div
@@ -1315,9 +1248,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                     {currentStep < totalSteps ? (
                       <Button
                         onClick={nextStep}
-                        disabled={
-                          !canCreateBot || !isStepValid()
-                        }
+                        disabled={!isStepValid()}
                         className="flex items-center justify-center gap-1 transition-all duration-300 rounded-2xl w-full sm:w-auto text-sm sm:text-base"
                       >
                         {isLoading ? (
@@ -1337,7 +1268,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                     ) : (
                       <Button
                         onClick={handleCreateBot}
-                        disabled={isLoading || !canCreateBot}
+                        disabled={isLoading}
                         className="flex items-center justify-center gap-1 transition-all duration-300 rounded-2xl w-full sm:w-auto text-sm sm:text-base"
                       >
                         {isLoading ? (

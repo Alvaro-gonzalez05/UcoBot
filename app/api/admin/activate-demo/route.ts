@@ -66,21 +66,33 @@ export async function POST(request: Request) {
 
     const newUserId = newUser.user.id
 
-    // Calculate trial end date (15 days from now)
-    const trialEndsAt = new Date()
-    trialEndsAt.setDate(trialEndsAt.getDate() + 15)
+    // Normalize demo sidebar_config IDs to match real URL slugs
+    const SIDEBAR_ID_MAP: Record<string, string> = {
+      "clients": "clientes",
+      "reservations": "reservas",
+      "orders": "pedidos",
+      "products": "punto-de-venta",
+      "forms": "formularios",
+      "automations": "automatizaciones",
+      "promotions": "promociones",
+    }
+
+    const normalizedSidebarConfig = Array.isArray(demo.sidebar_config) && demo.sidebar_config.length > 0
+      ? demo.sidebar_config.map((item: { id: string; [key: string]: unknown }) => ({
+          ...item,
+          id: SIDEBAR_ID_MAP[item.id] ?? item.id,
+        }))
+      : null
 
     // Upsert the user profile with demo configuration
     const { error: profileError } = await adminClient
       .from("user_profiles")
       .upsert({
         id: newUserId,
-        email,
         business_name: businessName,
-        plan_type: "trial",
+        full_name: contactName || businessName,
+        plan_type: "pro",
         subscription_status: "active",
-        trial_ends_at: trialEndsAt.toISOString(),
-        max_bots: 1,
         role: "user",
         // Store demo config as business info
         business_info: {
@@ -92,6 +104,7 @@ export async function POST(request: Request) {
           activated_from_demo: demoId,
         },
         business_description: demo.business_summary || "",
+        sidebar_config: normalizedSidebarConfig,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -106,26 +119,23 @@ export async function POST(request: Request) {
       )
     }
 
-    // Create a default bot based on demo configuration
+    // Create bot with the full configuration from the demo
     const features = Array.isArray(demo.features) ? demo.features : []
     const { error: botError } = await adminClient.from("bots").insert({
       user_id: newUserId,
-      name: `${businessName} Bot`,
+      name: demo.bot_name || `${businessName} Bot`,
       is_active: false,
-      model: "gemini-1.5-flash",
       platform: "whatsapp",
       features: features,
-      business_type: demo.business_type || "general",
-      system_prompt: demo.business_summary
-        ? `Eres el asistente virtual de ${businessName}. ${demo.business_summary}`
-        : `Eres el asistente virtual de ${businessName}.`,
+      personality_prompt: demo.personality_prompt || `Eres el asistente virtual de ${businessName}.`,
+      feature_config: demo.feature_config || {},
+      allowed_tags: Array.isArray(demo.allowed_tags) ? demo.allowed_tags : [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
 
     if (botError) {
       console.error("Error creating bot (non-fatal):", botError)
-      // Non-fatal — user can create a bot manually
     }
 
     // Mark demo as claimed and link to the new user
@@ -133,7 +143,7 @@ export async function POST(request: Request) {
       .from("demo_sessions")
       .update({
         status: "claimed",
-        claimed_user_id: newUserId,
+        claimed_by_user_id: newUserId,
         claimed_at: new Date().toISOString(),
       })
       .eq("id", demoId)

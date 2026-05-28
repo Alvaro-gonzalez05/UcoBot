@@ -303,44 +303,30 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
         .single()
 
       if (error) {
-        console.log("[v0] Subscription columns not found, using trial defaults:", error.message)
+        console.log("[v0] Subscription columns not found, using defaults:", error.message)
         setUserSubscription({
           subscription_status: "trial",
           plan_type: "trial",
-          max_bots: 1,
-          max_automations: 0,
+          max_automations: 999,
         })
         return
       }
 
-      const planLimits = {
-        trial: { max_bots: 999, max_automations: 999 }, // Unlimited for trial
-        basic: { max_bots: 999, max_automations: 999 }, // Unlimited for basic
-        premium: { max_bots: 999, max_automations: 999 }, // Unlimited for premium
-        enterprise: { max_bots: 999, max_automations: 999 }, // Unlimited
-      }
-
-      // In the new SaaS model, everyone gets unlimited bots/automations
-      // The limit is on AI Tokens (BYOK vs System) and Time (7 days vs Monthly)
-      const limits = { max_bots: 999, max_automations: 999 }
-
       setUserSubscription({
         ...data,
-        ...limits,
+        max_automations: 999,
       })
     } catch (error) {
       console.error("Error fetching subscription:", error)
       setUserSubscription({
         subscription_status: "trial",
         plan_type: "trial",
-        max_bots: 999,
         max_automations: 999,
       })
     }
   }
 
   const checkBotLimits = () => {
-    // Always allow creation in the new model
     setCanCreateBot(true)
   }
 
@@ -352,11 +338,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold">Configuración de Bots</h1>
             <p className="text-sm sm:text-base text-muted-foreground">Crea y gestiona tus chatbots con IA</p>
-            {userSubscription && (
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                {bots.length}/{userSubscription.max_bots} bots utilizados en tu plan
-              </p>
-            )}
           </div>
         </ScrollSlideUp>
         <ScrollFadeIn delay={0.2}>
@@ -386,32 +367,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
         </ScrollFadeIn>
       </div>
 
-      {!canCreateBot && (
-        <ScrollFadeIn delay={0.3}>
-          <Card className="border-amber-200 bg-amber-50">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-start gap-2 sm:gap-3">
-                <Bot className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                <div className="min-w-0">
-                  <h4 className="text-sm sm:text-base font-medium text-amber-800">Límite de bots alcanzado</h4>
-                  <p className="text-xs sm:text-sm text-amber-700 mt-1">
-                    Has alcanzado el límite de {userSubscription?.max_bots || 1} bot(s) para tu plan actual. Actualiza tu
-                    suscripción para crear más bots.
-                  </p>
-                  <motion.div
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <Button variant="outline" size="sm" className="mt-2 bg-transparent w-full sm:w-auto text-xs sm:text-sm">
-                      Ver Planes
-                    </Button>
-                  </motion.div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </ScrollFadeIn>
-      )}
 
       {/* Stats */}
       <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">

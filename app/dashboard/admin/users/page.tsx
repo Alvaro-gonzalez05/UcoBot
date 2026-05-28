@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { ArrowLeft, Users, UserCheck, UserX, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { UserListCard } from "@/components/dashboard/admin/user-list-card"
+import { CreateUserButton } from "@/components/dashboard/admin/create-user-button"
 import Link from "next/link"
 
 export default async function AdminUsersPage() {
@@ -37,7 +38,7 @@ export default async function AdminUsersPage() {
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
-        <div>
+        <div className="flex-1">
           <h2 className="text-3xl font-bold dark:text-white">
             Gestión de Usuarios
           </h2>
@@ -45,6 +46,7 @@ export default async function AdminUsersPage() {
             Administra los perfiles y suscripciones de los clientes.
           </p>
         </div>
+        <CreateUserButton />
       </div>
 
       {/* Stats */}

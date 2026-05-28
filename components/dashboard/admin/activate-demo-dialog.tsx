@@ -214,7 +214,7 @@ export function ActivateDemoDialog({
                 </div>
                 <div className="flex items-center gap-2 text-xs text-white/50">
                   <MessageSquare className="w-3.5 h-3.5" />
-                  Prueba gratuita de 15 días
+                  Cuenta activada con Plan Pro
                 </div>
               </div>
             </div>

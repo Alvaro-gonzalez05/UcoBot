@@ -186,9 +186,6 @@ export default async function AdminUserDetailsPage({
             </p>
             <p className="text-2xl font-bold dark:text-white">
               {bots?.length || 0}
-              <span className="text-sm font-normal text-muted-foreground">
-                /{profile.max_bots || 1}
-              </span>
             </p>
           </div>
         </div>
