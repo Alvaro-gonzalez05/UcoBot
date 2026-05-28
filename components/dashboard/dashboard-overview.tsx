@@ -19,16 +19,49 @@ interface DashboardOverviewProps {
   profile: any
 }
 
-// Chart data — exact same as reference HTML
-const chartData = [
-  { name: "Lun", value: 30 },
-  { name: "Mar", value: 45 },
-  { name: "Mié", value: 38 },
-  { name: "Jue", value: 72 },
-  { name: "Vie", value: 65 },
-  { name: "Sáb", value: 85 },
-  { name: "Dom", value: 92 },
-]
+const DAY_NAMES = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
+
+const TRIGGER_LABELS: Record<string, string> = {
+  birthday: "Cumpleaños",
+  inactive_client: "Cliente inactivo",
+  new_promotion: "Nueva promoción",
+  comment_reply: "Respuesta comentario",
+}
+
+const PLATFORM_ICONS: Record<string, string> = {
+  whatsapp: "chat",
+  instagram: "photo_camera",
+  web: "language",
+}
+
+// Dynamic tip generators — all based on real stats
+function getLeadsTip(clientsGrowth: number, totalClients: number): string {
+  if (totalClients === 0) return "Conectá tu primer asistente para empezar a capturar leads."
+  if (clientsGrowth >= 30) return `Creciste ${clientsGrowth.toFixed(0)}% en leads este mes. ¡Excelente ritmo!`
+  if (clientsGrowth >= 5) return `Tus leads crecen de forma constante. Activá automatizaciones para acelerar.`
+  if (clientsGrowth >= 0) return `Crecimiento estable este mes. Revisá el flujo de tu bot para mejorarlo.`
+  return `Tus leads bajaron ${Math.abs(clientsGrowth).toFixed(0)}% este mes. Revisá el estado de tu bot.`
+}
+
+function getMessagesTip(peakDay: string | null, monthlyMessages: number): string {
+  if (monthlyMessages === 0) return "Sin mensajes este mes. Verificá que tu asistente esté activo."
+  if (peakDay) return `Tu día con más actividad esta semana fue el ${peakDay}.`
+  return `${monthlyMessages.toLocaleString()} interacciones registradas este mes.`
+}
+
+function getSalesTip(pendingLeads: number, activeConversations: number): string {
+  if (pendingLeads > 0) return `${pendingLeads} conversación${pendingLeads > 1 ? "es requieren" : " requiere"} tu atención ahora.`
+  if (activeConversations === 0) return "Sin conversaciones activas. Chequeá que tu bot esté conectado."
+  return `${activeConversations} conversaciones activas en las últimas 24 h. ¡Todo en orden!`
+}
+
+function getProgressQuote(messagesGrowth: number, businessName: string): string {
+  const name = businessName || "emprendedor"
+  if (messagesGrowth > 20) return `¡Excelente, ${name}! Tus interacciones crecieron un ${messagesGrowth.toFixed(0)}% este mes.`
+  if (messagesGrowth > 0) return `Bien, ${name}. Tu actividad creció un ${messagesGrowth.toFixed(0)}% respecto al mes pasado.`
+  if (messagesGrowth < 0) return `${name}, podés reactivar clientes con una campaña de mensajes masivos.`
+  return `Primer mes activo, ${name}. ¡Cada conversación cuenta para crecer!`
+}
 
 interface BusinessInfoData {
   business_name: string
@@ -94,7 +127,13 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     messagesGrowth: 0,
     activeConversations: 0,
     totalConversations: 0,
+    conversationsGrowth: 0,
   })
+  const [chartData, setChartData] = useState<{ name: string; value: number }[]>([])
+  const [pendingLeads, setPendingLeads] = useState(0)
+  const [peakDay, setPeakDay] = useState<string | null>(null)
+  const [activeBotsList, setActiveBotsList] = useState<{ id: string; name: string; platform: string }[]>([])
+  const [automationsList, setAutomationsList] = useState<{ id: string; name: string; is_active: boolean; trigger_type: string }[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const supabase = createClient()
 
@@ -166,15 +205,79 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       }
       const messagesGrowth = lastMonthMessages > 0 ? (monthlyMessages - lastMonthMessages) / lastMonthMessages * 100 : 0
 
+      // Conversations growth (this month vs last month)
+      const { count: thisMonthConvCount } = await supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfCurrentMonth)
+      const { count: lastMonthConvCount } = await supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth)
+      const conversationsGrowth = lastMonthConvCount && lastMonthConvCount > 0
+        ? ((thisMonthConvCount || 0) - lastMonthConvCount) / lastMonthConvCount * 100 : 0
+
       setStats({
         totalClients: totalClients || 0, clientsGrowth,
         activeBots: activeBots || 0, monthlyMessages, messagesGrowth,
-        activeConversations, totalConversations: conversationIds.length
+        activeConversations, totalConversations: conversationIds.length,
+        conversationsGrowth,
       })
-    } catch (error) { 
-      console.error("Error fetching dashboard data:", error) 
-    } finally { 
-      setIsLoading(false) 
+
+      // Weekly chart data — messages per day for last 7 days
+      if (conversationIds.length > 0) {
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        const { data: recentMsgs } = await supabase
+          .from('messages')
+          .select('created_at')
+          .in('conversation_id', conversationIds)
+          .gte('created_at', sevenDaysAgo)
+
+        const weekly = Array.from({ length: 7 }, (_, i) => {
+          const date = new Date(now)
+          date.setDate(date.getDate() - (6 - i))
+          const dateStr = date.toISOString().split('T')[0]
+          const count = recentMsgs?.filter(m => m.created_at.startsWith(dateStr)).length || 0
+          return { name: DAY_NAMES[date.getDay()], value: count, dateStr }
+        })
+        setChartData(weekly.map(({ name, value }) => ({ name, value })))
+
+        // Peak day
+        const peak = weekly.reduce((a, b) => b.value > a.value ? b : a, weekly[0])
+        setPeakDay(peak.value > 0 ? peak.name : null)
+      } else {
+        setChartData(Array.from({ length: 7 }, (_, i) => {
+          const date = new Date(now)
+          date.setDate(date.getDate() - (6 - i))
+          return { name: DAY_NAMES[date.getDay()], value: 0 }
+        }))
+        setPeakDay(null)
+      }
+
+      // Pending leads (needs attention)
+      const { count: pendingCount } = await supabase
+        .from('conversations')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('needs_attention', true)
+      setPendingLeads(pendingCount || 0)
+
+      // Active bots list (max 3)
+      const { data: bots } = await supabase
+        .from('bots')
+        .select('id, name, platform')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .limit(3)
+      setActiveBotsList(bots || [])
+
+      // Automations list (last 5)
+      const { data: automations } = await supabase
+        .from('automations')
+        .select('id, name, is_active, trigger_type')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+      setAutomationsList(automations || [])
+
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error)
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -252,7 +355,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
 
   const progressPercent = stats.totalConversations > 0
     ? Math.min(100, Math.round((stats.activeConversations / stats.totalConversations) * 100))
-    : 68
+    : 0
 
   return (
     <div>
@@ -303,7 +406,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                 <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Leads Generados</h3>
                 <p className="text-3xl font-black mt-1">{stats.totalClients.toLocaleString()}</p>
                 <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-[#D1F366] font-bold">Proyección:</span> Vas camino a superar tu meta mensual en un 15%.
+                  <span className="text-[#D1F366] font-bold">Tip:</span> {getLeadsTip(stats.clientsGrowth, stats.totalClients)}
                 </p>
               </div>
 
@@ -323,7 +426,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                 <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Interacciones</h3>
                 <p className="text-3xl font-black mt-1">{stats.monthlyMessages.toLocaleString()}</p>
                 <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-blue-500 font-bold">Info:</span> El pico de tráfico fue ayer a las 20:00 (Campaña &quot;Flash&quot;).
+                  <span className="text-blue-500 font-bold">Info:</span> {getMessagesTip(peakDay, stats.monthlyMessages)}
                 </p>
               </div>
 
@@ -333,14 +436,17 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                   <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center text-orange-500">
                     <span className="material-symbols-outlined text-2xl">payments</span>
                   </div>
-                  <span className="text-[11px] font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg">
-                    +8.5%
+                  <span className={cn(
+                    "text-[11px] font-bold px-2 py-1 rounded-lg",
+                    stats.conversationsGrowth >= 0 ? "text-orange-500 bg-orange-500/10" : "text-red-500 bg-red-500/10"
+                  )}>
+                    {stats.conversationsGrowth >= 0 ? "+" : ""}{stats.conversationsGrowth.toFixed(1)}%
                   </span>
                 </div>
                 <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Cierres de Venta</h3>
                 <p className="text-3xl font-black mt-1">{stats.activeConversations}</p>
                 <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-orange-500 font-bold">Tip:</span> 12 leads están &quot;calientes&quot; esperando seguimiento hoy.
+                  <span className="text-orange-500 font-bold">Tip:</span> {getSalesTip(pendingLeads, stats.activeConversations)}
                 </p>
               </div>
             </section>
@@ -353,10 +459,15 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                     <h3 className="text-lg font-bold">Rendimiento de IA</h3>
                     <p className="text-xs text-[#64748B] mt-1">Conversiones asistidas por Chatbot</p>
                   </div>
-                  <div className="flex items-center gap-1.5 text-green-500 text-[11px] font-bold bg-green-500/5 px-2 py-1 rounded-lg">
-                    <span className="material-symbols-outlined text-sm">trending_up</span>
-                    <span>Top 5% Sector</span>
-                  </div>
+                  {stats.messagesGrowth !== 0 && (
+                    <div className={cn(
+                      "flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-lg",
+                      stats.messagesGrowth >= 0 ? "text-green-500 bg-green-500/5" : "text-red-500 bg-red-500/5"
+                    )}>
+                      <span className="material-symbols-outlined text-sm">{stats.messagesGrowth >= 0 ? "trending_up" : "trending_down"}</span>
+                      <span>{stats.messagesGrowth >= 0 ? "+" : ""}{stats.messagesGrowth.toFixed(1)}% vs mes ant.</span>
+                    </div>
+                  )}
                 </div>
                 <div className="relative h-48 w-full">
                   <ResponsiveContainer width="100%" height="100%">
@@ -386,30 +497,25 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                   </Link>
                 </div>
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl group cursor-pointer hover:bg-[#D1F366]/5 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#D1F366]/20 flex items-center justify-center text-[#D1F366]">
-                        <span className="material-symbols-outlined text-lg text-[#D1F366]">support_agent</span>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-sm">Ventas Web</h4>
-                        <p className="text-[10px] text-gray-400">Conversión del 4.2%</p>
-                      </div>
+                  {activeBotsList.length === 0 ? (
+                    <div className="text-center py-6 text-[#64748B] text-xs">
+                      <span className="material-symbols-outlined text-2xl block mb-2 opacity-30">smart_toy</span>
+                      No hay asistentes activos aún
                     </div>
-                    <span className="material-symbols-outlined text-gray-300 group-hover:text-[#D1F366] transition-colors">chevron_right</span>
-                  </div>
-                  <div className="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl group cursor-pointer hover:bg-[#D1F366]/5 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center text-purple-500">
-                        <span className="material-symbols-outlined text-lg">calendar_month</span>
+                  ) : activeBotsList.map(bot => (
+                    <Link key={bot.id} href="/dashboard/bots" className="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl group cursor-pointer hover:bg-[#D1F366]/5 transition-all">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-[#D1F366]/20 flex items-center justify-center text-[#D1F366]">
+                          <span className="material-symbols-outlined text-lg">{PLATFORM_ICONS[bot.platform] || "support_agent"}</span>
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm">{bot.name}</h4>
+                          <p className="text-[10px] text-gray-400 capitalize">{bot.platform}</p>
+                        </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-sm">Citas WhatsApp</h4>
-                        <p className="text-[10px] text-gray-400">8 agendadas hoy</p>
-                      </div>
-                    </div>
-                    <span className="material-symbols-outlined text-gray-300 group-hover:text-[#D1F366] transition-colors">chevron_right</span>
-                  </div>
+                      <span className="material-symbols-outlined text-gray-300 group-hover:text-[#D1F366] transition-colors">chevron_right</span>
+                    </Link>
+                  ))}
                 </div>
               </div>
             </div>
@@ -432,34 +538,35 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                     </tr>
                   </thead>
                   <tbody className="text-sm">
-                    <tr className="border-b border-gray-50 dark:border-white/5">
-                      <td className="py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/20 text-green-600 flex items-center justify-center">
-                            <span className="material-symbols-outlined text-sm">mail</span>
+                    {automationsList.length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-6 text-center text-[#64748B] text-xs">
+                          No hay automatizaciones creadas aún
+                        </td>
+                      </tr>
+                    ) : automationsList.map((auto, idx) => (
+                      <tr key={auto.id} className={idx < automationsList.length - 1 ? "border-b border-gray-50 dark:border-white/5" : ""}>
+                        <td className="py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className="w-7 h-7 rounded-lg bg-[#D1F366]/10 text-[#D1F366] flex items-center justify-center">
+                              <span className="material-symbols-outlined text-sm">bolt</span>
+                            </div>
+                            <span className="font-semibold text-xs truncate max-w-[120px]">{auto.name}</span>
                           </div>
-                          <span className="font-semibold text-xs">Onboarding Lead</span>
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-md uppercase">Activo</span>
-                      </td>
-                      <td className="py-4 text-right font-bold text-xs">+12% Retención</td>
-                    </tr>
-                    <tr>
-                      <td className="py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-7 h-7 rounded-lg bg-orange-100 dark:bg-orange-900/20 text-orange-600 flex items-center justify-center">
-                            <span className="material-symbols-outlined text-sm">shopping_cart</span>
-                          </div>
-                          <span className="font-semibold text-xs">Recuperación Carrito</span>
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[9px] font-black rounded-md uppercase">Activo</span>
-                      </td>
-                      <td className="py-4 text-right font-bold text-xs">$2,450 Recup.</td>
-                    </tr>
+                        </td>
+                        <td className="py-3.5">
+                          <span className={cn(
+                            "px-2 py-0.5 text-[9px] font-black rounded-md uppercase",
+                            auto.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400"
+                          )}>
+                            {auto.is_active ? "Activo" : "Pausado"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 text-right font-bold text-xs text-[#64748B]">
+                          {TRIGGER_LABELS[auto.trigger_type] || auto.trigger_type}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -648,7 +755,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                   <div className="bg-[#B3D93C] h-full" style={{ width: `${progressPercent}%` }}></div>
                 </div>
                 <p className="text-[10px] text-[#64748B] dark:text-gray-400 mt-4 leading-relaxed italic">
-                  &quot;Mantén el ritmo, {profile?.business_name || "emprendedor"}. Tu tasa de respuesta es un 20% superior al mes pasado.&quot;
+                  &quot;{getProgressQuote(stats.messagesGrowth, profile?.business_name)}&quot;
                 </p>
               </div>
             </div>
