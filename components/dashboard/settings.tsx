@@ -165,16 +165,16 @@ export function Settings() {
   const saveSidebarConfig = async () => {
     setIsSavingSidebar(true)
     try {
+      const { data: { user: authUser } } = await supabase.auth.getUser()
+      if (!authUser) throw new Error("No autenticado")
+
       const { error } = await supabase
         .from("user_profiles")
         .update({ sidebar_config: sidebarSections })
-        .eq("id", userId)
+        .eq("id", authUser.id)
 
       if (error) throw error
-      toast.success("Configuracion del panel guardada", {
-        description: "Los cambios se aplicaran la proxima vez que navegues.",
-      })
-      // Dispatch event so sidebar refreshes without full reload
+      toast.success("Configuracion del panel guardada")
       window.dispatchEvent(new Event("sidebarConfigUpdated"))
     } catch (err: any) {
       toast.error("Error al guardar", { description: err.message })
