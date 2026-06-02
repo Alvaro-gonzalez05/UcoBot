@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UcoBot — Reel 01</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@hyperframes/shader@latest/dist/index.js"></script>
+
+  <style>
+    /* ── Design Tokens — UcoBot ── */
+    :root {
+      --bg:      #000000;
+      --sidebar: #1C1C28;
+      --card:    #18181b;
+      --card2:   #27272a;
+      --ink:     #ffffff;
+      --accent:  #CCFF00;
+      --accent-s:#D1F366;
+      --muted:   #a1a1aa;
+      --muted2:  #71717a;
+      --border:  rgba(255,255,255,0.08);
+      --font:    "Space Grotesk", sans-serif;
+      --mono:    "JetBrains Mono", monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); overflow: hidden; font-family: var(--font); }
+
+    #main {
+      position: relative;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .scene {
+      position: absolute;
+      inset: 0;
+      width: 1080px;
+      height: 1920px;
+      overflow: hidden;
+    }
+
+    .scene-content {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Grain */
+    .grain {
+      position: absolute; inset: 0;
+      pointer-events: none; z-index: 200; opacity: 0.08;
+      background-image:
+        radial-gradient(rgba(255,255,255,0.10) 1px, transparent 1.2px),
+        radial-gradient(rgba(0,0,0,0.20) 1px, transparent 1.2px);
+      background-size: 3px 3px, 5px 5px;
+      background-position: 0 0, 1px 2px;
+      mix-blend-mode: overlay;
+    }
+
+    /* ── SVG Icon helper ── */
+    .ico {
+      display: inline-block;
+      flex-shrink: 0;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* ══════════════════════════════════════
+       SCENE 1 — Hero
+    ══════════════════════════════════════ */
+    #s1-glow {
+      position: absolute;
+      width: 700px; height: 700px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(204,255,0,0.14) 0%, transparent 70%);
+      bottom: -80px; left: 50%;
+      transform: translateX(-50%);
+      pointer-events: none;
+    }
+
+    #s1-inner {
+      display: flex; flex-direction: column; align-items: flex-start;
+      padding: 0 90px; width: 100%;
+    }
+
+    #s1-brand {
+      display: flex; align-items: center; gap: 14px;
+      font-family: var(--mono); font-size: 22px; font-weight: 600;
+      color: var(--muted2); letter-spacing: 0.18em; text-transform: uppercase;
+      margin-bottom: 44px;
+    }
+
+    #s1-brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+    #s1-line { width: 64px; height: 5px; background: var(--accent); border-radius: 3px; margin-bottom: 44px; }
+
+    #s1-h1 {
+      font-size: 144px; font-weight: 900; color: var(--ink);
+      line-height: 0.92; letter-spacing: -0.05em;
+    }
+    #s1-h1-ai {
+      font-size: 144px; font-weight: 900; color: var(--accent);
+      line-height: 0.92; letter-spacing: -0.05em;
+    }
+
+    #s1-sub {
+      font-size: 30px; font-weight: 400; color: var(--muted);
+      margin-top: 48px; line-height: 1.55;
+    }
+
+    #s1-chips { display: flex; gap: 16px; margin-top: 52px; flex-wrap: wrap; align-items: center; }
+
+    .chip {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); font-size: 22px; font-weight: 500;
+      padding: 13px 26px; border-radius: 100px; font-family: var(--mono);
+    }
+    .chip-hi { border-color: rgba(204,255,0,0.28); color: var(--accent); }
+
+    /* ══════════════════════════════════════
+       SCENE 3 — Chat + Processing Steps
+    ══════════════════════════════════════ */
+    #s3 .scene-content { padding: 0 60px; justify-content: flex-start; padding-top: 110px; }
+
+    #s3-head { width: 100%; margin-bottom: 40px; }
+    #s3-eyebrow {
+      font-family: var(--mono); font-size: 21px; color: var(--muted2);
+      letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px;
+    }
+    #s3-eyebrow span { color: var(--accent); }
+    #s3-title { font-size: 72px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; line-height: 1.0; }
+
+    .chat-win {
+      width: 100%; background: var(--card);
+      border-radius: 2rem; overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .chat-hdr {
+      background: var(--card2); padding: 26px 32px;
+      display: flex; align-items: center; gap: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .chat-av {
+      width: 52px; height: 52px; border-radius: 50%;
+      overflow: hidden; flex-shrink: 0;
+      box-shadow: 0 0 18px rgba(204,255,0,0.25);
+    }
+    .chat-av img { width: 100%; height: 100%; object-fit: cover; }
+
+    .chat-nm  { font-size: 24px; font-weight: 700; color: var(--ink); }
+    .chat-st  { font-size: 16px; color: #22c55e; font-family: var(--mono); }
+
+    .chat-body {
+      padding: 28px 28px 32px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+
+    .bubble {
+      max-width: 84%; padding: 16px 22px;
+      border-radius: 18px; font-size: 23px; line-height: 1.45; font-weight: 400;
+    }
+
+    /* User bubble — lime, matches UcoBot UI */
+    .b-user {
+      background: var(--accent); color: #000;
+      align-self: flex-end; border-bottom-right-radius: 4px; font-weight: 600;
+    }
+
+    /* Bot bubble — zinc-800, matches UcoBot UI */
+    .b-bot {
+      background: var(--card2); color: var(--ink);
+      align-self: flex-start; border-bottom-left-radius: 4px;
+    }
+    .b-bot strong { color: var(--accent); }
+
+    .b-ts {
+      font-family: var(--mono); font-size: 15px;
+      color: var(--muted2); align-self: flex-end;
+    }
+
+    /* Processing Steps Card */
+    .proc-card {
+      background: var(--card2);
+      border: 1px solid rgba(204,255,0,0.18);
+      border-radius: 18px;
+      padding: 22px 26px;
+      display: flex; flex-direction: column; gap: 16px;
+      align-self: flex-start;
+      min-width: 460px;
+      border-bottom-left-radius: 4px;
+    }
+
+    .proc-step {
+      display: flex; align-items: center; gap: 16px;
+      font-size: 21px; color: var(--muted2); font-family: var(--mono);
+    }
+
+    .proc-step.done   { color: var(--muted); }
+    .proc-step.active { color: var(--ink); font-weight: 600; }
+
+    .step-icon {
+      width: 28px; height: 28px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Pending ring */
+    .step-ring {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid var(--muted2);
+    }
+
+    /* Done check ring */
+    .step-check {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Spinner arc */
+    .step-spin {
+      width: 22px; height: 22px; border-radius: 50%;
+      border: 2px solid var(--card);
+      border-top-color: var(--accent);
+    }
+
+    /* ══════════════════════════════════════
+       SCENE 4 — Stats [ANCHOR]
+    ══════════════════════════════════════ */
+    #s4 .scene-content { padding: 0 60px; }
+
+    #s4-eyebrow {
+      font-family: var(--mono); font-size: 21px; color: var(--muted2);
+      letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 14px;
+      align-self: flex-start; width: 100%;
+    }
+    #s4-eyebrow span { color: var(--accent); }
+
+    #s4-title {
+      font-size: 92px; font-weight: 900; color: var(--ink);
+      letter-spacing: -0.04em; line-height: 1.0; margin-bottom: 52px;
+      align-self: flex-start; width: 100%;
+    }
+
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 100%; }
+
+    .stat-card {
+      background: var(--sidebar);
+      border: 1px solid var(--border);
+      border-radius: 22px; padding: 36px 32px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+
+    .stat-ico-row {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--mono); font-size: 18px; color: var(--muted2);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;
+    }
+
+    .stat-num {
+      font-size: 88px; font-weight: 900; color: var(--ink);
+      line-height: 1; letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-num .hi   { color: var(--accent); }
+    .stat-num .unit { font-size: 44px; color: var(--muted2); }
+
+    .stat-lbl { font-size: 21px; font-weight: 400; color: var(--muted); }
+
+    .bar-track {
+      width: 100%; height: 5px; background: var(--card2);
+      border-radius: 3px; margin-top: 16px; overflow: hidden;
+    }
+    .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; width: 0; }
+
+    .stat-card-wide {
+      grid-column: 1 / -1;
+      background: var(--sidebar);
+      border: 1px solid rgba(204,255,0,0.18);
+      border-radius: 22px;
+      padding: 32px 36px;
+      display: flex; align-items: center; gap: 32px;
+    }
+    .stat-card-wide .stat-num { font-size: 80px; }
+
+    /* ══════════════════════════════════════
+       SCENE 5 — Brand Reveal [ANCHOR]
+    ══════════════════════════════════════ */
+    #s5-glow {
+      position: absolute;
+      width: 1000px; height: 1000px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(204,255,0,0.16) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    #s5-inner { display: flex; flex-direction: column; align-items: center; gap: 0; }
+
+    #s5-logo {
+      width: 180px; height: 180px; border-radius: 50%;
+      overflow: hidden; flex-shrink: 0;
+      margin-bottom: 44px;
+      box-shadow: 0 0 0 2px rgba(204,255,0,0.18), 0 0 60px rgba(204,255,0,0.22), 0 20px 48px rgba(0,0,0,0.45);
+    }
+    #s5-logo img { width: 100%; height: 100%; object-fit: cover; }
+
+    #s5-word {
+      font-size: 124px; font-weight: 900; color: var(--ink);
+      letter-spacing: -0.05em; line-height: 1; margin-bottom: 10px;
+    }
+
+    #s5-co {
+      font-family: var(--mono); font-size: 20px; color: var(--muted2);
+      letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 52px;
+    }
+
+    #s5-tag {
+      font-size: 34px; font-weight: 300; color: var(--muted);
+      text-align: center; line-height: 1.45; max-width: 780px; margin-bottom: 64px;
+    }
+
+    #s5-cta {
+      display: flex; align-items: center; gap: 16px;
+      background: var(--accent); color: #000;
+      font-size: 32px; font-weight: 700;
+      padding: 28px 80px; border-radius: 100px; margin-bottom: 28px;
+    }
+
+    #s5-url {
+      font-family: var(--mono); font-size: 22px;
+      color: var(--muted2); letter-spacing: 0.06em;
+    }
+  </style>
+</head>
+<body>
+<!-- ── SVG Icon defs ── -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- LayoutDashboard -->
+    <symbol id="i-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+      <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+    </symbol>
+    <!-- MessageSquare -->
+    <symbol id="i-msg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </symbol>
+    <!-- Bot -->
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 8V4H8" /><rect x="3" y="8" width="18" height="14" rx="3" />
+      <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
+      <path d="M6 17h12" />
+    </symbol>
+    <!-- Users -->
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </symbol>
+    <!-- ShoppingBag -->
+    <symbol id="i-bag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <path d="M16 10a4 4 0 0 1-8 0" />
+    </symbol>
+    <!-- Calendar -->
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </symbol>
+    <!-- Zap -->
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </symbol>
+    <!-- User (single) -->
+    <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </symbol>
+    <!-- Database -->
+    <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <ellipse cx="12" cy="5" rx="9" ry="3" />
+      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
+      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+    </symbol>
+    <!-- Send -->
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="22" y1="2" x2="11" y2="13" />
+      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    </symbol>
+    <!-- Clock -->
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </symbol>
+    <!-- Check mark (for step-check) -->
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </symbol>
+    <!-- ArrowRight -->
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </symbol>
+    <!-- WhatsApp-style phone+chat (simplified) -->
+    <symbol id="i-wa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.1 2 2 0 0 1 3.62 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6.06 6.06l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+    </symbol>
+    <!-- Instagram-style camera -->
+    <symbol id="i-ig" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+    </symbol>
+  </defs>
+</svg>
+
+<div id="main" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="15">
+
+  <!-- ── Audio ── -->
+  <!-- Música de fondo: Thunderbird by Kevin MacLeod (CC BY) -->
+  <audio data-start="0" data-duration="15" data-track-index="10" data-volume="0.5" src="./music.mp3"></audio>
+  <!-- SFX: pasos del procesamiento -->
+  <audio data-start="5.5"  data-duration="1" data-track-index="11" data-volume="0.7" src="./notification.mp3"></audio>
+  <audio data-start="5.9"  data-duration="1" data-track-index="12" data-volume="0.7" src="./notification.mp3"></audio>
+  <audio data-start="6.4"  data-duration="1" data-track-index="13" data-volume="0.7" src="./notification.mp3"></audio>
+  <audio data-start="6.85" data-duration="1" data-track-index="14" data-volume="0.7" src="./notification.mp3"></audio>
+  <!-- SFX: confirmación de pedido -->
+  <audio data-start="7.1"  data-duration="2" data-track-index="15" data-volume="0.9" src="./cash-register.mp3"></audio>
+
+  <div class="grain"></div>
+
+  <!-- ════════════════════════════════════════
+       SCENE 1 · Hero · 0s → 2.5s
+  ════════════════════════════════════════ -->
+  <div class="scene clip" id="s1" data-start="0" data-duration="2.5" data-track-index="0">
+    <div id="s1-glow"></div>
+    <div class="scene-content" style="justify-content:center;">
+      <div id="s1-inner">
+        <div id="s1-brand">
+          <div id="s1-brand-dot"></div>
+          UCOBOT · IA para tu negocio
+        </div>
+        <div id="s1-line"></div>
+        <div id="s1-h1">Modernizá<br>tu negocio</div>
+        <div id="s1-h1-ai">con IA.</div>
+        <p id="s1-sub">Chatbot · CRM · Automatizaciones<br>en WhatsApp e Instagram.</p>
+        <div id="s1-chips">
+          <span class="chip chip-hi">
+            <svg class="ico" width="20" height="20"><use href="#i-wa" /></svg>
+            WhatsApp
+          </span>
+          <span class="chip chip-hi">
+            <svg class="ico" width="20" height="20"><use href="#i-ig" /></svg>
+            Instagram
+          </span>
+          <span class="chip">
+            <svg class="ico" width="20" height="20"><use href="#i-bag" /></svg>
+            Pedidos
+          </span>
+          <span class="chip">
+            <svg class="ico" width="20" height="20"><use href="#i-cal" /></svg>
+            Reservas
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       SCENE 3 · Chat + Processing · 2.5s → 8.5s
+  ════════════════════════════════════════ -->
+  <div class="scene clip" id="s3" data-start="2.5" data-duration="6" data-track-index="0" style="opacity:0;">
+    <div class="scene-content">
+      <div style="padding:0 56px;width:100%;">
+        <div id="s3-head">
+          <div id="s3-eyebrow">Bot en <span>acción</span></div>
+          <div id="s3-title">Atiende solo,<br>las 24 hs.</div>
+        </div>
+        <div class="chat-win">
+          <!-- Header -->
+          <div class="chat-hdr">
+            <div class="chat-av">
+              <img src="./ucobot-logo.png" alt="UcoBot">
+            </div>
+            <div>
+              <div class="chat-nm">UcoBot</div>
+              <div class="chat-st">en línea · automático</div>
+            </div>
+          </div>
+          <!-- Body -->
+          <div class="chat-body">
+            <!-- 1. Cliente pide -->
+            <div class="bubble b-user" id="cb1">Hola, quiero 2 pizzas y una coca</div>
+            <!-- 2. Bot responde con precio -->
+            <div class="bubble b-bot" id="cb2">
+              2× Pizza Napolitana + 1× Coca-Cola<br>
+              <strong>Total: $4.800</strong> — ¿Confirmás?
+            </div>
+            <!-- 3. Cliente confirma -->
+            <div class="bubble b-user" id="cb3">sí confirmo</div>
+
+            <!-- 4. Processing steps card -->
+            <div class="proc-card" id="proc-card">
+              <div class="proc-step" id="ps1">
+                <div class="step-icon" id="ps1-icon">
+                  <div class="step-ring"></div>
+                </div>
+                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-user" /></svg>
+                Identificando cliente...
+              </div>
+              <div class="proc-step" id="ps2">
+                <div class="step-icon" id="ps2-icon">
+                  <div class="step-ring"></div>
+                </div>
+                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-db" /></svg>
+                Guardando en base de datos...
+              </div>
+              <div class="proc-step" id="ps3">
+                <div class="step-icon" id="ps3-icon">
+                  <div class="step-ring"></div>
+                </div>
+                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-send" /></svg>
+                Enviando pedido al local...
+              </div>
+              <div class="proc-step" id="ps4">
+                <div class="step-icon" id="ps4-icon">
+                  <div class="step-ring"></div>
+                </div>
+                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-clock" /></svg>
+                Calculando tiempo estimado...
+              </div>
+            </div>
+
+            <!-- 5. Bot confirma pedido -->
+            <div class="bubble b-bot" id="cb4">
+              Pedido confirmado<br>
+              Tiempo estimado: <strong>25 min</strong>
+            </div>
+            <div class="b-ts" id="cb5">sin intervención humana</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       SCENE 4 · Stats · 8.5s → 11.5s [ANCHOR]
+  ════════════════════════════════════════ -->
+  <div class="scene clip" id="s4" data-start="8.5" data-duration="3" data-track-index="0" style="opacity:0;">
+    <div class="scene-content">
+      <div style="width:100%;padding:0 60px;">
+        <div id="s4-eyebrow">Esta <span>semana</span></div>
+        <div id="s4-title">Números<br>reales.</div>
+        <div class="stat-grid">
+          <div class="stat-card" id="sc1">
+            <div class="stat-ico-row">
+              <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-bag" /></svg>
+              Pedidos
+            </div>
+            <div class="stat-num"><span class="hi" id="n1">0</span></div>
+            <div class="stat-lbl">procesados por el bot</div>
+            <div class="bar-track"><div class="bar-fill" id="bf1"></div></div>
+          </div>
+          <div class="stat-card" id="sc2">
+            <div class="stat-ico-row">
+              <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-users" /></svg>
+              Clientes
+            </div>
+            <div class="stat-num"><span id="n2">0</span></div>
+            <div class="stat-lbl">registrados</div>
+            <div class="bar-track"><div class="bar-fill" id="bf2"></div></div>
+          </div>
+          <div class="stat-card-wide" id="sc3">
+            <div>
+              <div class="stat-ico-row" style="margin-bottom:6px;">
+                <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-clock" /></svg>
+                Atención automatizada
+              </div>
+              <div class="stat-num"><span class="hi" id="n3">0</span><span class="unit">h</span></div>
+              <div class="stat-lbl">sin pausas</div>
+              <div class="bar-track" style="width:380px;margin-top:14px;"><div class="bar-fill" id="bf3"></div></div>
+            </div>
+            <div style="margin-left:auto;text-align:right;">
+              <div style="font-size:72px;font-weight:900;color:var(--accent);line-height:1;">100%</div>
+              <div style="font-size:20px;color:var(--muted2);font-family:var(--mono);">disponible</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       SCENE 5 · Brand Reveal · 11.5s → 15s [ANCHOR]
+  ════════════════════════════════════════ -->
+  <div class="scene clip" id="s5" data-start="11.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
+    <div id="s5-glow"></div>
+    <div class="scene-content">
+      <div id="s5-inner">
+        <div id="s5-logo">
+          <img src="./ucobot-logo.png" alt="UcoBot">
+        </div>
+        <div id="s5-word">UcoBot</div>
+        <div id="s5-co">Codea Desarrollos</div>
+        <p id="s5-tag">El asistente inteligente que<br>gestiona tu negocio 24/7.</p>
+        <div id="s5-cta">
+          Probalo gratis
+          <svg class="ico" width="28" height="28" style="color:#000"><use href="#i-arrow" /></svg>
+        </div>
+        <div id="s5-url">ucobot.app · sin tarjeta de crédito</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  window.__timelines = window.__timelines || {};
+  window.__timelines["main"] = tl;
+
+  /* helper: swap step icon HTML */
+  function setStepDone(id) {
+    var el = document.getElementById(id + "-icon");
+    el.innerHTML = '<div class="step-check"><svg class="ico" width="14" height="14" style="color:#000"><use href="#i-check"/></svg></div>';
+    document.getElementById(id).classList.add("done");
+    document.getElementById(id).classList.remove("active");
+  }
+  function setStepActive(id) {
+    var el = document.getElementById(id + "-icon");
+    el.innerHTML = '<div class="step-spin" id="' + id + '-spin"></div>';
+    document.getElementById(id).classList.add("active");
+    tl.to("#" + id + "-spin", { rotation: 360, duration: 0.5, ease: "none", transformOrigin: "50% 50%" });
+  }
+
+  /* ══ S1: Hero 0–2.5s — IMPACTO INMEDIATO ══ */
+  tl.from("#s1-brand",  { y: -20, autoAlpha: 0, duration: 0.28, ease: "power4.out" }, 0.05);
+  tl.from("#s1-line",   { width: 0, duration: 0.28, ease: "power4.out" }, 0.24);
+  tl.from("#s1-h1",     { y: -120, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)" }, 0.4);
+  tl.from("#s1-h1-ai",  { y:  120, autoAlpha: 0, duration: 0.44, ease: "back.out(1.3)" }, 0.56);
+  tl.from("#s1-sub",    { y: 20, autoAlpha: 0, duration: 0.36, ease: "power3.out" }, 0.9);
+  tl.from(".chip",      { scale: 0, autoAlpha: 0, duration: 0.28, ease: "back.out(2.0)",
+    stagger: { each: 0.06, from: "start" } }, 1.18);
+  tl.to("#s1-glow", { scale: 1.4, duration: 0.55, ease: "power3.out" }, 0.45);
+  tl.to("#s1-glow", { scale: 1.0, duration: 0.75, ease: "power2.inOut" }, 1.0);
+  tl.set("#s1", { autoAlpha: 0 }, 2.5);
+
+  /* ══ S3: Chat + Processing 2.5–8.5s [ANCHOR] ══ */
+  tl.set("#s3", { opacity: 1 }, 2.5);
+  tl.from("#s3-eyebrow", { x: -32, autoAlpha: 0, duration: 0.26, ease: "power4.out" }, 2.58);
+  tl.from("#s3-title",   { y: -64, autoAlpha: 0, duration: 0.4,  ease: "back.out(1.3)" }, 2.75);
+  tl.from(".chat-win",   { y: 64, autoAlpha: 0, scale: 0.95, duration: 0.42, ease: "expo.out" }, 3.05);
+
+  tl.from("#cb1", { x:  60, autoAlpha: 0, duration: 0.26, ease: "back.out(1.8)" }, 3.48);
+  tl.from("#cb2", { x: -60, autoAlpha: 0, duration: 0.26, ease: "back.out(1.8)" }, 4.08);
+  tl.from("#cb3", { x:  60, autoAlpha: 0, duration: 0.24, ease: "back.out(1.8)" }, 4.65);
+
+  tl.from("#proc-card", { y: 36, autoAlpha: 0, scale: 0.93, duration: 0.3, ease: "back.out(1.6)" }, 4.98);
+
+  tl.call(function() { setStepActive("ps1"); }, null, 5.08);
+  tl.call(function() { setStepDone("ps1");   }, null, 5.46);
+  tl.call(function() { setStepActive("ps2"); }, null, 5.5);
+  tl.call(function() { setStepDone("ps2");   }, null, 5.86);
+  tl.call(function() { setStepActive("ps3"); }, null, 5.9);
+  tl.call(function() { setStepDone("ps3");   }, null, 6.36);
+  tl.call(function() { setStepActive("ps4"); }, null, 6.4);
+  tl.call(function() { setStepDone("ps4");   }, null, 6.8);
+
+  tl.from("#cb4", { x: -60, autoAlpha: 0, scale: 0.9, duration: 0.28, ease: "back.out(2.0)" }, 7.06);
+  tl.from("#cb5", { autoAlpha: 0, y: 8, duration: 0.22, ease: "power2.out" }, 7.52);
+  tl.to("#proc-card", { borderColor: "rgba(204,255,0,0.75)", duration: 0.2, ease: "power4.out" }, 7.06);
+  tl.to("#proc-card", { borderColor: "rgba(204,255,0,0.18)", duration: 0.55, ease: "power2.inOut" }, 7.26);
+
+  /* ══ S4: Stats 8.5–11.5s [ANCHOR] ══ */
+  tl.set("#s4", { opacity: 1 }, 8.5);
+  tl.from("#s4-eyebrow", { x: -26, autoAlpha: 0, duration: 0.24, ease: "power4.out" }, 8.58);
+  tl.from("#s4-title",   { y: -72, autoAlpha: 0, duration: 0.38, ease: "back.out(1.3)" }, 8.72);
+  tl.from("#sc1", { y: 64, autoAlpha: 0, scale: 0.88, duration: 0.36, ease: "back.out(1.7)" }, 9.08);
+  tl.from("#sc2", { y: 64, autoAlpha: 0, scale: 0.88, duration: 0.36, ease: "back.out(1.7)" }, 9.24);
+  tl.from("#sc3", { y: 64, autoAlpha: 0, scale: 0.88, duration: 0.4,  ease: "back.out(1.7)" }, 9.4);
+
+  var c1 = { v: 0 };
+  tl.to(c1, { v: 312, duration: 1.4, ease: "power3.out",
+    onUpdate: function () { document.getElementById("n1").textContent = Math.round(c1.v); }
+  }, 9.12);
+  var c2 = { v: 0 };
+  tl.to(c2, { v: 147, duration: 1.3, ease: "power3.out",
+    onUpdate: function () { document.getElementById("n2").textContent = Math.round(c2.v); }
+  }, 9.28);
+  var c3 = { v: 0 };
+  tl.to(c3, { v: 168, duration: 1.3, ease: "power3.out",
+    onUpdate: function () { document.getElementById("n3").textContent = Math.round(c3.v); }
+  }, 9.44);
+
+  tl.to("#bf1", { width: "87%", duration: 0.9, ease: "expo.out" }, 9.12);
+  tl.to("#bf2", { width: "62%", duration: 0.9, ease: "expo.out" }, 9.28);
+  tl.to("#bf3", { width: "95%", duration: 0.9, ease: "expo.out" }, 9.44);
+  tl.to("#sc3", { borderColor: "rgba(204,255,0,0.6)", duration: 0.2, ease: "power4.out" }, 10.72);
+  tl.to("#sc3", { borderColor: "rgba(204,255,0,0.18)", duration: 0.5, ease: "power2.inOut" }, 10.92);
+
+  /* ══ S5: Brand Reveal 11.5–15s [ANCHOR] ══ */
+  tl.set("#s5", { opacity: 1 }, 11.5);
+  tl.from("#s5-logo",  { scale: 0, autoAlpha: 0, duration: 0.65, ease: "elastic.out(1, 0.5)" }, 11.58);
+  tl.from("#s5-word",  { y: -88, autoAlpha: 0, duration: 0.44, ease: "back.out(1.4)" }, 12.08);
+  tl.from("#s5-co",    { autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 12.44);
+  tl.from("#s5-tag",   { y: 30, autoAlpha: 0, duration: 0.4, ease: "power3.out" }, 12.78);
+  tl.from("#s5-cta",   { y: 48, scale: 0.78, autoAlpha: 0, duration: 0.44, ease: "back.out(2.2)" }, 13.22);
+  tl.from("#s5-url",   { autoAlpha: 0, duration: 0.32, ease: "power2.out" }, 13.66);
+  tl.to("#s5-logo", { y: -14, duration: 0.85, ease: "sine.inOut", yoyo: true, repeat: 1 }, 12.28);
+  tl.to("#s5-glow", { scale: 1.6, opacity: 0.85, duration: 0.38, ease: "power3.out" }, 11.58);
+  tl.to("#s5-glow", { scale: 1.12, opacity: 1,   duration: 0.9,  ease: "power2.inOut" }, 11.96);
+  tl.to("#s5-cta",  { scale: 1.05, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 1 }, 14.1);
+
+  /* ══ HyperShader — 2 transiciones épicas ══
+     1. flash-through-white : S3→S4 (chat → stats) at 8.35s
+     2. cinematic-zoom      : S4→S5 (stats → brand) at 11.25s  */
+  if (window.HyperShader) {
+    window.HyperShader.init({
+      bgColor: "#000000",
+      scenes: ["s3", "s4", "s5"],
+      timeline: tl,
+      transitions: [
+        { time: 8.35,  shader: "flash-through-white", duration: 0.3 },
+        { time: 11.25, shader: "cinematic-zoom",      duration: 0.5 }
+      ],
+    });
+  }
+})();
+</script>
+</body>
+</html>

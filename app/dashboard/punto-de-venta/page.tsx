@@ -10,31 +10,6 @@ export default async function PuntoDeVentaPage() {
     redirect("/login")
   }
 
-  const { data: allBots } = await supabase
-    .from("bots")
-    .select("id, name, features")
-    .eq("user_id", data.user.id)
-
-  const botsWithOrders = allBots?.filter((bot) =>
-    bot.features && Array.isArray(bot.features) && bot.features.includes("take_orders")
-  ) || []
-
-  if (botsWithOrders.length === 0) {
-    return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-[2rem] border border-dashed border-border/70 bg-card/70 p-8 text-center">
-        <div className="max-w-xl space-y-3">
-          <h2 className="text-2xl font-semibold">Punto de venta no habilitado</h2>
-          <p className="text-muted-foreground">
-            Para crear ventas desde el sistema necesitas al menos un bot con la funcion Tomar pedidos activa.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Ve a Bots, edita uno de tus bots y habilita la funcionalidad de pedidos para usar este modulo.
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   const [{ data: products }, { data: clients }] = await Promise.all([
     supabase
       .from("products")

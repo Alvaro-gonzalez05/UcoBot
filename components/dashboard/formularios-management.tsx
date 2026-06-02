@@ -16,7 +16,7 @@ import {
   Plus, FileText, Globe, MessageSquare, MoreHorizontal,
   Trash2, Eye, Copy, Loader2, ArrowLeft, ArrowRight, ClipboardList,
   TrendingUp, CheckCircle, Pencil, GripVertical, X,
-  Link2, ExternalLink, Settings, ListChecks, BarChart3,
+  Link2, ExternalLink, Settings, ListChecks, BarChart3, GitBranch,
   AlignLeft, CircleDot, CheckSquare, SlidersHorizontal,
   Hash, Mail, Phone, Type, Calendar, Clock, ChevronDown,
   Calculator, CreditCard, Shield, Layers, ImagePlus, Palette, Package,
@@ -37,7 +37,9 @@ interface FormField {
   step?: number
   product_category?: string
   product_ids?: string[]
-  conditional?: { fieldLabel: string; value: string }
+  conditional?: { fieldLabel: string; values: string[] }
+  link_url?: string
+  link_label?: string
 }
 
 interface FormStep {
@@ -155,6 +157,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [responseView, setResponseView] = useState<Form | null>(null)
+  const [modalSubmission, setModalSubmission] = useState<FormSubmission | null>(null)
   const [editingForm, setEditingForm] = useState<Form | null>(null)
   const [editSteps, setEditSteps] = useState<FormStep[]>([])
   const [editCotizador, setEditCotizador] = useState<CotizadorConfig>(DEFAULT_COTIZADOR)
@@ -619,6 +622,26 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                                 </SelectContent>
                               </Select>
                               <button
+                                title={field.conditional !== undefined ? "Desactivar condicional" : "Agregar condicional"}
+                                onClick={() => updateFieldInStep(stepIdx, fieldIdx, field.conditional !== undefined
+                                  ? { conditional: undefined }
+                                  : { conditional: { fieldLabel: "", values: [] } }
+                                )}
+                                className={`transition-colors flex-shrink-0 ${field.conditional !== undefined ? "text-orange-400 hover:text-orange-300" : "text-muted-foreground hover:text-orange-400"}`}
+                              >
+                                <GitBranch className="w-4 h-4" />
+                              </button>
+                              <button
+                                title={field.link_url !== undefined ? "Desactivar link" : "Agregar link de referencia"}
+                                onClick={() => updateFieldInStep(stepIdx, fieldIdx, field.link_url !== undefined
+                                  ? { link_url: undefined, link_label: undefined }
+                                  : { link_url: "" }
+                                )}
+                                className={`transition-colors flex-shrink-0 ${field.link_url !== undefined ? "text-blue-400 hover:text-blue-300" : "text-muted-foreground hover:text-blue-400"}`}
+                              >
+                                <Link2 className="w-4 h-4" />
+                              </button>
+                              <button
                                 onClick={() => removeFieldFromStep(stepIdx, fieldIdx)}
                                 className="text-muted-foreground hover:text-destructive transition-colors flex-shrink-0"
                               >
@@ -799,6 +822,110 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                                 />
                                 <span className="text-xs text-muted-foreground">Respuesta obligatoria</span>
                               </div>
+
+                              {field.conditional !== undefined && (() => {
+                                const otherFields = step.fields.filter((_, i) => i !== fieldIdx)
+                                const depField = otherFields.find(f => f.label === field.conditional!.fieldLabel)
+                                const depOptions = depField
+                                  ? (depField.options || []).map(o => typeof o === "string" ? o : o.value)
+                                  : []
+                                return (
+                                  <div className="space-y-2 pt-1 border-t border-border/50">
+                                    <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide flex items-center gap-1.5">
+                                      <GitBranch className="w-3 h-3" />
+                                      Mostrar este campo solo si...
+                                    </p>
+                                    {/* Field selector */}
+                                    <Select
+                                      value={field.conditional!.fieldLabel || "__none__"}
+                                      onValueChange={v => updateFieldInStep(stepIdx, fieldIdx, { conditional: { fieldLabel: v === "__none__" ? "" : v, values: [] } })}
+                                    >
+                                      <SelectTrigger className="h-8 text-xs rounded-xl">
+                                        <SelectValue placeholder="Seleccionar campo..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="__none__" className="text-xs">Seleccionar campo...</SelectItem>
+                                        {otherFields.map(f => (
+                                          <SelectItem key={f.label} value={f.label} className="text-xs">{f.label}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+
+                                    {/* Values */}
+                                    {field.conditional!.fieldLabel && (
+                                      <div className="space-y-2">
+                                        <p className="text-[10px] text-muted-foreground">Valores que lo activan:</p>
+                                        {/* Selected values as pills */}
+                                        {field.conditional!.values.length > 0 && (
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {field.conditional!.values.map(v => (
+                                              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-orange-400/15 text-orange-400 border border-orange-400/25">
+                                                {v}
+                                                <button onClick={() => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, values: field.conditional!.values.filter(x => x !== v) } })} className="hover:text-orange-200">
+                                                  <X className="w-2.5 h-2.5" />
+                                                </button>
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {/* If parent field has known options, show checkboxes */}
+                                        {depOptions.length > 0 ? (
+                                          <div className="flex flex-col gap-1">
+                                            {depOptions.filter(o => !field.conditional!.values.includes(o)).map(o => (
+                                              <button
+                                                key={o}
+                                                onClick={() => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, values: [...field.conditional!.values, o] } })}
+                                                className="flex items-center gap-2 text-xs text-left px-2 py-1.5 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
+                                              >
+                                                <Plus className="w-3 h-3 flex-shrink-0" />
+                                                {o}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        ) : (
+                                          /* Free-form input for text fields */
+                                          <div className="flex gap-2">
+                                            <Input
+                                              placeholder="Escribir valor y Enter..."
+                                              className="h-8 text-xs rounded-xl flex-1"
+                                              onKeyDown={e => {
+                                                if (e.key === "Enter") {
+                                                  const val = (e.target as HTMLInputElement).value.trim()
+                                                  if (val && !field.conditional!.values.includes(val)) {
+                                                    updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, values: [...field.conditional!.values, val] } });
+                                                    (e.target as HTMLInputElement).value = ""
+                                                  }
+                                                }
+                                              }}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+
+                              {field.link_url !== undefined && (
+                                <div className="space-y-2 pt-1 border-t border-border/50">
+                                  <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wide flex items-center gap-1.5">
+                                    <Link2 className="w-3 h-3" />
+                                    Link de referencia
+                                  </p>
+                                  <Input
+                                    placeholder="Texto del botón (ej: Ver cobertura)"
+                                    value={field.link_label || ""}
+                                    onChange={e => updateFieldInStep(stepIdx, fieldIdx, { link_label: e.target.value || undefined })}
+                                    className="h-8 text-xs rounded-xl"
+                                  />
+                                  <Input
+                                    placeholder="URL (ej: https://maps.google.com/...)"
+                                    value={field.link_url || ""}
+                                    onChange={e => updateFieldInStep(stepIdx, fieldIdx, { link_url: e.target.value })}
+                                    className="h-8 text-xs rounded-xl"
+                                  />
+                                </div>
+                              )}
                             </div>
                           </div>
                         )
@@ -1084,10 +1211,10 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
             <div className="absolute rounded-full pointer-events-none" style={{ bottom: "-20%", right: "-10%", width: "50%", height: "50%", background: "rgba(0,198,182,0.10)", filter: "blur(120px)", zIndex: 0 }} />
 
             {/* Main grid */}
-            <div className={`relative z-10 grid grid-cols-1 gap-4 ${editCotizador.enabled ? "lg:grid-cols-12" : ""}`}>
+            <div className="relative z-10 grid grid-cols-1 gap-4 lg:grid-cols-12">
 
               {/* LEFT: Form flow */}
-              <div className={`flex flex-col gap-4 ${editCotizador.enabled ? "lg:col-span-8" : ""}`}>
+              <div className="flex flex-col gap-4 lg:col-span-8">
 
                 {/* Header */}
                 <header className="glass-panel rounded-2xl p-6 flex flex-wrap justify-between items-center gap-4">
@@ -1254,64 +1381,70 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                 )}
               </div>
 
-              {/* RIGHT: Cotizador */}
-              {editCotizador.enabled && (
-                <div className="lg:col-span-4 flex flex-col gap-4">
+              {/* RIGHT: sidebar — siempre visible */}
+              <div className="lg:col-span-4 flex flex-col gap-4">
 
-                  {/* Price card preview */}
-                  <div
-                    className="rounded-2xl p-6 flex flex-col gap-4 relative overflow-hidden"
-                    style={{ background: themeGradient, boxShadow: `0 8px 32px ${editTheme.color1}1a` }}
-                  >
-                    <div className="absolute rounded-full pointer-events-none" style={{ top: 0, right: 0, width: 128, height: 128, backgroundColor: "rgba(255,255,255,0.1)", transform: "translate(50%,-50%)", filter: "blur(24px)" }} />
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wider" style={{ color: themeOnGradientDim }}>Cotización estimada</p>
-                      <div className="flex items-baseline gap-1 mt-1">
-                        <span className="font-bold" style={{ fontSize: 44, color: themeOnGradient, lineHeight: 1.1 }}>$0</span>
+                {/* Cotizador — solo cuando está activo */}
+                {editCotizador.enabled && (
+                  <>
+                    <div
+                      className="rounded-2xl p-6 flex flex-col gap-4 relative overflow-hidden"
+                      style={{ background: themeGradient, boxShadow: `0 8px 32px ${editTheme.color1}1a` }}
+                    >
+                      <div className="absolute rounded-full pointer-events-none" style={{ top: 0, right: 0, width: 128, height: 128, backgroundColor: "rgba(255,255,255,0.1)", transform: "translate(50%,-50%)", filter: "blur(24px)" }} />
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wider" style={{ color: themeOnGradientDim }}>Cotización estimada</p>
+                        <div className="flex items-baseline gap-1 mt-1">
+                          <span className="font-bold" style={{ fontSize: 44, color: themeOnGradient, lineHeight: 1.1 }}>$0</span>
+                        </div>
                       </div>
+                      <div className="rounded-xl p-3 flex flex-col gap-2 border border-white/10" style={{ backgroundColor: "rgba(17,19,28,0.2)", backdropFilter: "blur(8px)" }}>
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs" style={{ color: themeOnGradient }}>Producto seleccionado</span>
+                          <span className="text-xs font-bold" style={{ color: themeOnGradient }}>—</span>
+                        </div>
+                        <div className="h-px my-1" style={{ backgroundColor: "rgba(0,0,0,0.15)" }} />
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-bold" style={{ color: themeOnGradient }}>Total</span>
+                          <span className="text-sm font-bold" style={{ color: themeOnGradient }}>$0</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-center opacity-60" style={{ color: themeOnGradient }}>El precio se actualiza al seleccionar un producto</p>
                     </div>
-                    <div className="rounded-xl p-3 flex flex-col gap-2 border border-white/10" style={{ backgroundColor: "rgba(17,19,28,0.2)", backdropFilter: "blur(8px)" }}>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs" style={{ color: themeOnGradient }}>Producto seleccionado</span>
-                        <span className="text-xs font-bold" style={{ color: themeOnGradient }}>—</span>
-                      </div>
-                      <div className="h-px my-1" style={{ backgroundColor: "rgba(0,0,0,0.15)" }} />
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-bold" style={{ color: themeOnGradient }}>Total</span>
-                        <span className="text-sm font-bold" style={{ color: themeOnGradient }}>$0</span>
-                      </div>
-                    </div>
-                    <p className="text-xs text-center opacity-60" style={{ color: themeOnGradient }}>El precio se actualiza al seleccionar un producto</p>
-                  </div>
 
-                  {/* Payment locked preview */}
-                  {editCotizador.showPayment && (
-                    <div className="glass-panel rounded-2xl p-6 flex flex-col gap-4" style={{ opacity: 0.5 }}>
-                      <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                        <span className="material-symbols-outlined" style={{ color: "#424939", fontVariationSettings: "'FILL' 1" }}>credit_card</span>
-                        <span className="text-lg font-semibold" style={{ color: "#c2c9b5" }}>Datos de pago</span>
+                    {editCotizador.showPayment && (
+                      <div className="glass-panel rounded-2xl p-6 flex flex-col gap-4" style={{ opacity: 0.5 }}>
+                        <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                          <span className="material-symbols-outlined" style={{ color: "#424939", fontVariationSettings: "'FILL' 1" }}>credit_card</span>
+                          <span className="text-lg font-semibold" style={{ color: "#c2c9b5" }}>Datos de pago</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          {[["Titular","Juan García"],["Número de tarjeta","•••• •••• •••• ••••"],["Vencimiento","MM/AA"],["CVV","•••"]].map(([lbl,ph]) => (
+                            <div key={lbl} className="flex flex-col gap-1.5">
+                              <label className="input-label text-xs font-medium">{lbl}</label>
+                              <div className="input-field rounded-lg px-4 py-3 text-sm" style={{ color: "#8c9381", opacity: 0.5 }}>{ph}</div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        {[["Titular","Juan García"],["Número de tarjeta","•••• •••• •••• ••••"],["Vencimiento","MM/AA"],["CVV","•••"]].map(([lbl,ph]) => (
-                          <div key={lbl} className="flex flex-col gap-1.5">
-                            <label className="input-label text-xs font-medium">{lbl}</label>
-                            <div className="input-field rounded-lg px-4 py-3 text-sm" style={{ color: "#8c9381", opacity: 0.5 }}>{ph}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </>
+                )}
 
-                  {/* Trust badge */}
-                  <div className="glass-panel rounded-xl p-4 flex items-start gap-3" style={{ borderLeft: "2px solid #00c6b6" }}>
-                    <span className="material-symbols-outlined mt-0.5" style={{ color: "#00c6b6" }}>verified_user</span>
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: "#ffffff" }}>Seguro y confiable</p>
-                      <p className="text-xs mt-1 leading-relaxed" style={{ color: "#c2c9b5" }}>Tus datos están protegidos.</p>
-                    </div>
+                {/* Trust badge + branding — siempre */}
+                <div className="glass-panel rounded-xl p-4 flex items-start gap-3" style={{ borderLeft: "2px solid #00c6b6" }}>
+                  <span className="material-symbols-outlined mt-0.5" style={{ color: "#00c6b6", fontVariationSettings: "'FILL' 1" }}>verified_user</span>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "#ffffff" }}>Seguro y confiable</p>
+                    <p className="text-xs mt-1 leading-relaxed" style={{ color: "#c2c9b5" }}>Tus datos están protegidos. Al completar recibirás una confirmación por WhatsApp.</p>
                   </div>
                 </div>
-              )}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>powered by</span>
+                  <span style={{ fontSize: "clamp(40px, 7vw, 72px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: "#ffffff" }}>CODEA</span>
+                </div>
+
+              </div>
             </div>
           </div>
         )}
@@ -1395,36 +1528,96 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border">
-                    {cols.map(col => (
-                      <th key={col} className="text-left text-muted-foreground text-xs px-6 py-3 font-semibold uppercase tracking-wide whitespace-nowrap">
-                        {col}
-                      </th>
-                    ))}
-                    <th className="text-left text-muted-foreground text-xs px-6 py-3 font-semibold uppercase tracking-wide whitespace-nowrap">Fecha</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {these.map(s => (
-                    <tr key={s.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                      {cols.map(col => (
-                        <td key={col} className="px-6 py-4 text-sm whitespace-nowrap">
-                          {s.data?.[col] ?? <span className="text-muted-foreground">--</span>}
-                        </td>
-                      ))}
-                      <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
-                        {formatDistanceToNow(new Date(s.created_at), { addSuffix: true, locale: es })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 p-6">
+              {these.map((s, idx) => {
+                const c1: string = responseView.settings?.color1 || "#6366f1"
+                const c2: string = responseView.settings?.color2 || "#8b5cf6"
+                const gradient = `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)`
+                const mainVal = cols[0] ? (s.data?.[cols[0]] || "—") : "—"
+                const subVal  = cols[1] ? (s.data?.[cols[1]] || "—") : "—"
+                const stat1K  = cols[2] ?? null
+                const stat2K  = cols[3] ?? null
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => setModalSubmission(s)}
+                    className="rounded-3xl overflow-hidden shadow-xl cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98] flex flex-col"
+                    style={{ backgroundColor: "#16181f" }}
+                  >
+                    {/* Top gradient area — ~45% of card */}
+                    <div className="relative overflow-hidden flex-shrink-0" style={{ height: 140, background: gradient }}>
+                      {/* decorative blobs */}
+                      <div className="absolute -top-8 -left-8 w-36 h-36 rounded-full blur-3xl opacity-50" style={{ backgroundColor: c1 }} />
+                      <div className="absolute -bottom-6 -right-6 w-28 h-28 rounded-full blur-2xl opacity-40" style={{ backgroundColor: c2 }} />
+                      <div className="absolute inset-0 bg-gradient-to-b from-black/10 to-black/30" />
+                      {/* top-right label — like "Taskello App / Card Design" */}
+                      <div className="absolute top-3 right-3 text-right leading-tight">
+                        <p className="text-white font-bold text-sm drop-shadow">{responseView.name}</p>
+                        <p className="text-white/60 text-xs capitalize">{responseView.type}</p>
+                      </div>
+                    </div>
+
+                    {/* Bottom dark area */}
+                    <div className="flex flex-col flex-1 px-4 pt-4 pb-4 justify-between gap-3">
+                      <div>
+                        <h3 className="font-bold text-base leading-snug truncate text-white">{mainVal}</h3>
+                        <p className="text-sm mt-0.5 truncate" style={{ color: "rgba(255,255,255,0.45)" }}>{subVal}</p>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.35)" }}>
+                          {format(new Date(s.created_at), "d MMM yyyy", { locale: es })}
+                        </p>
+                        <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.35)" }}>
+                          {format(new Date(s.created_at), "HH:mm")}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
+
+        {/* Submission detail modal */}
+        <Dialog open={!!modalSubmission} onOpenChange={open => !open && setModalSubmission(null)}>
+          <DialogContent className="max-w-md p-0 overflow-hidden rounded-3xl border-0 shadow-2xl">
+            {modalSubmission && (() => {
+              const c1: string = responseView.settings?.color1 || "#6366f1"
+              const c2: string = responseView.settings?.color2 || "#8b5cf6"
+              const gradient = `linear-gradient(135deg, ${c1} 0%, ${c2} 100%)`
+              return (
+                <>
+                  {/* Gradient header */}
+                  <div className="relative h-36 overflow-hidden flex-shrink-0" style={{ background: gradient }}>
+                    <div className="absolute -top-8 -left-8 w-40 h-40 rounded-full blur-3xl opacity-50" style={{ backgroundColor: c1 }} />
+                    <div className="absolute -bottom-6 -right-6 w-32 h-32 rounded-full blur-2xl opacity-40" style={{ backgroundColor: c2 }} />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/10 to-black/40" />
+                    <div className="absolute bottom-4 left-5 right-5 flex items-end justify-between">
+                      <div>
+                        <p className="text-white font-black text-lg leading-tight drop-shadow">{responseView.name}</p>
+                        <p className="text-white/60 text-xs capitalize mt-0.5">
+                          {formatDistanceToNow(new Date(modalSubmission.created_at), { addSuffix: true, locale: es })}
+                        </p>
+                      </div>
+                      <span className="text-white/50 text-xs font-bold">#{these.findIndex(s => s.id === modalSubmission.id) + 1}</span>
+                    </div>
+                  </div>
+
+                  {/* All fields */}
+                  <div className="px-5 py-5 space-y-3 max-h-[60vh] overflow-y-auto" style={{ backgroundColor: "#16181f" }}>
+                    {cols.map(col => (
+                      <div key={col} className="rounded-2xl px-4 py-3" style={{ backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)" }}>
+                        <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.4)" }}>{col}</p>
+                        <p className="text-white font-semibold text-sm leading-snug">{modalSubmission.data?.[col] || <span style={{ color: "rgba(255,255,255,0.3)" }}>—</span>}</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )
+            })()}
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }

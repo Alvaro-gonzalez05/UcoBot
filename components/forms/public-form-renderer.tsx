@@ -25,7 +25,9 @@ interface FormField {
   options?: Array<string | { label: string; value: string }>
   product_category?: string
   product_ids?: string[]
-  conditional?: { fieldLabel: string; value: string }
+  conditional?: { fieldLabel: string; values: string[] }
+  link_url?: string
+  link_label?: string
 }
 
 interface Product {
@@ -105,13 +107,16 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const onGradient = hexLuminance(color1) > 0.35 ? darkenHex(color1, 0.25) : "#f0f0f0"
   const onGradientDim = hexLuminance(color1) > 0.35 ? darkenHex(color1, 0.3) + "cc" : "rgba(240,240,240,0.8)"
 
-  const [isDark, setIsDark] = useState(false)
+  const [isDark, setIsDark] = useState(true)
 
   // Fixed design system (light/dark, not user-configurable)
   const pageBg = isDark ? "#11131d" : "#f4f6f8"
   const panelBase: CSSProperties = isDark
-    ? { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 2px 12px rgba(0,0,0,0.3)" }
-    : { backgroundColor: "#ffffff", border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 2px 12px rgba(0,0,0,0.05)" }
+    ? { backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", boxShadow: "0 8px 32px rgba(0,0,0,0.5), 0 32px 80px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04)" }
+    : { backgroundColor: "#ffffff", border: "1px solid rgba(0,0,0,0.07)", boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 32px 80px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.12)" }
+  const fieldCard: CSSProperties = isDark
+    ? { backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, boxShadow: "0 4px 20px rgba(0,0,0,0.4), 0 16px 48px rgba(0,0,0,0.3), 0 2px 6px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.03)" }
+    : { backgroundColor: "#ffffff", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.10), 0 16px 48px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.08)" }
   const textPrimary = isDark ? "#e1e1ef" : "#111827"
   const textSecondary = isDark ? "#c2c9b5" : "#374151"
   const labelColor = isDark ? "#8b9478" : "#6b7280"
@@ -210,7 +215,12 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
     ? "stepEnterRight 0.3s cubic-bezier(0.22,1,0.36,1)"
     : "stepEnterLeft 0.3s cubic-bezier(0.22,1,0.36,1)"
 
-  const visibleFields = activeStep?.fields ?? []
+  const visibleFields = (activeStep?.fields ?? []).filter(field => {
+    const cond = field.conditional
+    if (!cond?.fieldLabel || !cond.values?.length) return true
+    const depValue = values[cond.fieldLabel] ?? ""
+    return cond.values.includes(depValue)
+  })
   const showCotizador = hasCotizador
 
   // Mini cotizador bar shown on mobile when products are selected
@@ -241,9 +251,9 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
         </div>
       )}
 
-      <div className={`w-full max-w-5xl relative z-10 grid grid-cols-1 gap-3 sm:gap-4 ${showCotizador ? "lg:grid-cols-12" : ""} ${showMiniBar ? "pb-16 lg:pb-0" : ""}`}>
+      <div className={`w-full max-w-5xl relative z-10 grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-12 ${showMiniBar ? "pb-16 lg:pb-0" : ""}`}>
 
-        <div className={`flex flex-col gap-3 sm:gap-4 ${showCotizador ? "lg:col-span-8" : ""}`}>
+        <div className="flex flex-col gap-3 sm:gap-4 lg:col-span-8">
 
           {/* Header */}
           <header className="rounded-2xl p-4 sm:p-5" style={panelStyleFn()}>
@@ -309,16 +319,31 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                 <h2 className="text-base sm:text-xl font-semibold" style={{ color: textPrimary }}>{activeStep.title}</h2>
               </div>
 
-              <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {visibleFields.map((field, fi) => {
                   const isProductSelector = field.type === "product_selector"
+                  const isWide = isProductSelector || field.type === "radio" || field.type === "checkbox" || field.type === "textarea"
                   return (
-                    <div key={field.id ?? fi} className="flex flex-col gap-1.5">
+                    <div key={field.id ?? fi} className={`flex flex-col gap-2 p-3 sm:p-4${isWide ? " sm:col-span-2" : ""}`} style={fieldCard}>
                       {!isProductSelector && (
-                        <label className="text-xs font-semibold" style={{ color: labelColor }}>
-                          {field.label}
-                          {field.required && <span className="ml-0.5" style={{ color: color1 }}>*</span>}
-                        </label>
+                        <div className="flex items-center justify-between gap-2">
+                          <label className="text-xs font-semibold" style={{ color: labelColor }}>
+                            {field.label}
+                            {field.required && <span className="ml-0.5" style={{ color: color1 }}>*</span>}
+                          </label>
+                          {field.link_url && (
+                            <a
+                              href={field.link_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.07)", color: isDark ? "#ffffff" : "#000000", textDecoration: "none", border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(0,0,0,0.12)" }}
+                            >
+                              <span className="material-symbols-outlined" style={{ fontSize: 12, fontVariationSettings: "'FILL' 1" }}>open_in_new</span>
+                              {field.link_label || "Ver más"}
+                            </a>
+                          )}
+                        </div>
                       )}
                       {isProductSelector ? (
                         <ProductSelector
@@ -367,33 +392,11 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
             </section>
           )}
 
-          {/* Payment form */}
-          {showCotizador && showPayment && (
-            <section className="rounded-2xl p-4 sm:p-6 flex flex-col gap-4" style={panelStyleFn()}>
-              <div className="flex items-center gap-3 pb-3" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.07)" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 20, color: color1, fontVariationSettings: "'FILL' 1" }}>credit_card</span>
-                <h2 className="text-base sm:text-lg font-semibold" style={{ color: textPrimary }}>Datos de pago</h2>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                {[
-                  { key: "__card_name", label: "Titular de la tarjeta", placeholder: "Juan García", type: "text" },
-                  { key: "__card_number", label: "Número de tarjeta", placeholder: "1234 5678 9012 3456", type: "text" },
-                  { key: "__card_expiry", label: "Vencimiento", placeholder: "MM/AA", type: "text" },
-                  { key: "__card_cvv", label: "CVV", placeholder: "123", type: "text" },
-                ].map(({ key, label, placeholder, type }) => (
-                  <div key={key} className="flex flex-col gap-1.5">
-                    <label className="text-xs font-medium" style={{ color: labelColor }}>{label}</label>
-                    <input type={type} placeholder={placeholder} value={values[key] ?? ""} onChange={e => handleChange(key, e.target.value)} style={{ ...inputOverride }} />
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
         </div>
 
-        {/* Cotizador panel — desktop sidebar, hidden on mobile (mini bar handles it) */}
-        {showCotizador && (
-          <div className="hidden lg:flex lg:col-span-4 flex-col gap-4">
+        {/* Right sidebar — always visible on desktop */}
+        <div className="hidden lg:flex lg:col-span-4 flex-col gap-4">
+          {showCotizador && (
             <CotizadorSidebar
               cotizador={cotizador}
               selectedProducts={selectedProducts}
@@ -409,9 +412,27 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
               textPrimary={textPrimary}
               bodyColor={bodyColor}
               isDark={isDark}
+              showPayment={showPayment}
+              values={values}
+              onChangeValue={handleChange}
+              inputOverride={inputOverride}
+              labelColor={labelColor}
             />
+          )}
+
+          {/* Seguro + branding — siempre al final del sidebar */}
+          <div className="rounded-xl p-3 sm:p-4 flex items-start gap-3" style={{ ...panelBase, borderLeft: `3px solid ${color2}`, boxShadow: isDark ? (panelBase.boxShadow as string) : "0 4px 16px rgba(0,0,0,0.10), 0 16px 48px rgba(0,0,0,0.07), 0 1px 4px rgba(0,0,0,0.08)" }}>
+            <span style={{ fontFamily: "'Material Symbols Outlined'", fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24", fontSize: 18, color: color2, lineHeight: 1, display: "inline-block", userSelect: "none" as const, flexShrink: 0, marginTop: 2 }}>verified_user</span>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: textPrimary }}>Seguro y confiable</p>
+              <p className="text-xs mt-1 leading-relaxed" style={{ color: bodyColor }}>Tus datos están protegidos. Al completar recibirás una confirmación por WhatsApp.</p>
+            </div>
           </div>
-        )}
+          <a href="https://codeadesarrollos.com" target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase" as const, color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
+            <span style={{ fontSize: "clamp(40px, 7vw, 72px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase" as const, lineHeight: 1, color: isDark ? "#ffffff" : "#000000", textShadow: isDark ? "none" : "0 4px 6px rgba(0,0,0,0.25), 0 10px 40px rgba(0,0,0,0.20), 0 2px 2px rgba(0,0,0,0.15)" }}>CODEA</span>
+          </a>
+        </div>
       </div>
 
       {/* Mobile full cotizador — shown below form when products selected */}
@@ -444,6 +465,7 @@ function CotizadorSidebar({
   cotizador, selectedProducts, checkedExtraCosts, onToggleExtraCost,
   cotizadorTotal, themeGradient, color1, color2, onGradient, onGradientDim,
   panelBase, textPrimary, bodyColor, isDark,
+  showPayment, values, onChangeValue, inputOverride, labelColor,
 }: {
   cotizador: CotizadorConfig | undefined
   selectedProducts: Product[]
@@ -459,6 +481,11 @@ function CotizadorSidebar({
   textPrimary: string
   bodyColor: string
   isDark: boolean
+  showPayment: boolean
+  values: Record<string, string>
+  onChangeValue: (key: string, val: string) => void
+  inputOverride: CSSProperties
+  labelColor: string
 }) {
   return (
     <div className="flex flex-col gap-3 sm:gap-4">
@@ -514,25 +541,28 @@ function CotizadorSidebar({
         </div>
       </div>
 
-      <div className="rounded-xl p-3 sm:p-4 flex items-start gap-3" style={{ ...panelBase, borderLeft: `3px solid ${color2}` }}>
-        <span style={{ fontFamily: "'Material Symbols Outlined'", fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24", fontSize: 18, color: color2, lineHeight: 1, display: "inline-block", userSelect: "none", flexShrink: 0, marginTop: 2 }}>verified_user</span>
-        <div>
-          <p className="text-sm font-semibold" style={{ color: textPrimary }}>Seguro y confiable</p>
-          <p className="text-xs mt-1 leading-relaxed" style={{ color: bodyColor }}>
-            Tus datos están protegidos. Al completar recibirás una confirmación por WhatsApp.
-          </p>
+      {showPayment && (
+        <div className="rounded-2xl p-4 sm:p-5 flex flex-col gap-3" style={panelBase}>
+          <div className="flex items-center gap-2.5 pb-3" style={{ borderBottom: isDark ? "1px solid rgba(255,255,255,0.07)" : "1px solid rgba(0,0,0,0.07)" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18, color: color1, fontVariationSettings: "'FILL' 1" }}>credit_card</span>
+            <p className="text-sm font-semibold" style={{ color: textPrimary }}>Datos de pago</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {[
+              { key: "__card_name", label: "Titular", placeholder: "Juan García", type: "text", wide: true },
+              { key: "__card_number", label: "Número de tarjeta", placeholder: "1234 5678 9012 3456", type: "text", wide: true },
+              { key: "__card_expiry", label: "Vencimiento", placeholder: "MM/AA", type: "text", wide: false },
+              { key: "__card_cvv", label: "CVV", placeholder: "123", type: "text", wide: false },
+            ].map(({ key, label, placeholder, type, wide }) => (
+              <div key={key} className={`flex flex-col gap-1.5${wide ? " col-span-2" : ""}`}>
+                <label className="text-xs font-medium" style={{ color: labelColor }}>{label}</label>
+                <input type={type} placeholder={placeholder} value={values[key] ?? ""} onChange={e => onChangeValue(key, e.target.value)} style={{ ...inputOverride }} />
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <a
-        href="https://codeadesarrollos.com"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}
-      >
-        <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase", color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
-        <span style={{ fontSize: "clamp(40px, 7vw, 72px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase", lineHeight: 1, color: isDark ? "#ffffff" : "#000000" }}>CODEA</span>
-      </a>
     </div>
   )
 }
@@ -781,13 +811,34 @@ function FieldInput({ field, value, onChange, accentColor, inputOverride }: {
 
   if (field.type === "radio") {
     return (
-      <div className="flex flex-col gap-2 mt-1">
-        {opts.map(o => (
-          <label key={o.value} className="flex items-center gap-2 cursor-pointer text-sm" style={{ color: inputOverride.color || "#374151" }}>
-            <input type="radio" name={key} value={o.value} checked={value === o.value} onChange={() => onChange(key, o.value)} style={{ accentColor }} />
-            {o.label}
-          </label>
-        ))}
+      <div className="flex flex-col gap-2">
+        {opts.map(o => {
+          const isSelected = value === o.value
+          return (
+            <label
+              key={o.value}
+              className="flex items-center gap-3 cursor-pointer rounded-xl px-3 py-2.5"
+              style={{
+                backgroundColor: isSelected ? `${accentColor}14` : inputOverride.backgroundColor,
+                border: isSelected ? `1.5px solid ${accentColor}` : inputOverride.border,
+                color: inputOverride.color || "#374151",
+                transition: "border-color 0.15s ease, background-color 0.15s ease",
+              }}
+              onClick={() => onChange(key, o.value)}
+            >
+              <div style={{
+                width: 16, height: 16, borderRadius: "50%", flexShrink: 0,
+                border: isSelected ? `2px solid ${accentColor}` : `2px solid rgba(150,150,150,0.4)`,
+                background: isSelected ? accentColor : "transparent",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all 0.15s ease",
+              }}>
+                {isSelected && <div style={{ width: 5, height: 5, borderRadius: "50%", backgroundColor: "#fff" }} />}
+              </div>
+              <span className="text-sm font-medium">{o.label}</span>
+            </label>
+          )
+        })}
       </div>
     )
   }

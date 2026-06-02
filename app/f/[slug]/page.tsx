@@ -2,7 +2,7 @@ import { notFound } from "next/navigation"
 import { createServiceClient } from "@/lib/supabase/service"
 import { PublicFormRenderer } from "@/components/forms/public-form-renderer"
 
-export const revalidate = 300
+export const revalidate = 0
 
 interface PageProps {
   params: { slug: string }
