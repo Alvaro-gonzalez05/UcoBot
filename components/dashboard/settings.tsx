@@ -60,6 +60,11 @@ export function Settings() {
     DEFAULT_SIDEBAR_SECTIONS.map(s => ({ ...s, visible: true }))
   )
 
+  // Email change state
+  const [showEmailChange, setShowEmailChange] = useState(false)
+  const [newEmail, setNewEmail] = useState("")
+  const [isSavingEmail, setIsSavingEmail] = useState(false)
+
   // Password state
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -152,6 +157,23 @@ export function Settings() {
       toast.error("Error al guardar", { description: err.message })
     } finally {
       setIsSavingProfile(false)
+    }
+  }
+
+  // ── Email change ──────────────────────────────────────────────────────────
+  const changeEmail = async () => {
+    if (!newEmail.trim() || newEmail === email) return
+    setIsSavingEmail(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ email: newEmail.trim() })
+      if (error) throw error
+      toast.success("Revisá tu correo", { description: `Se envió un link de confirmación a ${newEmail.trim()}. El cambio se aplica al confirmar.` })
+      setShowEmailChange(false)
+      setNewEmail("")
+    } catch (err: any) {
+      toast.error("Error al cambiar email", { description: err.message })
+    } finally {
+      setIsSavingEmail(false)
     }
   }
 
@@ -315,9 +337,39 @@ export function Settings() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input id="email" value={email} disabled className="bg-muted" />
-                    <p className="text-xs text-muted-foreground">El email no se puede cambiar</p>
+                    <Label>Email</Label>
+                    <div className="flex items-center gap-2">
+                      <Input value={email} disabled className="bg-muted flex-1" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setShowEmailChange(v => !v); setNewEmail("") }}
+                      >
+                        {showEmailChange ? "Cancelar" : "Cambiar"}
+                      </Button>
+                    </div>
+                    {showEmailChange && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <Input
+                          type="email"
+                          placeholder="Nuevo correo electrónico"
+                          value={newEmail}
+                          onChange={e => setNewEmail(e.target.value)}
+                          className="flex-1"
+                          onKeyDown={e => e.key === "Enter" && changeEmail()}
+                        />
+                        <Button
+                          size="sm"
+                          disabled={isSavingEmail || !newEmail.trim() || newEmail === email}
+                          onClick={changeEmail}
+                        >
+                          {isSavingEmail ? "Enviando..." : "Confirmar"}
+                        </Button>
+                      </div>
+                    )}
+                    {showEmailChange && (
+                      <p className="text-xs text-muted-foreground">Se enviará un link de confirmación al nuevo correo.</p>
+                    )}
                   </div>
                 </div>
 
