@@ -13,7 +13,6 @@
   <script src="https://cdn.jsdelivr.net/npm/@hyperframes/shader@latest/dist/index.js"></script>
 
   <style>
-    /* ── Design Tokens — UcoBot ── */
     :root {
       --bg:      #000000;
       --sidebar: #1C1C28;
@@ -27,40 +26,28 @@
       --border:  rgba(255,255,255,0.08);
       --font:    "Space Grotesk", sans-serif;
       --mono:    "JetBrains Mono", monospace;
+      --green:   #22c55e;
     }
 
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); overflow: hidden; font-family: var(--font); }
 
     #main {
-      position: relative;
-      width: 1080px;
-      height: 1920px;
-      overflow: hidden;
-      background: var(--bg);
+      position: relative; width: 1080px; height: 1920px;
+      overflow: hidden; background: var(--bg);
     }
-
     .scene {
-      position: absolute;
-      inset: 0;
-      width: 1080px;
-      height: 1920px;
-      overflow: hidden;
-    }
-
-    .scene-content {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* Grain */
-    .grain {
       position: absolute; inset: 0;
-      pointer-events: none; z-index: 200; opacity: 0.08;
+      width: 1080px; height: 1920px; overflow: hidden;
+    }
+    .scene-content {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+    }
+    .grain {
+      position: absolute; inset: 0; pointer-events: none;
+      z-index: 200; opacity: 0.08;
       background-image:
         radial-gradient(rgba(255,255,255,0.10) 1px, transparent 1.2px),
         radial-gradient(rgba(0,0,0,0.20) 1px, transparent 1.2px);
@@ -68,496 +55,484 @@
       background-position: 0 0, 1px 2px;
       mix-blend-mode: overlay;
     }
-
-    /* ── SVG Icon helper ── */
     .ico {
-      display: inline-block;
-      flex-shrink: 0;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
+      display: inline-block; flex-shrink: 0;
+      fill: none; stroke: currentColor;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
     }
 
-    /* ══════════════════════════════════════
-       SCENE 1 — Hero
-    ══════════════════════════════════════ */
+    /* ── Shared layout helpers ── */
+    .sc-pad { width: 100%; padding: 0 72px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 21px; font-weight: 600;
+      color: var(--muted2); letter-spacing: 0.14em; text-transform: uppercase;
+      margin-bottom: 12px; display: flex; align-items: center; gap: 10px;
+    }
+    .eyebrow span { color: var(--accent); }
+    .sc-title {
+      font-size: 92px; font-weight: 900; color: var(--ink);
+      letter-spacing: -0.045em; line-height: 0.95; margin-bottom: 52px;
+    }
+    .sc-title-sm {
+      font-size: 72px; font-weight: 900; color: var(--ink);
+      letter-spacing: -0.04em; line-height: 0.95; margin-bottom: 44px;
+    }
+
+    /* ══ S1 — Hero ══ */
     #s1-glow {
-      position: absolute;
-      width: 700px; height: 700px;
-      border-radius: 50%;
+      position: absolute; width: 700px; height: 700px; border-radius: 50%;
       background: radial-gradient(circle, rgba(204,255,0,0.14) 0%, transparent 70%);
-      bottom: -80px; left: 50%;
-      transform: translateX(-50%);
-      pointer-events: none;
+      bottom: -80px; left: 50%; transform: translateX(-50%); pointer-events: none;
     }
-
-    #s1-inner {
-      display: flex; flex-direction: column; align-items: flex-start;
-      padding: 0 90px; width: 100%;
-    }
-
+    #s1-inner { display: flex; flex-direction: column; align-items: flex-start; padding: 0 90px; width: 100%; }
     #s1-brand {
       display: flex; align-items: center; gap: 14px;
-      font-family: var(--mono); font-size: 22px; font-weight: 600;
-      color: var(--muted2); letter-spacing: 0.18em; text-transform: uppercase;
-      margin-bottom: 44px;
+      font-family: var(--mono); font-size: 21px; font-weight: 600;
+      color: var(--muted2); letter-spacing: 0.18em; text-transform: uppercase; margin-bottom: 40px;
     }
-
     #s1-brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
-
-    #s1-line { width: 64px; height: 5px; background: var(--accent); border-radius: 3px; margin-bottom: 44px; }
-
-    #s1-h1 {
-      font-size: 144px; font-weight: 900; color: var(--ink);
-      line-height: 0.92; letter-spacing: -0.05em;
-    }
-    #s1-h1-ai {
-      font-size: 144px; font-weight: 900; color: var(--accent);
-      line-height: 0.92; letter-spacing: -0.05em;
-    }
-
-    #s1-sub {
-      font-size: 30px; font-weight: 400; color: var(--muted);
-      margin-top: 48px; line-height: 1.55;
-    }
-
-    #s1-chips { display: flex; gap: 16px; margin-top: 52px; flex-wrap: wrap; align-items: center; }
-
+    #s1-line { width: 64px; height: 5px; background: var(--accent); border-radius: 3px; margin-bottom: 40px; }
+    #s1-h1    { font-size: 136px; font-weight: 900; color: var(--ink); line-height: 0.92; letter-spacing: -0.05em; }
+    #s1-h1-ai { font-size: 136px; font-weight: 900; color: var(--accent); line-height: 0.92; letter-spacing: -0.05em; }
+    #s1-sub   { font-size: 28px; font-weight: 400; color: var(--muted); margin-top: 44px; line-height: 1.55; }
+    #s1-chips { display: flex; gap: 14px; margin-top: 48px; flex-wrap: wrap; align-items: center; }
     .chip {
       display: flex; align-items: center; gap: 10px;
       background: var(--card); border: 1px solid var(--border);
-      color: var(--muted); font-size: 22px; font-weight: 500;
-      padding: 13px 26px; border-radius: 100px; font-family: var(--mono);
+      color: var(--muted); font-size: 20px; font-weight: 500;
+      padding: 12px 24px; border-radius: 100px; font-family: var(--mono);
     }
     .chip-hi { border-color: rgba(204,255,0,0.28); color: var(--accent); }
 
-    /* ══════════════════════════════════════
-       SCENE 3 — Chat + Processing Steps
-    ══════════════════════════════════════ */
-    #s3 .scene-content { padding: 0 60px; justify-content: flex-start; padding-top: 110px; }
-
-    #s3-head { width: 100%; margin-bottom: 40px; }
-    #s3-eyebrow {
-      font-family: var(--mono); font-size: 21px; color: var(--muted2);
-      letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px;
-    }
-    #s3-eyebrow span { color: var(--accent); }
-    #s3-title { font-size: 72px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; line-height: 1.0; }
-
+    /* ══ S3 — Chat ══ */
+    #s3 .scene-content { padding: 0 56px; justify-content: flex-start; padding-top: 100px; }
+    #s3-head { width: 100%; margin-bottom: 36px; }
     .chat-win {
       width: 100%; background: var(--card);
-      border-radius: 2rem; overflow: hidden;
-      border: 1px solid var(--border);
+      border-radius: 2rem; overflow: hidden; border: 1px solid var(--border);
     }
-
     .chat-hdr {
-      background: var(--card2); padding: 26px 32px;
-      display: flex; align-items: center; gap: 16px;
-      border-bottom: 1px solid var(--border);
+      background: var(--card2); padding: 24px 30px;
+      display: flex; align-items: center; gap: 16px; border-bottom: 1px solid var(--border);
     }
-
     .chat-av {
-      width: 52px; height: 52px; border-radius: 50%;
-      overflow: hidden; flex-shrink: 0;
-      box-shadow: 0 0 18px rgba(204,255,0,0.25);
+      width: 50px; height: 50px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+      box-shadow: 0 0 16px rgba(204,255,0,0.25);
     }
     .chat-av img { width: 100%; height: 100%; object-fit: cover; }
-
-    .chat-nm  { font-size: 24px; font-weight: 700; color: var(--ink); }
-    .chat-st  { font-size: 16px; color: #22c55e; font-family: var(--mono); }
-
-    .chat-body {
-      padding: 28px 28px 32px;
-      display: flex; flex-direction: column; gap: 14px;
-    }
-
-    .bubble {
-      max-width: 84%; padding: 16px 22px;
-      border-radius: 18px; font-size: 23px; line-height: 1.45; font-weight: 400;
-    }
-
-    /* User bubble — lime, matches UcoBot UI */
-    .b-user {
-      background: var(--accent); color: #000;
-      align-self: flex-end; border-bottom-right-radius: 4px; font-weight: 600;
-    }
-
-    /* Bot bubble — zinc-800, matches UcoBot UI */
-    .b-bot {
-      background: var(--card2); color: var(--ink);
-      align-self: flex-start; border-bottom-left-radius: 4px;
-    }
+    .chat-nm { font-size: 23px; font-weight: 700; color: var(--ink); }
+    .chat-st { font-size: 15px; color: var(--green); font-family: var(--mono); }
+    .chat-body { padding: 26px 26px 30px; display: flex; flex-direction: column; gap: 13px; }
+    .bubble { max-width: 84%; padding: 15px 21px; border-radius: 17px; font-size: 22px; line-height: 1.45; }
+    .b-user { background: var(--accent); color: #000; align-self: flex-end; border-bottom-right-radius: 4px; font-weight: 600; }
+    .b-bot  { background: var(--card2); color: var(--ink); align-self: flex-start; border-bottom-left-radius: 4px; }
     .b-bot strong { color: var(--accent); }
-
-    .b-ts {
-      font-family: var(--mono); font-size: 15px;
-      color: var(--muted2); align-self: flex-end;
-    }
-
-    /* Processing Steps Card */
+    .b-ts { font-family: var(--mono); font-size: 14px; color: var(--muted2); align-self: flex-end; }
     .proc-card {
-      background: var(--card2);
-      border: 1px solid rgba(204,255,0,0.18);
-      border-radius: 18px;
-      padding: 22px 26px;
-      display: flex; flex-direction: column; gap: 16px;
-      align-self: flex-start;
-      min-width: 460px;
-      border-bottom-left-radius: 4px;
+      background: var(--card2); border: 1px solid rgba(204,255,0,0.18);
+      border-radius: 16px; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;
+      align-self: flex-start; min-width: 440px; border-bottom-left-radius: 4px;
     }
-
-    .proc-step {
-      display: flex; align-items: center; gap: 16px;
-      font-size: 21px; color: var(--muted2); font-family: var(--mono);
-    }
-
+    .proc-step { display: flex; align-items: center; gap: 14px; font-size: 20px; color: var(--muted2); font-family: var(--mono); }
     .proc-step.done   { color: var(--muted); }
     .proc-step.active { color: var(--ink); font-weight: 600; }
+    .step-icon { width: 26px; height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .step-ring { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--muted2); }
+    .step-check { width: 20px; height: 20px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+    .step-spin  { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--card); border-top-color: var(--accent); }
 
-    .step-icon {
-      width: 28px; height: 28px; flex-shrink: 0;
-      display: flex; align-items: center; justify-content: center;
+    /* ══ S_AUTO — Automatizaciones ══ */
+    #s_auto .scene-content { padding: 0 72px; justify-content: center; }
+    .promo-card {
+      width: 100%; background: var(--sidebar);
+      border: 1px solid var(--border); border-radius: 28px; padding: 48px 48px 40px;
     }
-
-    /* Pending ring */
-    .step-ring {
-      width: 22px; height: 22px; border-radius: 50%;
-      border: 2px solid var(--muted2);
+    .promo-tag {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(204,255,0,0.12); border: 1px solid rgba(204,255,0,0.25);
+      color: var(--accent); font-family: var(--mono); font-size: 18px; font-weight: 600;
+      padding: 8px 18px; border-radius: 100px; letter-spacing: 0.08em;
+      text-transform: uppercase; margin-bottom: 20px;
     }
-
-    /* Done check ring */
-    .step-check {
-      width: 22px; height: 22px; border-radius: 50%;
-      background: var(--accent);
-      display: flex; align-items: center; justify-content: center;
+    .promo-name { font-size: 52px; font-weight: 900; color: var(--ink); letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 12px; }
+    .promo-desc { font-size: 28px; font-weight: 300; color: var(--muted); margin-bottom: 36px; }
+    .promo-meta {
+      display: flex; align-items: center; gap: 24px;
+      margin-bottom: 40px; padding-bottom: 36px; border-bottom: 1px solid var(--border);
     }
-
-    /* Spinner arc */
-    .step-spin {
-      width: 22px; height: 22px; border-radius: 50%;
-      border: 2px solid var(--card);
-      border-top-color: var(--accent);
+    .promo-meta-item { display: flex; align-items: center; gap: 10px; font-size: 22px; color: var(--muted2); font-family: var(--mono); }
+    .promo-meta-item span { color: var(--ink); font-weight: 700; }
+    .promo-btn {
+      width: 100%; background: var(--accent); color: #000;
+      font-size: 30px; font-weight: 900; padding: 28px 0;
+      border-radius: 18px; display: flex; align-items: center; justify-content: center; gap: 14px;
     }
+    /* result row after sending */
+    .promo-result {
+      margin-top: 28px; display: flex; align-items: center; gap: 20px;
+    }
+    .promo-chip {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3);
+      color: var(--green); font-family: var(--mono); font-size: 19px; font-weight: 600;
+      padding: 10px 20px; border-radius: 100px;
+    }
+    .promo-counter {
+      font-size: 52px; font-weight: 900; color: var(--accent);
+      letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+    }
+    .promo-counter-lbl { font-size: 20px; color: var(--muted); font-family: var(--mono); }
 
-    /* ══════════════════════════════════════
-       SCENE 4 — Stats [ANCHOR]
-    ══════════════════════════════════════ */
+    /* ══ S_PROMPT — Personalizar Bot ══ */
+    #s_prompt .scene-content { padding: 0 72px; justify-content: center; }
+    .prompt-card {
+      width: 100%; background: var(--sidebar);
+      border: 1px solid var(--border); border-radius: 28px; padding: 48px;
+    }
+    .prompt-label { font-family: var(--mono); font-size: 18px; color: var(--muted2); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 14px; }
+    .prompt-box {
+      background: var(--card2); border: 1px solid rgba(204,255,0,0.25);
+      border-radius: 16px; padding: 28px 30px;
+      font-family: var(--mono); font-size: 22px; color: var(--muted); line-height: 1.6;
+      min-height: 220px; margin-bottom: 36px; position: relative;
+    }
+    .prompt-cursor {
+      display: inline-block; width: 2px; height: 1.2em;
+      background: var(--accent); margin-left: 2px; vertical-align: middle;
+    }
+    .feature-toggle-list { display: flex; flex-direction: column; gap: 16px; }
+    .ft-row {
+      display: flex; align-items: center; gap: 20px;
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px 26px;
+    }
+    .ft-toggle {
+      width: 52px; height: 28px; background: var(--card); border-radius: 14px;
+      flex-shrink: 0; position: relative;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .ft-toggle.on { background: var(--accent); }
+    .ft-thumb {
+      position: absolute; top: 3px; width: 22px; height: 22px;
+      border-radius: 50%; background: #000;
+    }
+    .ft-toggle.on .ft-thumb { left: 26px; }
+    .ft-toggle:not(.on) .ft-thumb { left: 3px; }
+    .ft-name { font-size: 23px; font-weight: 600; color: var(--ink); flex: 1; }
+    .ft-name.off { color: var(--muted2); }
+    .ft-badge {
+      font-family: var(--mono); font-size: 16px; font-weight: 600;
+      padding: 5px 14px; border-radius: 100px;
+    }
+    .ft-badge.on  { background: rgba(204,255,0,0.12); color: var(--accent); border: 1px solid rgba(204,255,0,0.25); }
+    .ft-badge.off { background: var(--card); color: var(--muted2); border: 1px solid var(--border); }
+
+    /* ══ S_RESERVAS — Calendario ══ */
+    #s_reservas .scene-content { padding: 0 60px; justify-content: flex-start; padding-top: 100px; }
+    .reserva-split { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; width: 100%; }
+    /* mini chat */
+    .mini-chat-win {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 24px; overflow: hidden;
+    }
+    .mini-chat-hdr {
+      background: var(--card2); padding: 18px 22px;
+      display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--border);
+    }
+    .mini-av {
+      width: 38px; height: 38px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+    }
+    .mini-av img { width: 100%; height: 100%; object-fit: cover; }
+    .mini-nm { font-size: 18px; font-weight: 700; color: var(--ink); }
+    .mini-body { padding: 18px 18px 20px; display: flex; flex-direction: column; gap: 10px; }
+    .mini-bubble { padding: 12px 16px; border-radius: 14px; font-size: 18px; line-height: 1.4; }
+    .mb-user { background: var(--accent); color: #000; align-self: flex-end; border-bottom-right-radius: 3px; font-weight: 600; max-width: 88%; }
+    .mb-bot  { background: var(--card2); color: var(--ink); align-self: flex-start; border-bottom-left-radius: 3px; max-width: 92%; }
+    /* calendar card */
+    .cal-card {
+      background: var(--sidebar); border: 1px solid var(--border);
+      border-radius: 24px; padding: 28px 24px;
+    }
+    .cal-month { font-size: 22px; font-weight: 700; color: var(--ink); margin-bottom: 20px; letter-spacing: -0.01em; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+    .cal-dow { font-family: var(--mono); font-size: 14px; color: var(--muted2); text-align: center; padding-bottom: 6px; }
+    .cal-day {
+      font-size: 18px; font-weight: 500; color: var(--muted2); text-align: center;
+      padding: 8px 4px; border-radius: 10px;
+    }
+    .cal-day.today { background: var(--accent); color: #000; font-weight: 900; }
+    .cal-day.has-booking { color: var(--ink); font-weight: 700; position: relative; }
+    .cal-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin: 2px auto 0; }
+    .booking-tag {
+      margin-top: 20px; background: rgba(204,255,0,0.1);
+      border: 1px solid rgba(204,255,0,0.3); border-radius: 14px;
+      padding: 16px 20px; display: flex; align-items: center; gap: 12px;
+      font-size: 20px; color: var(--ink);
+    }
+    .booking-tag strong { color: var(--accent); }
+
+    /* ══ S_APRENDE — Bot aprende ══ */
+    #s_aprende .scene-content { padding: 0 72px; justify-content: center; }
+    .learn-center {
+      display: flex; flex-direction: column; align-items: center; width: 100%;
+    }
+    .learn-logo {
+      width: 120px; height: 120px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+      box-shadow: 0 0 0 2px rgba(204,255,0,0.2), 0 0 40px rgba(204,255,0,0.2);
+      margin-bottom: 36px;
+    }
+    .learn-logo img { width: 100%; height: 100%; object-fit: cover; }
+    .learn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; margin-bottom: 40px; }
+    .learn-card {
+      background: var(--sidebar); border: 1px solid var(--border);
+      border-radius: 20px; padding: 28px 28px;
+      display: flex; align-items: center; gap: 18px;
+    }
+    .learn-card.done { border-color: rgba(204,255,0,0.3); }
+    .learn-check {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: rgba(204,255,0,0.15); border: 2px solid rgba(204,255,0,0.3);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .learn-check.filled { background: var(--accent); border-color: var(--accent); }
+    .learn-name  { font-size: 22px; font-weight: 700; color: var(--ink); }
+    .learn-sub   { font-size: 17px; font-weight: 400; color: var(--muted); margin-top: 3px; }
+    .learn-bar-wrap { width: 100%; }
+    .learn-bar-lbl  { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 18px; color: var(--muted2); margin-bottom: 10px; }
+    .learn-bar-lbl span { color: var(--accent); font-weight: 700; }
+    .learn-bar-track { width: 100%; height: 8px; background: var(--card2); border-radius: 4px; overflow: hidden; }
+    .learn-bar-fill  { height: 100%; background: var(--accent); border-radius: 4px; width: 0; }
+
+    /* ══ S4 — Stats ══ */
     #s4 .scene-content { padding: 0 60px; }
-
-    #s4-eyebrow {
-      font-family: var(--mono); font-size: 21px; color: var(--muted2);
-      letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 14px;
-      align-self: flex-start; width: 100%;
-    }
-    #s4-eyebrow span { color: var(--accent); }
-
-    #s4-title {
-      font-size: 92px; font-weight: 900; color: var(--ink);
-      letter-spacing: -0.04em; line-height: 1.0; margin-bottom: 52px;
-      align-self: flex-start; width: 100%;
-    }
-
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 100%; }
-
     .stat-card {
-      background: var(--sidebar);
-      border: 1px solid var(--border);
-      border-radius: 22px; padding: 36px 32px;
-      display: flex; flex-direction: column; gap: 8px;
+      background: var(--sidebar); border: 1px solid var(--border);
+      border-radius: 22px; padding: 36px 32px; display: flex; flex-direction: column; gap: 8px;
     }
-
     .stat-ico-row {
       display: flex; align-items: center; gap: 10px;
       font-family: var(--mono); font-size: 18px; color: var(--muted2);
       text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;
     }
-
     .stat-num {
       font-size: 88px; font-weight: 900; color: var(--ink);
-      line-height: 1; letter-spacing: -0.04em;
-      font-variant-numeric: tabular-nums;
+      line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
     }
     .stat-num .hi   { color: var(--accent); }
     .stat-num .unit { font-size: 44px; color: var(--muted2); }
-
     .stat-lbl { font-size: 21px; font-weight: 400; color: var(--muted); }
-
-    .bar-track {
-      width: 100%; height: 5px; background: var(--card2);
-      border-radius: 3px; margin-top: 16px; overflow: hidden;
-    }
-    .bar-fill { height: 100%; background: var(--accent); border-radius: 3px; width: 0; }
-
+    .bar-track { width: 100%; height: 5px; background: var(--card2); border-radius: 3px; margin-top: 16px; overflow: hidden; }
+    .bar-fill  { height: 100%; background: var(--accent); border-radius: 3px; width: 0; }
     .stat-card-wide {
-      grid-column: 1 / -1;
-      background: var(--sidebar);
-      border: 1px solid rgba(204,255,0,0.18);
-      border-radius: 22px;
-      padding: 32px 36px;
-      display: flex; align-items: center; gap: 32px;
+      grid-column: 1 / -1; background: var(--sidebar);
+      border: 1px solid rgba(204,255,0,0.18); border-radius: 22px;
+      padding: 32px 36px; display: flex; align-items: center; gap: 32px;
     }
     .stat-card-wide .stat-num { font-size: 80px; }
 
-    /* ══════════════════════════════════════
-       SCENE 5 — Brand Reveal [ANCHOR]
-    ══════════════════════════════════════ */
+    /* ══ S5 — Brand Reveal ══ */
     #s5-glow {
-      position: absolute;
-      width: 1000px; height: 1000px; border-radius: 50%;
+      position: absolute; width: 1000px; height: 1000px; border-radius: 50%;
       background: radial-gradient(circle, rgba(204,255,0,0.16) 0%, transparent 70%);
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
+      top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
     }
-
     #s5-inner { display: flex; flex-direction: column; align-items: center; gap: 0; }
-
     #s5-logo {
-      width: 180px; height: 180px; border-radius: 50%;
-      overflow: hidden; flex-shrink: 0;
+      width: 180px; height: 180px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
       margin-bottom: 44px;
       box-shadow: 0 0 0 2px rgba(204,255,0,0.18), 0 0 60px rgba(204,255,0,0.22), 0 20px 48px rgba(0,0,0,0.45);
     }
     #s5-logo img { width: 100%; height: 100%; object-fit: cover; }
-
     #s5-word {
-      font-size: 124px; font-weight: 900; color: var(--ink);
+      font-size: 120px; font-weight: 900; color: var(--ink);
       letter-spacing: -0.05em; line-height: 1; margin-bottom: 10px;
     }
-
-    #s5-co {
-      font-family: var(--mono); font-size: 20px; color: var(--muted2);
-      letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 52px;
-    }
-
-    #s5-tag {
-      font-size: 34px; font-weight: 300; color: var(--muted);
-      text-align: center; line-height: 1.45; max-width: 780px; margin-bottom: 64px;
-    }
-
+    #s5-co { font-family: var(--mono); font-size: 20px; color: var(--muted2); letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 52px; }
+    #s5-tag { font-size: 33px; font-weight: 300; color: var(--muted); text-align: center; line-height: 1.45; max-width: 780px; margin-bottom: 60px; }
     #s5-cta {
       display: flex; align-items: center; gap: 16px;
       background: var(--accent); color: #000;
       font-size: 32px; font-weight: 700;
       padding: 28px 80px; border-radius: 100px; margin-bottom: 28px;
     }
-
-    #s5-url {
-      font-family: var(--mono); font-size: 22px;
-      color: var(--muted2); letter-spacing: 0.06em;
-    }
+    #s5-url { font-family: var(--mono); font-size: 22px; color: var(--muted2); letter-spacing: 0.06em; }
   </style>
 </head>
 <body>
+
 <!-- ── SVG Icon defs ── -->
 <svg width="0" height="0" style="position:absolute">
   <defs>
-    <!-- LayoutDashboard -->
     <symbol id="i-dashboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-      <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+      <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+      <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
     </symbol>
-    <!-- MessageSquare -->
     <symbol id="i-msg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </symbol>
-    <!-- Bot -->
     <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 8V4H8" /><rect x="3" y="8" width="18" height="14" rx="3" />
-      <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
-      <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
-      <path d="M6 17h12" />
+      <path d="M12 8V4H8"/><rect x="3" y="8" width="18" height="14" rx="3"/>
+      <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none"/>
+      <path d="M6 17h12"/>
     </symbol>
-    <!-- Users -->
     <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
     </symbol>
-    <!-- ShoppingBag -->
     <symbol id="i-bag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <path d="M16 10a4 4 0 0 1-8 0" />
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <path d="M16 10a4 4 0 0 1-8 0"/>
     </symbol>
-    <!-- Calendar -->
     <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
     </symbol>
-    <!-- Zap -->
     <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
     </symbol>
-    <!-- User (single) -->
     <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
     </symbol>
-    <!-- Database -->
     <symbol id="i-db" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <ellipse cx="12" cy="5" rx="9" ry="3" />
-      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" />
-      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
+      <ellipse cx="12" cy="5" rx="9" ry="3"/>
+      <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+      <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
     </symbol>
-    <!-- Send -->
     <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="22" y1="2" x2="11" y2="13" />
-      <polygon points="22 2 15 22 11 13 2 9 22 2" />
+      <line x1="22" y1="2" x2="11" y2="13"/>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"/>
     </symbol>
-    <!-- Clock -->
     <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
+      <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
     </symbol>
-    <!-- Check mark (for step-check) -->
     <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="20 6 9 17 4 12" />
+      <polyline points="20 6 9 17 4 12"/>
     </symbol>
-    <!-- ArrowRight -->
     <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="5" y1="12" x2="19" y2="12" />
-      <polyline points="12 5 19 12 12 19" />
+      <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
     </symbol>
-    <!-- WhatsApp-style phone+chat (simplified) -->
     <symbol id="i-wa" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.1 2 2 0 0 1 3.62 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6.06 6.06l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.1 2 2 0 0 1 3.62 1h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.96a16 16 0 0 0 6.06 6.06l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
     </symbol>
-    <!-- Instagram-style camera -->
     <symbol id="i-ig" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+      <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+    </symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+      <line x1="7" y1="7" x2="7.01" y2="7"/>
+    </symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+    </symbol>
+    <symbol id="i-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="1" y="3" width="15" height="13"/>
+      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+      <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
     </symbol>
   </defs>
 </svg>
 
-<div id="main" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="15">
+<!-- ═══════════════════════════════════════════════════════════
+     TIMELINE: 30s
+     S1(0-2.5) → S3(2.5-8.5)[A] →flash→ S_AUTO(8.5-12.5)[A]
+     → S_PROMPT(12.5-16) → S_RES(16-19.5) → S_APR(19.5-23)[A]
+     →whip→ S4(23-26)[A] →zoom→ S5(26-30)[A]
+═══════════════════════════════════════════════════════════ -->
+<div id="main" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="30">
 
   <!-- ── Audio ── -->
-  <!-- Música de fondo: Thunderbird by Kevin MacLeod (CC BY) -->
-  <audio data-start="0" data-duration="15" data-track-index="10" data-volume="0.5" src="./music.mp3"></audio>
-  <!-- SFX: pasos del procesamiento -->
-  <audio data-start="5.5"  data-duration="1" data-track-index="11" data-volume="0.7" src="./notification.mp3"></audio>
-  <audio data-start="5.9"  data-duration="1" data-track-index="12" data-volume="0.7" src="./notification.mp3"></audio>
-  <audio data-start="6.4"  data-duration="1" data-track-index="13" data-volume="0.7" src="./notification.mp3"></audio>
-  <audio data-start="6.85" data-duration="1" data-track-index="14" data-volume="0.7" src="./notification.mp3"></audio>
-  <!-- SFX: confirmación de pedido -->
-  <audio data-start="7.1"  data-duration="2" data-track-index="15" data-volume="0.9" src="./cash-register.mp3"></audio>
+  <audio data-start="0"    data-duration="30" data-track-index="10" data-volume="0.48" src="./music.mp3"></audio>
+  <!-- SFX chat processing steps -->
+  <audio data-start="5.46" data-duration="1"  data-track-index="11" data-volume="0.65" src="./notification.mp3"></audio>
+  <audio data-start="5.86" data-duration="1"  data-track-index="12" data-volume="0.65" src="./notification.mp3"></audio>
+  <audio data-start="6.36" data-duration="1"  data-track-index="13" data-volume="0.65" src="./notification.mp3"></audio>
+  <audio data-start="6.80" data-duration="1"  data-track-index="14" data-volume="0.65" src="./notification.mp3"></audio>
+  <!-- SFX pedido confirmado -->
+  <audio data-start="7.06" data-duration="2"  data-track-index="15" data-volume="0.85" src="./cash-register.mp3"></audio>
+  <!-- SFX promo enviada -->
+  <audio data-start="10.6" data-duration="2"  data-track-index="16" data-volume="0.85" src="./cash-register.mp3"></audio>
+  <!-- SFX reserva confirmada -->
+  <audio data-start="18.1" data-duration="1"  data-track-index="17" data-volume="0.7"  src="./notification.mp3"></audio>
+  <!-- SFX aprendizaje completo (cada card) -->
+  <audio data-start="21.0" data-duration="1"  data-track-index="18" data-volume="0.55" src="./notification.mp3"></audio>
+  <audio data-start="21.4" data-duration="1"  data-track-index="19" data-volume="0.55" src="./notification.mp3"></audio>
+  <audio data-start="21.8" data-duration="1"  data-track-index="20" data-volume="0.55" src="./notification.mp3"></audio>
+  <audio data-start="22.2" data-duration="1"  data-track-index="21" data-volume="0.55" src="./notification.mp3"></audio>
 
   <div class="grain"></div>
 
-  <!-- ════════════════════════════════════════
-       SCENE 1 · Hero · 0s → 2.5s
-  ════════════════════════════════════════ -->
+  <!-- ═══════════════════════════════════
+       S1 · Hero · 0 → 2.5s
+  ═══════════════════════════════════ -->
   <div class="scene clip" id="s1" data-start="0" data-duration="2.5" data-track-index="0">
     <div id="s1-glow"></div>
     <div class="scene-content" style="justify-content:center;">
       <div id="s1-inner">
-        <div id="s1-brand">
-          <div id="s1-brand-dot"></div>
-          UCOBOT · IA para tu negocio
-        </div>
+        <div id="s1-brand"><div id="s1-brand-dot"></div>UCOBOT · IA para tu negocio</div>
         <div id="s1-line"></div>
         <div id="s1-h1">Modernizá<br>tu negocio</div>
         <div id="s1-h1-ai">con IA.</div>
         <p id="s1-sub">Chatbot · CRM · Automatizaciones<br>en WhatsApp e Instagram.</p>
         <div id="s1-chips">
-          <span class="chip chip-hi">
-            <svg class="ico" width="20" height="20"><use href="#i-wa" /></svg>
-            WhatsApp
-          </span>
-          <span class="chip chip-hi">
-            <svg class="ico" width="20" height="20"><use href="#i-ig" /></svg>
-            Instagram
-          </span>
-          <span class="chip">
-            <svg class="ico" width="20" height="20"><use href="#i-bag" /></svg>
-            Pedidos
-          </span>
-          <span class="chip">
-            <svg class="ico" width="20" height="20"><use href="#i-cal" /></svg>
-            Reservas
-          </span>
+          <span class="chip chip-hi"><svg class="ico" width="20" height="20"><use href="#i-wa"/></svg>WhatsApp</span>
+          <span class="chip chip-hi"><svg class="ico" width="20" height="20"><use href="#i-ig"/></svg>Instagram</span>
+          <span class="chip"><svg class="ico" width="20" height="20"><use href="#i-bag"/></svg>Pedidos</span>
+          <span class="chip"><svg class="ico" width="20" height="20"><use href="#i-cal"/></svg>Reservas</span>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════
-       SCENE 3 · Chat + Processing · 2.5s → 8.5s
-  ════════════════════════════════════════ -->
+  <!-- ═══════════════════════════════════
+       S3 · Chat + Processing · 2.5 → 8.5s [ANCHOR]
+  ═══════════════════════════════════ -->
   <div class="scene clip" id="s3" data-start="2.5" data-duration="6" data-track-index="0" style="opacity:0;">
     <div class="scene-content">
       <div style="padding:0 56px;width:100%;">
         <div id="s3-head">
-          <div id="s3-eyebrow">Bot en <span>acción</span></div>
-          <div id="s3-title">Atiende solo,<br>las 24 hs.</div>
+          <div class="eyebrow">Bot en <span>acción</span></div>
+          <div class="sc-title-sm">Atiende solo,<br>las 24 hs.</div>
         </div>
         <div class="chat-win">
-          <!-- Header -->
           <div class="chat-hdr">
-            <div class="chat-av">
-              <img src="./ucobot-logo.png" alt="UcoBot">
-            </div>
-            <div>
-              <div class="chat-nm">UcoBot</div>
-              <div class="chat-st">en línea · automático</div>
-            </div>
+            <div class="chat-av"><img src="./ucobot-logo.png" alt="UcoBot"></div>
+            <div><div class="chat-nm">UcoBot</div><div class="chat-st">en línea · automático</div></div>
           </div>
-          <!-- Body -->
           <div class="chat-body">
-            <!-- 1. Cliente pide -->
             <div class="bubble b-user" id="cb1">Hola, quiero 2 pizzas y una coca</div>
-            <!-- 2. Bot responde con precio -->
-            <div class="bubble b-bot" id="cb2">
-              2× Pizza Napolitana + 1× Coca-Cola<br>
-              <strong>Total: $4.800</strong> — ¿Confirmás?
-            </div>
-            <!-- 3. Cliente confirma -->
+            <div class="bubble b-bot"  id="cb2">2× Pizza + 1× Coca-Cola<br><strong>Total: $4.800</strong> — ¿Confirmás?</div>
             <div class="bubble b-user" id="cb3">sí confirmo</div>
-
-            <!-- 4. Processing steps card -->
             <div class="proc-card" id="proc-card">
               <div class="proc-step" id="ps1">
-                <div class="step-icon" id="ps1-icon">
-                  <div class="step-ring"></div>
-                </div>
-                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-user" /></svg>
+                <div class="step-icon" id="ps1-icon"><div class="step-ring"></div></div>
+                <svg class="ico" width="16" height="16" style="color:var(--muted2)"><use href="#i-user"/></svg>
                 Identificando cliente...
               </div>
               <div class="proc-step" id="ps2">
-                <div class="step-icon" id="ps2-icon">
-                  <div class="step-ring"></div>
-                </div>
-                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-db" /></svg>
+                <div class="step-icon" id="ps2-icon"><div class="step-ring"></div></div>
+                <svg class="ico" width="16" height="16" style="color:var(--muted2)"><use href="#i-db"/></svg>
                 Guardando en base de datos...
               </div>
               <div class="proc-step" id="ps3">
-                <div class="step-icon" id="ps3-icon">
-                  <div class="step-ring"></div>
-                </div>
-                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-send" /></svg>
+                <div class="step-icon" id="ps3-icon"><div class="step-ring"></div></div>
+                <svg class="ico" width="16" height="16" style="color:var(--muted2)"><use href="#i-send"/></svg>
                 Enviando pedido al local...
               </div>
               <div class="proc-step" id="ps4">
-                <div class="step-icon" id="ps4-icon">
-                  <div class="step-ring"></div>
-                </div>
-                <svg class="ico" width="18" height="18" style="color:var(--muted2)"><use href="#i-clock" /></svg>
+                <div class="step-icon" id="ps4-icon"><div class="step-ring"></div></div>
+                <svg class="ico" width="16" height="16" style="color:var(--muted2)"><use href="#i-clock"/></svg>
                 Calculando tiempo estimado...
               </div>
             </div>
-
-            <!-- 5. Bot confirma pedido -->
-            <div class="bubble b-bot" id="cb4">
-              Pedido confirmado<br>
-              Tiempo estimado: <strong>25 min</strong>
-            </div>
+            <div class="bubble b-bot" id="cb4">Pedido confirmado<br>Tiempo estimado: <strong>25 min</strong></div>
             <div class="b-ts" id="cb5">sin intervención humana</div>
           </div>
         </div>
@@ -565,39 +540,188 @@
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════
-       SCENE 4 · Stats · 8.5s → 11.5s [ANCHOR]
-  ════════════════════════════════════════ -->
-  <div class="scene clip" id="s4" data-start="8.5" data-duration="3" data-track-index="0" style="opacity:0;">
+  <!-- ═══════════════════════════════════
+       S_AUTO · Automatizaciones · 8.5 → 12.5s [ANCHOR]
+  ═══════════════════════════════════ -->
+  <div class="scene clip" id="s_auto" data-start="8.5" data-duration="4" data-track-index="0" style="opacity:0;">
+    <div class="scene-content">
+      <div class="sc-pad">
+        <div class="eyebrow" id="au-ey"><svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-zap"/></svg>Automatizaciones</div>
+        <div class="sc-title" id="au-ti">Un click.<br>847 mensajes.</div>
+        <div class="promo-card" id="au-card">
+          <div class="promo-tag"><svg class="ico" width="14" height="14"><use href="#i-tag"/></svg>PROMO ACTIVA</div>
+          <div class="promo-name">Pizza + Bebida</div>
+          <div class="promo-desc">20% de descuento este fin de semana</div>
+          <div class="promo-meta">
+            <div class="promo-meta-item"><svg class="ico" width="16" height="16"><use href="#i-users"/></svg><span id="au-count">847</span> clientes</div>
+            <div class="promo-meta-item"><svg class="ico" width="16" height="16"><use href="#i-wa"/></svg>WhatsApp</div>
+            <div class="promo-meta-item"><svg class="ico" width="16" height="16"><use href="#i-ig"/></svg>Instagram</div>
+          </div>
+          <div class="promo-btn" id="au-btn">
+            <svg class="ico" width="24" height="24"><use href="#i-send"/></svg>
+            Enviar a todos ahora
+          </div>
+          <div class="promo-result" id="au-result" style="opacity:0;">
+            <div>
+              <div class="promo-counter" id="au-sent">0</div>
+              <div class="promo-counter-lbl">mensajes enviados</div>
+            </div>
+            <div style="margin-left:auto;display:flex;gap:12px;">
+              <div class="promo-chip"><svg class="ico" width="14" height="14"><use href="#i-check"/></svg>WhatsApp</div>
+              <div class="promo-chip"><svg class="ico" width="14" height="14"><use href="#i-check"/></svg>Instagram</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════
+       S_PROMPT · Personalizar Bot · 12.5 → 16s
+  ═══════════════════════════════════ -->
+  <div class="scene clip" id="s_prompt" data-start="12.5" data-duration="3.5" data-track-index="0" style="visibility:hidden;">
+    <div class="scene-content">
+      <div class="sc-pad">
+        <div class="eyebrow" id="pr-ey"><svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-bot"/></svg>Chatbot a medida</div>
+        <div class="sc-title-sm" id="pr-ti">Tu voz,<br>su respuesta.</div>
+        <div class="prompt-card" id="pr-card">
+          <div class="prompt-label">Personalidad del bot</div>
+          <div class="prompt-box">
+            <span id="pr-text"></span><span class="prompt-cursor" id="pr-cursor"></span>
+          </div>
+          <div class="prompt-label" style="margin-bottom:12px;">Funcionalidades activas</div>
+          <div class="feature-toggle-list">
+            <div class="ft-row" id="ft1">
+              <div class="ft-toggle on"><div class="ft-thumb"></div></div>
+              <div><div class="ft-name">Toma de pedidos</div></div>
+              <div class="ft-badge on">Activo</div>
+            </div>
+            <div class="ft-row" id="ft2">
+              <div class="ft-toggle on"><div class="ft-thumb"></div></div>
+              <div><div class="ft-name">Puntos de fidelización</div></div>
+              <div class="ft-badge on">Activo</div>
+            </div>
+            <div class="ft-row" id="ft3">
+              <div class="ft-toggle"><div class="ft-thumb"></div></div>
+              <div><div class="ft-name ft off">Reservas de mesa</div></div>
+              <div class="ft-badge off">Inactivo</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════
+       S_RESERVAS · Calendario · 16 → 19.5s
+  ═══════════════════════════════════ -->
+  <div class="scene clip" id="s_reservas" data-start="16" data-duration="3.5" data-track-index="0" style="visibility:hidden;">
+    <div class="scene-content">
+      <div style="padding:0 56px;width:100%;">
+        <div style="margin-bottom:32px;">
+          <div class="eyebrow" id="rs-ey"><svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-cal"/></svg>Reservas</div>
+          <div class="sc-title-sm" id="rs-ti">Sin llamadas,<br>sin errores.</div>
+        </div>
+        <div class="reserva-split">
+          <!-- mini chat -->
+          <div class="mini-chat-win" id="rs-chat">
+            <div class="mini-chat-hdr">
+              <div class="mini-av"><img src="./ucobot-logo.png" alt="U"></div>
+              <div><div class="mini-nm">UcoBot</div></div>
+            </div>
+            <div class="mini-body">
+              <div class="mini-bubble mb-user" id="rb1">Mesa para 4 el viernes 20hs</div>
+              <div class="mini-bubble mb-bot" id="rb2">Reservado para el viernes 6 de junio a las 20:00, 4 personas</div>
+              <div class="mini-bubble mb-user" id="rb3">perfecto gracias!</div>
+              <div class="mini-bubble mb-bot" id="rb4">Te esperamos, recordá traer tu QR de fidelización</div>
+            </div>
+          </div>
+          <!-- calendar -->
+          <div class="cal-card" id="rs-cal">
+            <div class="cal-month">Junio 2026</div>
+            <div class="cal-grid">
+              <div class="cal-dow">L</div><div class="cal-dow">M</div><div class="cal-dow">X</div>
+              <div class="cal-dow">J</div><div class="cal-dow">V</div><div class="cal-dow">S</div><div class="cal-dow">D</div>
+              <div class="cal-day">1</div><div class="cal-day">2</div><div class="cal-day">3</div>
+              <div class="cal-day">4</div>
+              <div class="cal-day has-booking" id="cal-fri">5<div class="cal-dot"></div></div>
+              <div class="cal-day">6</div><div class="cal-day">7</div>
+              <div class="cal-day">8</div><div class="cal-day">9</div><div class="cal-day">10</div>
+              <div class="cal-day">11</div><div class="cal-day">12</div><div class="cal-day">13</div><div class="cal-day">14</div>
+              <div class="cal-day">15</div><div class="cal-day today">16</div><div class="cal-day">17</div>
+              <div class="cal-day">18</div><div class="cal-day">19</div><div class="cal-day">20</div><div class="cal-day">21</div>
+            </div>
+            <div class="booking-tag" id="rs-btag" style="opacity:0;">
+              <svg class="ico" width="20" height="20" style="color:var(--accent)"><use href="#i-users"/></svg>
+              <strong>4 personas</strong> · 20:00 · vie 6 jun
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════
+       S_APRENDE · Bot aprende · 19.5 → 23s [ANCHOR]
+  ═══════════════════════════════════ -->
+  <div class="scene clip" id="s_aprende" data-start="19.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
+    <div class="scene-content">
+      <div class="sc-pad">
+        <div class="eyebrow" id="ap-ey"><svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-db"/></svg>Inteligencia</div>
+        <div class="sc-title-sm" id="ap-ti" style="margin-bottom:36px;">Tu negocio,<br>en su memoria.</div>
+        <div class="learn-center">
+          <div class="learn-logo" id="ap-logo"><img src="./ucobot-logo.png" alt="UcoBot"></div>
+          <div class="learn-grid">
+            <div class="learn-card done" id="lc1">
+              <div class="learn-check filled" id="lch1"><svg class="ico" width="18" height="18" style="color:#000"><use href="#i-check"/></svg></div>
+              <div><div class="learn-name">Menú completo</div><div class="learn-sub">Productos y precios cargados</div></div>
+            </div>
+            <div class="learn-card done" id="lc2">
+              <div class="learn-check filled" id="lch2"><svg class="ico" width="18" height="18" style="color:#000"><use href="#i-check"/></svg></div>
+              <div><div class="learn-name">Horarios</div><div class="learn-sub">Lunes a domingo actualizado</div></div>
+            </div>
+            <div class="learn-card done" id="lc3">
+              <div class="learn-check filled" id="lch3"><svg class="ico" width="18" height="18" style="color:#000"><use href="#i-check"/></svg></div>
+              <div><div class="learn-name">Precios actualizados</div><div class="learn-sub">Sincronizado automáticamente</div></div>
+            </div>
+            <div class="learn-card done" id="lc4">
+              <div class="learn-check filled" id="lch4"><svg class="ico" width="18" height="18" style="color:#000"><use href="#i-check"/></svg></div>
+              <div><div class="learn-name">Política de envíos</div><div class="learn-sub">Radio, tiempos y costos</div></div>
+            </div>
+          </div>
+          <div class="learn-bar-wrap" id="ap-bar-wrap">
+            <div class="learn-bar-lbl">Base de conocimiento <span id="ap-pct">0%</span></div>
+            <div class="learn-bar-track"><div class="learn-bar-fill" id="ap-fill"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════
+       S4 · Stats · 23 → 26s [ANCHOR]
+  ═══════════════════════════════════ -->
+  <div class="scene clip" id="s4" data-start="23" data-duration="3" data-track-index="0" style="opacity:0;">
     <div class="scene-content">
       <div style="width:100%;padding:0 60px;">
-        <div id="s4-eyebrow">Esta <span>semana</span></div>
-        <div id="s4-title">Números<br>reales.</div>
+        <div class="eyebrow" id="s4-ey"><svg class="ico" width="16" height="16" style="color:var(--accent)"><use href="#i-dashboard"/></svg>Esta <span>semana</span></div>
+        <div class="sc-title" id="s4-ti" style="margin-bottom:44px;">Números<br>reales.</div>
         <div class="stat-grid">
           <div class="stat-card" id="sc1">
-            <div class="stat-ico-row">
-              <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-bag" /></svg>
-              Pedidos
-            </div>
+            <div class="stat-ico-row"><svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-bag"/></svg>Pedidos</div>
             <div class="stat-num"><span class="hi" id="n1">0</span></div>
             <div class="stat-lbl">procesados por el bot</div>
             <div class="bar-track"><div class="bar-fill" id="bf1"></div></div>
           </div>
           <div class="stat-card" id="sc2">
-            <div class="stat-ico-row">
-              <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-users" /></svg>
-              Clientes
-            </div>
+            <div class="stat-ico-row"><svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-users"/></svg>Clientes</div>
             <div class="stat-num"><span id="n2">0</span></div>
             <div class="stat-lbl">registrados</div>
             <div class="bar-track"><div class="bar-fill" id="bf2"></div></div>
           </div>
           <div class="stat-card-wide" id="sc3">
             <div>
-              <div class="stat-ico-row" style="margin-bottom:6px;">
-                <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-clock" /></svg>
-                Atención automatizada
-              </div>
+              <div class="stat-ico-row" style="margin-bottom:6px;"><svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-clock"/></svg>Atención automatizada</div>
               <div class="stat-num"><span class="hi" id="n3">0</span><span class="unit">h</span></div>
               <div class="stat-lbl">sin pausas</div>
               <div class="bar-track" style="width:380px;margin-top:14px;"><div class="bar-fill" id="bf3"></div></div>
@@ -612,23 +736,18 @@
     </div>
   </div>
 
-  <!-- ════════════════════════════════════════
-       SCENE 5 · Brand Reveal · 11.5s → 15s [ANCHOR]
-  ════════════════════════════════════════ -->
-  <div class="scene clip" id="s5" data-start="11.5" data-duration="3.5" data-track-index="0" style="opacity:0;">
+  <!-- ═══════════════════════════════════
+       S5 · Brand Reveal · 26 → 30s [ANCHOR]
+  ═══════════════════════════════════ -->
+  <div class="scene clip" id="s5" data-start="26" data-duration="4" data-track-index="0" style="opacity:0;">
     <div id="s5-glow"></div>
     <div class="scene-content">
       <div id="s5-inner">
-        <div id="s5-logo">
-          <img src="./ucobot-logo.png" alt="UcoBot">
-        </div>
+        <div id="s5-logo"><img src="./ucobot-logo.png" alt="UcoBot"></div>
         <div id="s5-word">UcoBot</div>
         <div id="s5-co">Codea Desarrollos</div>
         <p id="s5-tag">El asistente inteligente que<br>gestiona tu negocio 24/7.</p>
-        <div id="s5-cta">
-          Probalo gratis
-          <svg class="ico" width="28" height="28" style="color:#000"><use href="#i-arrow" /></svg>
-        </div>
+        <div id="s5-cta">Probalo gratis<svg class="ico" width="28" height="28" style="color:#000"><use href="#i-arrow"/></svg></div>
         <div id="s5-url">ucobot.app · sin tarjeta de crédito</div>
       </div>
     </div>
@@ -641,10 +760,9 @@
   window.__timelines = window.__timelines || {};
   window.__timelines["main"] = tl;
 
-  /* helper: swap step icon HTML */
   function setStepDone(id) {
     var el = document.getElementById(id + "-icon");
-    el.innerHTML = '<div class="step-check"><svg class="ico" width="14" height="14" style="color:#000"><use href="#i-check"/></svg></div>';
+    el.innerHTML = '<div class="step-check"><svg class="ico" width="12" height="12" style="color:#000"><use href="#i-check"/></svg></div>';
     document.getElementById(id).classList.add("done");
     document.getElementById(id).classList.remove("active");
   }
@@ -652,98 +770,219 @@
     var el = document.getElementById(id + "-icon");
     el.innerHTML = '<div class="step-spin" id="' + id + '-spin"></div>';
     document.getElementById(id).classList.add("active");
-    tl.to("#" + id + "-spin", { rotation: 360, duration: 0.5, ease: "none", transformOrigin: "50% 50%" });
+    tl.to("#" + id + "-spin", { rotation: 360, duration: 0.7, ease: "none", transformOrigin: "50% 50%" });
   }
 
-  /* ══ S1: Hero 0–2.5s — IMPACTO INMEDIATO ══ */
-  tl.from("#s1-brand",  { y: -20, autoAlpha: 0, duration: 0.28, ease: "power4.out" }, 0.05);
-  tl.from("#s1-line",   { width: 0, duration: 0.28, ease: "power4.out" }, 0.24);
-  tl.from("#s1-h1",     { y: -120, autoAlpha: 0, duration: 0.48, ease: "back.out(1.2)" }, 0.4);
-  tl.from("#s1-h1-ai",  { y:  120, autoAlpha: 0, duration: 0.44, ease: "back.out(1.3)" }, 0.56);
-  tl.from("#s1-sub",    { y: 20, autoAlpha: 0, duration: 0.36, ease: "power3.out" }, 0.9);
-  tl.from(".chip",      { scale: 0, autoAlpha: 0, duration: 0.28, ease: "back.out(2.0)",
-    stagger: { each: 0.06, from: "start" } }, 1.18);
-  tl.to("#s1-glow", { scale: 1.4, duration: 0.55, ease: "power3.out" }, 0.45);
-  tl.to("#s1-glow", { scale: 1.0, duration: 0.75, ease: "power2.inOut" }, 1.0);
+  /* ══════════════════════════════════════
+     S1: Hero  0 – 2.5s
+  ══════════════════════════════════════ */
+  tl.from("#s1-brand", { y: -18, autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 0.1);
+  tl.from("#s1-line",  { width: 0, duration: 0.45, ease: "power3.out" }, 0.32);
+  tl.from("#s1-h1",    { y: -110, autoAlpha: 0, duration: 0.72, ease: "back.out(1.15)" }, 0.52);
+  tl.from("#s1-h1-ai", { y:  110, autoAlpha: 0, duration: 0.65, ease: "back.out(1.2)"  }, 0.74);
+  tl.from("#s1-sub",   { y: 22, autoAlpha: 0, duration: 0.55, ease: "power2.out" }, 1.1);
+  tl.from(".chip",     { scale: 0, autoAlpha: 0, duration: 0.42, ease: "back.out(1.8)",
+    stagger: { each: 0.1, from: "start" } }, 1.42);
+  tl.to("#s1-glow", { scale: 1.35, duration: 0.8,  ease: "power2.out"   }, 0.55);
+  tl.to("#s1-glow", { scale: 1.0,  duration: 1.05, ease: "power2.inOut" }, 1.35);
   tl.set("#s1", { autoAlpha: 0 }, 2.5);
 
-  /* ══ S3: Chat + Processing 2.5–8.5s [ANCHOR] ══ */
+  /* ══════════════════════════════════════
+     S3: Chat + Processing  2.5 – 8.5s  [ANCHOR]
+  ══════════════════════════════════════ */
   tl.set("#s3", { opacity: 1 }, 2.5);
-  tl.from("#s3-eyebrow", { x: -32, autoAlpha: 0, duration: 0.26, ease: "power4.out" }, 2.58);
-  tl.from("#s3-title",   { y: -64, autoAlpha: 0, duration: 0.4,  ease: "back.out(1.3)" }, 2.75);
-  tl.from(".chat-win",   { y: 64, autoAlpha: 0, scale: 0.95, duration: 0.42, ease: "expo.out" }, 3.05);
+  tl.from("#s3-head .eyebrow",    { x: -36, autoAlpha: 0, duration: 0.42, ease: "power3.out"   }, 2.62);
+  tl.from("#s3-head .sc-title-sm",{ y: -60, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)"}, 2.82);
+  tl.from(".chat-win", { y: 60, autoAlpha: 0, scale: 0.95, duration: 0.65, ease: "expo.out" }, 3.2);
+  /* Burbujas — espaciadas, cada una tiene tiempo de lectura */
+  tl.from("#cb1", { x:  56, autoAlpha: 0, duration: 0.42, ease: "back.out(1.6)" }, 3.72);
+  tl.from("#cb2", { x: -56, autoAlpha: 0, duration: 0.42, ease: "back.out(1.6)" }, 4.38);
+  tl.from("#cb3", { x:  56, autoAlpha: 0, duration: 0.38, ease: "back.out(1.6)" }, 5.0);
+  /* Processing card */
+  tl.from("#proc-card", { y: 40, autoAlpha: 0, scale: 0.93, duration: 0.48, ease: "back.out(1.5)" }, 5.32);
+  /* Steps — cada uno con ~0.55s de spinner visible antes de completarse */
+  tl.call(function() { setStepActive("ps1"); }, null, 5.45);
+  tl.call(function() { setStepDone("ps1");   }, null, 5.95);
+  tl.call(function() { setStepActive("ps2"); }, null, 6.02);
+  tl.call(function() { setStepDone("ps2");   }, null, 6.52);
+  tl.call(function() { setStepActive("ps3"); }, null, 6.58);
+  tl.call(function() { setStepDone("ps3");   }, null, 7.12);
+  tl.call(function() { setStepActive("ps4"); }, null, 7.18);
+  tl.call(function() { setStepDone("ps4");   }, null, 7.65);
+  /* Bot confirma — llega después de que terminen todos los steps */
+  tl.from("#cb4", { x: -56, autoAlpha: 0, scale: 0.92, duration: 0.44, ease: "back.out(1.8)" }, 7.88);
+  tl.from("#cb5", { autoAlpha: 0, y: 10, duration: 0.4, ease: "power2.out" }, 8.2);
+  tl.to("#proc-card", { borderColor: "rgba(204,255,0,0.7)",  duration: 0.25, ease: "power4.out"  }, 7.88);
+  tl.to("#proc-card", { borderColor: "rgba(204,255,0,0.18)", duration: 0.7,  ease: "power2.inOut"}, 8.13);
 
-  tl.from("#cb1", { x:  60, autoAlpha: 0, duration: 0.26, ease: "back.out(1.8)" }, 3.48);
-  tl.from("#cb2", { x: -60, autoAlpha: 0, duration: 0.26, ease: "back.out(1.8)" }, 4.08);
-  tl.from("#cb3", { x:  60, autoAlpha: 0, duration: 0.24, ease: "back.out(1.8)" }, 4.65);
+  /* ══════════════════════════════════════
+     S_AUTO: Automatizaciones  8.5 – 12.5s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s_auto", { opacity: 1 }, 8.5);
+  tl.from("#au-ey",   { x: -36, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 8.65);
+  tl.from("#au-ti",   { y: -68, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)" }, 8.88);
+  tl.from("#au-card", { y: 60, autoAlpha: 0, scale: 0.95, duration: 0.65, ease: "expo.out" }, 9.3);
 
-  tl.from("#proc-card", { y: 36, autoAlpha: 0, scale: 0.93, duration: 0.3, ease: "back.out(1.6)" }, 4.98);
+  /* ── Botón: atención antes del click ── */
+  /* Breathe suave dos veces */
+  tl.to("#au-btn", { scale: 1.025, duration: 0.55, ease: "sine.inOut", yoyo: true, repeat: 1 }, 10.0);
 
-  tl.call(function() { setStepActive("ps1"); }, null, 5.08);
-  tl.call(function() { setStepDone("ps1");   }, null, 5.46);
-  tl.call(function() { setStepActive("ps2"); }, null, 5.5);
-  tl.call(function() { setStepDone("ps2");   }, null, 5.86);
-  tl.call(function() { setStepActive("ps3"); }, null, 5.9);
-  tl.call(function() { setStepDone("ps3");   }, null, 6.36);
-  tl.call(function() { setStepActive("ps4"); }, null, 6.4);
-  tl.call(function() { setStepDone("ps4");   }, null, 6.8);
+  /* ── Botón: secuencia de click ── */
+  /* 1. Press físico */
+  tl.to("#au-btn", { scale: 0.95, duration: 0.12, ease: "power3.in" }, 10.95);
+  /* 2. Spring release con overshoot */
+  tl.to("#au-btn", { scale: 1.04, duration: 0.3, ease: "back.out(2.5)" }, 11.07);
+  tl.to("#au-btn", { scale: 1.0,  duration: 0.22, ease: "power2.inOut" }, 11.37);
+  /* 3. Flash blanco — sensación de energía liberada */
+  tl.to("#au-btn", { backgroundColor: "#ffffff", duration: 0.08, ease: "power4.out" }, 10.97);
+  tl.to("#au-btn", { backgroundColor: "#CCFF00", duration: 0.35, ease: "power2.out" }, 11.05);
+  /* 4. Ripple: ring que se expande desde el botón hacia afuera */
+  tl.fromTo("#au-btn",
+    { boxShadow: "0 0 0 0px rgba(204,255,0,0.65)" },
+    { boxShadow: "0 0 0 64px rgba(204,255,0,0)", duration: 0.95, ease: "power2.out" },
+    10.97
+  );
+  /* 5. Result aparece deslizándose hacia arriba */
+  tl.fromTo("#au-result",
+    { autoAlpha: 0, y: 24 },
+    { autoAlpha: 1, y: 0,  duration: 0.55, ease: "back.out(1.4)" },
+    11.3
+  );
+  /* 6. Counter 0 → 847 */
+  var sent = { v: 0 };
+  tl.to(sent, { v: 847, duration: 1.35, ease: "power2.out",
+    onUpdate: function () { document.getElementById("au-sent").textContent = Math.round(sent.v); }
+  }, 11.35);
 
-  tl.from("#cb4", { x: -60, autoAlpha: 0, scale: 0.9, duration: 0.28, ease: "back.out(2.0)" }, 7.06);
-  tl.from("#cb5", { autoAlpha: 0, y: 8, duration: 0.22, ease: "power2.out" }, 7.52);
-  tl.to("#proc-card", { borderColor: "rgba(204,255,0,0.75)", duration: 0.2, ease: "power4.out" }, 7.06);
-  tl.to("#proc-card", { borderColor: "rgba(204,255,0,0.18)", duration: 0.55, ease: "power2.inOut" }, 7.26);
+  /* ══════════════════════════════════════
+     S_PROMPT: Personalización  12.5 – 16s
+  ══════════════════════════════════════ */
+  tl.set("#s_prompt", { autoAlpha: 1 }, 12.5);
+  tl.from("#pr-ey",   { x: -36, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 12.65);
+  tl.from("#pr-ti",   { y: -60, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)" }, 12.88);
+  tl.from("#pr-card", { y: 56, autoAlpha: 0, scale: 0.95, duration: 0.65, ease: "expo.out" }, 13.22);
+  /* Typing del prompt — se "escribe" progresivamente */
+  var promptFull = 'Sos el asistente de Don Mario Pizzería. Respondés de forma amigable, rápida y tomás pedidos con precisión.';
+  var pEl = document.getElementById("pr-text");
+  var pIdx = { i: 0 };
+  tl.to(pIdx, { i: promptFull.length, duration: 1.9, ease: "none",
+    onUpdate: function () { pEl.textContent = promptFull.substring(0, Math.round(pIdx.i)); }
+  }, 13.72);
+  tl.to("#pr-cursor", { autoAlpha: 0, duration: 0.38, ease: "none", yoyo: true, repeat: 5 }, 13.72);
+  /* Feature toggles entran escalonados */
+  tl.from("#ft1", { x: -36, autoAlpha: 0, duration: 0.46, ease: "back.out(1.4)" }, 14.55);
+  tl.from("#ft2", { x: -36, autoAlpha: 0, duration: 0.46, ease: "back.out(1.4)" }, 14.85);
+  tl.from("#ft3", { x: -36, autoAlpha: 0, duration: 0.46, ease: "back.out(1.4)" }, 15.15);
+  tl.set("#s_prompt", { autoAlpha: 0 }, 16.0);
 
-  /* ══ S4: Stats 8.5–11.5s [ANCHOR] ══ */
-  tl.set("#s4", { opacity: 1 }, 8.5);
-  tl.from("#s4-eyebrow", { x: -26, autoAlpha: 0, duration: 0.24, ease: "power4.out" }, 8.58);
-  tl.from("#s4-title",   { y: -72, autoAlpha: 0, duration: 0.38, ease: "back.out(1.3)" }, 8.72);
-  tl.from("#sc1", { y: 64, autoAlpha: 0, scale: 0.88, duration: 0.36, ease: "back.out(1.7)" }, 9.08);
-  tl.from("#sc2", { y: 64, autoAlpha: 0, scale: 0.88, duration: 0.36, ease: "back.out(1.7)" }, 9.24);
-  tl.from("#sc3", { y: 64, autoAlpha: 0, scale: 0.88, duration: 0.4,  ease: "back.out(1.7)" }, 9.4);
+  /* ══════════════════════════════════════
+     S_RESERVAS: Calendario  16 – 19.5s
+  ══════════════════════════════════════ */
+  tl.set("#s_reservas", { autoAlpha: 1 }, 16.0);
+  tl.from("#rs-ey",   { x: -36, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 16.15);
+  tl.from("#rs-ti",   { y: -56, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)" }, 16.38);
+  /* Chat y calendario entran desde lados opuestos */
+  tl.from("#rs-chat", { x: -56, autoAlpha: 0, duration: 0.65, ease: "expo.out" }, 16.75);
+  tl.from("#rs-cal",  { x:  56, autoAlpha: 0, duration: 0.65, ease: "expo.out" }, 16.88);
+  /* Burbujas del mini chat */
+  tl.from("#rb1", { x: 40, autoAlpha: 0, duration: 0.42, ease: "back.out(1.5)" }, 17.3);
+  tl.from("#rb2", { x: -40, autoAlpha: 0, duration: 0.42, ease: "back.out(1.5)" }, 17.95);
+  /* Celda del viernes se ilumina */
+  tl.to("#cal-fri", { background: "rgba(204,255,0,0.25)", borderRadius: "10px", duration: 0.5, ease: "power2.out" }, 18.1);
+  tl.from("#rb3", { x: 40, autoAlpha: 0, duration: 0.38, ease: "back.out(1.5)" }, 18.45);
+  tl.from("#rb4", { x: -40, autoAlpha: 0, duration: 0.38, ease: "back.out(1.5)" }, 19.0);
+  /* Booking tag aparece en el calendario */
+  tl.fromTo("#rs-btag",
+    { autoAlpha: 0, y: 14 },
+    { autoAlpha: 1, y: 0, duration: 0.5, ease: "back.out(1.4)" },
+    18.15
+  );
+  tl.set("#s_reservas", { autoAlpha: 0 }, 19.5);
 
+  /* ══════════════════════════════════════
+     S_APRENDE: Bot aprende  19.5 – 23s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s_aprende", { opacity: 1 }, 19.5);
+  tl.from("#ap-ey",   { x: -36, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 19.65);
+  tl.from("#ap-ti",   { y: -60, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)" }, 19.88);
+  /* Logo aparece con elastic bounce */
+  tl.from("#ap-logo", { scale: 0, autoAlpha: 0, duration: 0.75, ease: "elastic.out(1, 0.55)" }, 20.22);
+  /* Cards del conocimiento entran una por una con tiempo para leer */
+  tl.from("#lc1", { y: 40, autoAlpha: 0, scale: 0.9, duration: 0.5, ease: "back.out(1.5)" }, 20.72);
+  tl.from("#lc2", { y: 40, autoAlpha: 0, scale: 0.9, duration: 0.5, ease: "back.out(1.5)" }, 21.12);
+  tl.from("#lc3", { y: 40, autoAlpha: 0, scale: 0.9, duration: 0.5, ease: "back.out(1.5)" }, 21.52);
+  tl.from("#lc4", { y: 40, autoAlpha: 0, scale: 0.9, duration: 0.5, ease: "back.out(1.5)" }, 21.92);
+  /* Barra de progreso — llega con todas las cards ya visibles */
+  tl.from("#ap-bar-wrap", { autoAlpha: 0, duration: 0.45, ease: "power2.out" }, 22.18);
+  var pct = { v: 0 };
+  tl.to(pct, { v: 100, duration: 0.7, ease: "power2.out",
+    onUpdate: function () {
+      document.getElementById("ap-pct").textContent = Math.round(pct.v) + "%";
+      document.getElementById("ap-fill").style.width = Math.round(pct.v) + "%";
+    }
+  }, 22.25);
+  /* Logo flota suavemente */
+  tl.to("#ap-logo", { y: -10, duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: 1 }, 20.6);
+
+  /* ══════════════════════════════════════
+     S4: Stats  23 – 26s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s4", { opacity: 1 }, 23.0);
+  tl.from("#s4-ey", { x: -36, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 23.15);
+  tl.from("#s4-ti", { y: -68, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)" }, 23.38);
+  tl.from("#sc1", { y: 60, autoAlpha: 0, scale: 0.9, duration: 0.55, ease: "back.out(1.6)" }, 23.82);
+  tl.from("#sc2", { y: 60, autoAlpha: 0, scale: 0.9, duration: 0.55, ease: "back.out(1.6)" }, 24.02);
+  tl.from("#sc3", { y: 60, autoAlpha: 0, scale: 0.9, duration: 0.6,  ease: "back.out(1.6)" }, 24.22);
+  /* Contadores — pace moderado para que se lean los números */
   var c1 = { v: 0 };
-  tl.to(c1, { v: 312, duration: 1.4, ease: "power3.out",
-    onUpdate: function () { document.getElementById("n1").textContent = Math.round(c1.v); }
-  }, 9.12);
+  tl.to(c1, { v: 312, duration: 1.55, ease: "power2.out",
+    onUpdate: function () { document.getElementById("n1").textContent = Math.round(c1.v); } }, 23.88);
   var c2 = { v: 0 };
-  tl.to(c2, { v: 147, duration: 1.3, ease: "power3.out",
-    onUpdate: function () { document.getElementById("n2").textContent = Math.round(c2.v); }
-  }, 9.28);
+  tl.to(c2, { v: 147, duration: 1.45, ease: "power2.out",
+    onUpdate: function () { document.getElementById("n2").textContent = Math.round(c2.v); } }, 24.08);
   var c3 = { v: 0 };
-  tl.to(c3, { v: 168, duration: 1.3, ease: "power3.out",
-    onUpdate: function () { document.getElementById("n3").textContent = Math.round(c3.v); }
-  }, 9.44);
+  tl.to(c3, { v: 168, duration: 1.45, ease: "power2.out",
+    onUpdate: function () { document.getElementById("n3").textContent = Math.round(c3.v); } }, 24.28);
+  tl.to("#bf1", { width: "87%", duration: 1.2, ease: "power2.out" }, 23.88);
+  tl.to("#bf2", { width: "62%", duration: 1.2, ease: "power2.out" }, 24.08);
+  tl.to("#bf3", { width: "95%", duration: 1.2, ease: "power2.out" }, 24.28);
+  tl.to("#sc3", { borderColor: "rgba(204,255,0,0.6)",  duration: 0.28, ease: "power4.out"  }, 25.2);
+  tl.to("#sc3", { borderColor: "rgba(204,255,0,0.18)", duration: 0.6,  ease: "power2.inOut"}, 25.48);
 
-  tl.to("#bf1", { width: "87%", duration: 0.9, ease: "expo.out" }, 9.12);
-  tl.to("#bf2", { width: "62%", duration: 0.9, ease: "expo.out" }, 9.28);
-  tl.to("#bf3", { width: "95%", duration: 0.9, ease: "expo.out" }, 9.44);
-  tl.to("#sc3", { borderColor: "rgba(204,255,0,0.6)", duration: 0.2, ease: "power4.out" }, 10.72);
-  tl.to("#sc3", { borderColor: "rgba(204,255,0,0.18)", duration: 0.5, ease: "power2.inOut" }, 10.92);
+  /* ══════════════════════════════════════
+     S5: Brand Reveal  26 – 30s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s5", { opacity: 1 }, 26.0);
+  /* Logo entra con elastic — principal elemento de la escena */
+  tl.from("#s5-logo", { scale: 0, autoAlpha: 0, duration: 0.9, ease: "elastic.out(1, 0.48)" }, 26.12);
+  tl.from("#s5-word", { y: -80, autoAlpha: 0, duration: 0.65, ease: "back.out(1.3)" }, 26.78);
+  tl.from("#s5-co",   { autoAlpha: 0, duration: 0.58, ease: "power3.out" }, 27.22);
+  tl.from("#s5-tag",  { y: 28, autoAlpha: 0, duration: 0.58, ease: "power2.out" }, 27.6);
+  tl.from("#s5-cta",  { y: 44, scale: 0.8, autoAlpha: 0, duration: 0.62, ease: "back.out(2.0)" }, 28.1);
+  tl.from("#s5-url",  { autoAlpha: 0, duration: 0.48, ease: "power2.out" }, 28.65);
+  /* Logo flota */
+  tl.to("#s5-logo", { y: -14, duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: 1 }, 26.85);
+  /* Glow respira */
+  tl.to("#s5-glow", { scale: 1.55, opacity: 0.88, duration: 0.5,  ease: "power3.out"  }, 26.12);
+  tl.to("#s5-glow", { scale: 1.1,  opacity: 1,    duration: 1.1,  ease: "power2.inOut"}, 26.62);
+  /* CTA pulsa al final para que se lea bien */
+  tl.to("#s5-cta", { scale: 1.05, duration: 0.45, ease: "sine.inOut", yoyo: true, repeat: 1 }, 29.0);
 
-  /* ══ S5: Brand Reveal 11.5–15s [ANCHOR] ══ */
-  tl.set("#s5", { opacity: 1 }, 11.5);
-  tl.from("#s5-logo",  { scale: 0, autoAlpha: 0, duration: 0.65, ease: "elastic.out(1, 0.5)" }, 11.58);
-  tl.from("#s5-word",  { y: -88, autoAlpha: 0, duration: 0.44, ease: "back.out(1.4)" }, 12.08);
-  tl.from("#s5-co",    { autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 12.44);
-  tl.from("#s5-tag",   { y: 30, autoAlpha: 0, duration: 0.4, ease: "power3.out" }, 12.78);
-  tl.from("#s5-cta",   { y: 48, scale: 0.78, autoAlpha: 0, duration: 0.44, ease: "back.out(2.2)" }, 13.22);
-  tl.from("#s5-url",   { autoAlpha: 0, duration: 0.32, ease: "power2.out" }, 13.66);
-  tl.to("#s5-logo", { y: -14, duration: 0.85, ease: "sine.inOut", yoyo: true, repeat: 1 }, 12.28);
-  tl.to("#s5-glow", { scale: 1.6, opacity: 0.85, duration: 0.38, ease: "power3.out" }, 11.58);
-  tl.to("#s5-glow", { scale: 1.12, opacity: 1,   duration: 0.9,  ease: "power2.inOut" }, 11.96);
-  tl.to("#s5-cta",  { scale: 1.05, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: 1 }, 14.1);
-
-  /* ══ HyperShader — 2 transiciones épicas ══
-     1. flash-through-white : S3→S4 (chat → stats) at 8.35s
-     2. cinematic-zoom      : S4→S5 (stats → brand) at 11.25s  */
+  /* ══════════════════════════════════════
+     HyperShader — 3 transiciones
+     S3 → S_AUTO  : flash-through-white  t=8.35   dur=0.3
+     S_APR → S4   : whip-pan             t=22.85  dur=0.3
+     S4 → S5      : cinematic-zoom       t=25.75  dur=0.5
+  ══════════════════════════════════════ */
   if (window.HyperShader) {
     window.HyperShader.init({
       bgColor: "#000000",
-      scenes: ["s3", "s4", "s5"],
+      scenes: ["s3", "s_auto", "s_aprende", "s4", "s5"],
       timeline: tl,
       transitions: [
         { time: 8.35,  shader: "flash-through-white", duration: 0.3 },
-        { time: 11.25, shader: "cinematic-zoom",      duration: 0.5 }
+        { time: 22.85, shader: "whip-pan",            duration: 0.3 },
+        { time: 25.75, shader: "cinematic-zoom",       duration: 0.5 }
       ],
     });
   }

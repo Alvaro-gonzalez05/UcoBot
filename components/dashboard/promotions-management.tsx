@@ -77,10 +77,10 @@ function getDaysUntilExpiryColor(endDate: string): string {
   const end = new Date(endDate)
   const diffMs = end.getTime() - now.getTime()
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-  if (diffDays < 0) return "text-gray-400"
+  if (diffDays < 0) return "text-muted-foreground"
   if (diffDays <= 1) return "text-red-500"
   if (diffDays <= 7) return "text-amber-500"
-  return "text-gray-700"
+  return "text-foreground"
 }
 
 function getPromotionProgress(promotion: Promotion): number {
@@ -265,8 +265,8 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
       {/* Header */}
       <header className="flex justify-between items-center mb-6 flex-shrink-0">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Gestión de Promociones</h2>
-          <p className="text-sm text-gray-500">Crea y administra tus campañas de descuentos y recompensas.</p>
+          <h2 className="text-2xl font-bold text-foreground">Gestión de Promociones</h2>
+          <p className="text-sm text-muted-foreground">Crea y administra tus campañas de descuentos y recompensas.</p>
         </div>
         <button
           onClick={() => { if (activeTab === "rewards") { setIsRewardDialogOpen(true) } else { setIsPromotionDialogOpen(true) } }}
@@ -279,36 +279,36 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6 flex-shrink-0">
-        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <div className="bg-card p-5 rounded-3xl shadow-sm border border-border border-l-[3px] border-l-blue-500">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-50 text-blue-500 rounded-2xl flex items-center justify-center">
-              <Megaphone className="w-5 h-5" />
+            <div className="w-12 h-12 text-blue-500 flex items-center justify-center">
+              <Megaphone className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Promociones Activas</p>
-              <p className="text-2xl font-bold text-gray-900">{activePromotionsCount}</p>
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Promociones Activas</p>
+              <p className="text-2xl font-bold text-foreground">{activePromotionsCount}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <div className="bg-card p-5 rounded-3xl shadow-sm border border-border border-l-[3px] border-l-amber-500">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center">
-              <Ticket className="w-5 h-5" />
+            <div className="w-12 h-12 text-amber-500 flex items-center justify-center">
+              <Ticket className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Cupones Canjeados</p>
-              <p className="text-2xl font-bold text-gray-900">{totalUses.toLocaleString("es-ES")}</p>
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Cupones Canjeados</p>
+              <p className="text-2xl font-bold text-foreground">{totalUses.toLocaleString("es-ES")}</p>
             </div>
           </div>
         </div>
-        <div className="bg-white p-5 rounded-3xl shadow-sm border border-gray-100">
+        <div className="bg-card p-5 rounded-3xl shadow-sm border border-border border-l-[3px] border-l-green-500">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-green-50 text-green-500 rounded-2xl flex items-center justify-center">
-              <Award className="w-5 h-5" />
+            <div className="w-12 h-12 text-green-500 flex items-center justify-center">
+              <Award className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Recompensas Activas</p>
-              <p className="text-2xl font-bold text-gray-900">{activeRewardsCount}</p>
+              <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Recompensas Activas</p>
+              <p className="text-2xl font-bold text-foreground">{activeRewardsCount}</p>
             </div>
           </div>
         </div>
@@ -316,22 +316,22 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
       {/* Tabs */}
       <Tabs defaultValue="promotions" className="flex-1 flex flex-col overflow-hidden" onValueChange={setActiveTab}>
-        <TabsList className="flex-shrink-0 bg-white border border-gray-100 rounded-2xl p-1 mb-4 w-fit">
+        <TabsList className="flex-shrink-0 bg-card border border-border rounded-2xl p-1 mb-4 w-fit">
           <TabsTrigger
             value="promotions"
-            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-gray-500"
+            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-muted-foreground"
           >
             Promociones
           </TabsTrigger>
           <TabsTrigger
             value="rewards"
-            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-gray-500"
+            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-muted-foreground"
           >
             Recompensas
           </TabsTrigger>
           <TabsTrigger
             value="settings"
-            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-gray-500"
+            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-muted-foreground"
           >
             Configuración
           </TabsTrigger>
@@ -342,12 +342,12 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
           <h3 className="font-bold text-lg mb-4 flex-shrink-0">Mis Promociones</h3>
           <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
             {promotions.length === 0 ? (
-              <div className="bg-white rounded-3xl border border-gray-100 p-12 flex flex-col items-center justify-center text-center">
+              <div className="bg-card rounded-3xl border border-border p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 bg-[#D1F366]/20 rounded-2xl flex items-center justify-center mb-4">
                   <Percent className="w-8 h-8 text-[#1C1C28]" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-800 mb-2">No tienes promociones aún</h3>
-                <p className="text-sm text-gray-500 mb-5">Crea tu primera promoción para atraer y fidelizar clientes</p>
+                <h3 className="text-lg font-bold text-foreground mb-2">No tienes promociones aún</h3>
+                <p className="text-sm text-muted-foreground mb-5">Crea tu primera promoción para atraer y fidelizar clientes</p>
                 <button
                   onClick={() => setIsPromotionDialogOpen(true)}
                   className="flex items-center gap-2 px-5 py-2.5 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors"
@@ -365,7 +365,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                 return (
                   <div
                     key={promotion.id}
-                    className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow"
+                    className="bg-card p-6 rounded-3xl shadow-sm border border-border flex items-center justify-between group hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-center gap-6 flex-1 min-w-0">
                       {promotion.image_url ? (
@@ -382,20 +382,20 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 mb-1 flex-wrap">
-                          <h4 className="font-bold text-lg text-gray-900 truncate">{promotion.name}</h4>
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                          <h4 className="font-bold text-lg text-foreground truncate">{promotion.name}</h4>
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${active ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
                             {active ? "Activa" : "Inactiva"}
                           </span>
                         </div>
                         {promotion.description && (
-                          <p className="text-xs text-gray-500 mb-2 truncate">{promotion.description}</p>
+                          <p className="text-xs text-muted-foreground mb-2 truncate">{promotion.description}</p>
                         )}
                         <div className="flex flex-col gap-1 mt-2">
-                          <div className="flex justify-between text-xs font-medium text-gray-500">
+                          <div className="flex justify-between text-xs font-medium text-muted-foreground">
                             <span>Límite de uso</span>
                             <span>{promotion.current_uses} / {promotion.max_uses ? promotion.max_uses.toLocaleString("es-ES") : "Sin límite"} canjes</span>
                           </div>
-                          <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
+                          <div className="w-full bg-muted h-2 rounded-full overflow-hidden">
                             <div className="bg-[#D1F366] h-full rounded-full transition-all" style={{ width: `${promotion.max_uses ? progress : 100}%` }} />
                           </div>
                         </div>
@@ -404,7 +404,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
                     <div className="flex items-center gap-8 flex-shrink-0 ml-4">
                       <div className="text-right">
-                        <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Vence en</p>
+                        <p className="text-[10px] text-muted-foreground uppercase font-bold mb-1">Vence en</p>
                         <p className={`text-sm font-semibold ${expiryColor}`}>{expiryText}</p>
                       </div>
                       <Switch
@@ -414,7 +414,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                       />
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button className="p-2 text-gray-400 hover:text-gray-700 transition-colors rounded-lg hover:bg-gray-100">
+                          <button className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
                             <MoreVertical className="w-4 h-4" />
                           </button>
                         </DropdownMenuTrigger>
@@ -441,12 +441,12 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
           <h3 className="font-bold text-lg mb-4 flex-shrink-0">Catálogo de Recompensas</h3>
           <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
             {rewards.length === 0 ? (
-              <div className="bg-white rounded-3xl border border-gray-100 p-12 flex flex-col items-center justify-center text-center">
+              <div className="bg-card rounded-3xl border border-border p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 bg-[#D1F366]/20 rounded-2xl flex items-center justify-center mb-4">
                   <Gift className="w-8 h-8 text-[#1C1C28]" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-800 mb-2">No tienes recompensas aún</h3>
-                <p className="text-sm text-gray-500 mb-5">Crea recompensas que tus clientes puedan canjear con puntos</p>
+                <h3 className="text-lg font-bold text-foreground mb-2">No tienes recompensas aún</h3>
+                <p className="text-sm text-muted-foreground mb-5">Crea recompensas que tus clientes puedan canjear con puntos</p>
                 <button
                   onClick={() => setIsRewardDialogOpen(true)}
                   className="flex items-center gap-2 px-5 py-2.5 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors"
@@ -459,7 +459,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
               rewards.map((reward) => (
                 <div
                   key={reward.id}
-                  className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center justify-between group hover:shadow-md transition-shadow"
+                  className="bg-card p-6 rounded-3xl shadow-sm border border-border flex items-center justify-between group hover:shadow-md transition-shadow"
                 >
                   <div className="flex items-center gap-6 flex-1 min-w-0">
                     <div className="w-16 h-16 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center flex-shrink-0">
@@ -467,18 +467,18 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h4 className="font-bold text-lg text-gray-900 truncate">{reward.name}</h4>
+                        <h4 className="font-bold text-lg text-foreground truncate">{reward.name}</h4>
                         <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0">
                           {rewardTypeLabels[reward.reward_type]}
                         </span>
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${reward.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider flex-shrink-0 ${reward.is_active ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
                           {reward.is_active ? "Disponible" : "No disponible"}
                         </span>
                       </div>
                       {reward.description && (
-                        <p className="text-xs text-gray-500 mb-1 truncate">{reward.description}</p>
+                        <p className="text-xs text-muted-foreground mb-1 truncate">{reward.description}</p>
                       )}
-                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1">
                         <span className="font-semibold text-[#1C1C28]">
                           <Star className="inline w-3 h-3 mr-1 text-amber-500" />
                           {reward.points_cost} puntos
@@ -496,7 +496,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                     />
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button className="p-2 text-gray-400 hover:text-gray-700 transition-colors rounded-lg hover:bg-gray-100">
+                        <button className="p-2 text-muted-foreground hover:text-foreground transition-colors rounded-lg hover:bg-muted">
                           <MoreVertical className="w-4 h-4" />
                         </button>
                       </DropdownMenuTrigger>
@@ -519,24 +519,24 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
         {/* Settings Tab */}
         <TabsContent value="settings" className="flex-1 overflow-y-auto hide-scrollbar mt-0">
-          <div className="bg-white rounded-3xl border border-gray-100 p-8">
-            <h3 className="font-bold text-lg text-gray-900 mb-6">Configuración del Sistema de Puntos</h3>
+          <div className="bg-card rounded-3xl border border-border p-8">
+            <h3 className="font-bold text-lg text-foreground mb-6">Configuración del Sistema de Puntos</h3>
             <div className="grid gap-6 md:grid-cols-2">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="points-per-euro" className="text-sm font-semibold text-gray-700">Puntos por Euro Gastado</Label>
-                <Input id="points-per-euro" type="number" min="1" defaultValue="1" className="rounded-xl border-gray-200" />
-                <p className="text-xs text-gray-400">Cuántos puntos gana el cliente por cada euro gastado</p>
+                <Label htmlFor="points-per-euro" className="text-sm font-semibold text-foreground">Puntos por Euro Gastado</Label>
+                <Input id="points-per-euro" type="number" min="1" defaultValue="1" className="rounded-xl border-border" />
+                <p className="text-xs text-muted-foreground">Cuántos puntos gana el cliente por cada euro gastado</p>
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="points-expiry" className="text-sm font-semibold text-gray-700">Caducidad de Puntos (días)</Label>
-                <Input id="points-expiry" type="number" min="30" defaultValue="365" className="rounded-xl border-gray-200" />
-                <p className="text-xs text-gray-400">Días hasta que los puntos caduquen</p>
+                <Label htmlFor="points-expiry" className="text-sm font-semibold text-foreground">Caducidad de Puntos (días)</Label>
+                <Input id="points-expiry" type="number" min="30" defaultValue="365" className="rounded-xl border-border" />
+                <p className="text-xs text-muted-foreground">Días hasta que los puntos caduquen</p>
               </div>
             </div>
             <div className="flex flex-col gap-2 mt-4">
-              <Label htmlFor="welcome-points" className="text-sm font-semibold text-gray-700">Puntos de Bienvenida</Label>
-              <Input id="welcome-points" type="number" min="0" defaultValue="100" className="rounded-xl border-gray-200" />
-              <p className="text-xs text-gray-400">Puntos que recibe un cliente al registrarse</p>
+              <Label htmlFor="welcome-points" className="text-sm font-semibold text-foreground">Puntos de Bienvenida</Label>
+              <Input id="welcome-points" type="number" min="0" defaultValue="100" className="rounded-xl border-border" />
+              <p className="text-xs text-muted-foreground">Puntos que recibe un cliente al registrarse</p>
             </div>
             <button className="mt-6 px-6 py-3 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors">
               Guardar Configuración
@@ -566,16 +566,16 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
               <div className="flex flex-col gap-2">
                 <Label className="font-semibold">Imagen (opcional)</Label>
                 <div className="flex gap-2 mb-2">
-                  <button type="button" onClick={() => setImageUploadMethod("url")} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${imageUploadMethod === "url" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>URL</button>
-                  <button type="button" onClick={() => setImageUploadMethod("upload")} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${imageUploadMethod === "upload" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>Subir archivo</button>
+                  <button type="button" onClick={() => setImageUploadMethod("url")} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${imageUploadMethod === "url" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>URL</button>
+                  <button type="button" onClick={() => setImageUploadMethod("upload")} className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${imageUploadMethod === "upload" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>Subir archivo</button>
                 </div>
                 {imageUploadMethod === "url" ? (
                   <Input type="url" placeholder="https://ejemplo.com/imagen.jpg" value={promotionForm.image_url} onChange={(e) => setPromotionForm((prev) => ({ ...prev, image_url: e.target.value }))} className="rounded-xl" />
                 ) : (
                   <div className="flex flex-col gap-2">
                     <Input type="file" accept="image/*" onChange={handleImageUpload} disabled={isUploading} className="rounded-xl" />
-                    {isUploading && (<div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" />Subiendo imagen...</div>)}
-                    <p className="text-xs text-gray-400">Formatos: JPG, PNG, GIF, WebP. Máximo 5MB.</p>
+                    {isUploading && (<div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Subiendo imagen...</div>)}
+                    <p className="text-xs text-muted-foreground">Formatos: JPG, PNG, GIF, WebP. Máximo 5MB.</p>
                   </div>
                 )}
                 {promotionForm.image_url && (
@@ -606,7 +606,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
 
               <div className="flex items-center gap-3">
                 <Switch id="promo-active" checked={promotionForm.is_active} onCheckedChange={(checked) => setPromotionForm({ ...promotionForm, is_active: checked })} className="data-[state=checked]:bg-[#D1F366]" />
-                <Label htmlFor="promo-active" className="font-medium text-gray-700">Activar promoción inmediatamente</Label>
+                <Label htmlFor="promo-active" className="font-medium text-foreground">Activar promoción inmediatamente</Label>
               </div>
             </div>
             <DialogFooter className="gap-2">
@@ -662,7 +662,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
               </div>
               <div className="flex items-center gap-3">
                 <Switch id="reward-active" checked={rewardForm.is_active} onCheckedChange={(checked) => setRewardForm({ ...rewardForm, is_active: checked })} className="data-[state=checked]:bg-[#D1F366]" />
-                <Label htmlFor="reward-active" className="font-medium text-gray-700">Recompensa disponible</Label>
+                <Label htmlFor="reward-active" className="font-medium text-foreground">Recompensa disponible</Label>
               </div>
             </div>
             <DialogFooter className="gap-2">

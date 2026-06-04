@@ -312,15 +312,15 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const moveOrder = () => submitSale("pending")
 
   return (
-    <div className="h-full w-full bg-[#f3f3f6] p-3 sm:p-4 lg:p-4 xl:p-6 overflow-hidden">
+    <div className="h-full w-full bg-[#f3f3f6] dark:bg-background p-3 sm:p-4 lg:p-4 xl:p-6 overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1500px] gap-4 overflow-hidden rounded-[2rem] bg-transparent">
         <section
           className={cn(
-            "min-w-0 flex-1 rounded-[2rem] bg-[#f7f7fa] p-4 transition-all duration-500 sm:p-5",
+            "min-w-0 flex-1 rounded-[2rem] bg-[#f7f7fa] dark:bg-background p-4 transition-all duration-500 sm:p-5",
             isCartOpen ? "lg:mr-0" : ""
           )}
         >
-          <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] bg-white px-4 py-3 shadow-[0_10px_30px_rgba(17,24,39,0.04)]">
+          <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] bg-white dark:bg-muted px-4 py-3 shadow-[0_10px_30px_rgba(17,24,39,0.04)] dark:shadow-none">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <Input
               value={productSearch}
@@ -340,7 +340,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   "whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors",
                   activeCategory === category
                     ? "bg-[#1f2030] text-[#d8ff55]"
-                    : "bg-white text-slate-400 hover:text-slate-700"
+                    : "bg-white dark:bg-muted text-slate-400 hover:text-slate-700 dark:hover:text-foreground"
                 )}
               >
                 {category}
@@ -351,26 +351,26 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           {isRefetching ? (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] 2xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               {Array.from({ length: PRODUCTS_PAGE_SIZE }).map((_, i) => (
-                <div key={i} className="animate-pulse rounded-[2rem] bg-white p-3 shadow-[0_10px_35px_rgba(17,24,39,0.05)]">
-                  <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] p-2">
-                    <div className="aspect-square rounded-[1.25rem] bg-slate-200" />
+                <div key={i} className="animate-pulse rounded-[2rem] bg-white dark:bg-muted p-3 shadow-[0_10px_35px_rgba(17,24,39,0.05)] dark:shadow-none">
+                  <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted dark:bg-muted/60 p-2">
+                    <div className="aspect-square rounded-[1.25rem] bg-slate-200 dark:bg-muted-foreground/20" />
                   </div>
                   <div className="space-y-2">
-                    <div className="h-4 rounded-full bg-slate-200" />
-                    <div className="h-3 w-3/4 rounded-full bg-slate-200" />
+                    <div className="h-4 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
+                    <div className="h-3 w-3/4 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
                     <div className="flex items-center justify-between pt-2">
-                      <div className="h-6 w-24 rounded-full bg-slate-200" />
-                      <div className="h-8 w-8 rounded-full bg-slate-200" />
+                      <div className="h-6 w-24 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
+                      <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
                     </div>
                   </div>
                 </div>
               ))}
             </div>
           ) : products.length === 0 && !isLoadingProducts ? (
-            <div className="flex h-[420px] items-center justify-center rounded-[2rem] border border-dashed border-slate-200 bg-white text-center text-slate-500">
+            <div className="flex h-[420px] items-center justify-center rounded-[2rem] border border-dashed border-slate-200 dark:border-border bg-white dark:bg-card text-center text-slate-500 dark:text-muted-foreground">
               <div className="max-w-sm px-6">
-                <p className="text-lg font-semibold text-slate-700">No hay productos disponibles</p>
-                <p className="mt-2 text-sm text-slate-500">Carga productos en tu catalogo para empezar a vender desde esta seccion.</p>
+                <p className="text-lg font-semibold text-slate-700 dark:text-foreground">No hay productos disponibles</p>
+                <p className="mt-2 text-sm text-slate-500 dark:text-muted-foreground">Carga productos en tu catalogo para empezar a vender desde esta seccion.</p>
                   </div>
                 </div>
               ) : (
@@ -381,35 +381,31 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     key={product.id}
                     type="button"
                     onClick={() => addProductToCart(product)}
-                    className="group rounded-[2rem] bg-white p-3 text-left shadow-[0_10px_35px_rgba(17,24,39,0.05)] transition-transform duration-200 hover:-translate-y-1"
+                    className="group rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-muted shadow-[0_10px_35px_rgba(17,24,39,0.05)] dark:shadow-none transition-transform duration-200 hover:-translate-y-1"
                   >
-                    <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] p-2">
-                      <div className="aspect-square overflow-hidden rounded-[1.25rem] bg-white">
-                        {product.image_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
+                    {product.image_url && (
+                      <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted p-2">
+                        <div className="aspect-square overflow-hidden rounded-[1.25rem] bg-white dark:bg-card">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={product.image_url}
                             alt={product.name}
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
-                        ) : (
-                          <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 text-slate-400">
-                            <ShoppingBag className="h-10 w-10" />
-                          </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div className="min-w-0 space-y-1">
-                      <h3 className="line-clamp-2 min-h-[3rem] text-[15px] font-semibold leading-tight text-slate-900">{product.name}</h3>
+                      <h3 className="line-clamp-2 min-h-[3rem] text-[15px] font-semibold leading-tight text-slate-900 dark:text-foreground">{product.name}</h3>
                       <p className="line-clamp-2 min-h-[2.5rem] text-xs text-slate-400">{product.description || product.category || "Producto disponible para venta inmediata"}</p>
                       <div className="flex items-center justify-between gap-2 pt-1">
                         <div className="min-w-0 flex-1">
-                          <span className="block truncate text-lg font-black leading-none tracking-tight text-slate-900 sm:text-xl">
+                          <span className="block truncate text-lg font-black leading-none tracking-tight text-slate-900 dark:text-foreground sm:text-xl">
                             {formatCurrency(product.price)}
                           </span>
                         </div>
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0f2f5] text-slate-600 transition-colors group-hover:bg-[#d8ff55] group-hover:text-slate-900">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0f2f5] dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors group-hover:bg-[#d8ff55] group-hover:text-slate-900">
                           <Plus className="h-4 w-4" />
                         </span>
                       </div>
@@ -433,11 +429,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
         <aside
           className={cn(
-            "fixed inset-y-0 right-0 z-40 w-full max-w-[420px] transform bg-white p-4 shadow-2xl transition-transform duration-500 ease-out lg:static lg:h-auto lg:w-[420px] lg:shrink-0 lg:rounded-[2rem] lg:p-4 lg:shadow-none",
+            "fixed inset-y-0 right-0 z-40 w-full max-w-[420px] transform bg-white dark:bg-card p-4 shadow-2xl transition-transform duration-500 ease-out lg:static lg:h-auto lg:w-[420px] lg:shrink-0 lg:rounded-[2rem] lg:p-4 lg:shadow-none",
             isCartOpen ? "translate-x-0" : "translate-x-full lg:w-0 lg:max-w-0 lg:p-0 lg:opacity-0"
           )}
         >
-          <div className={cn("flex h-full w-full flex-col overflow-hidden rounded-[2rem] bg-white", !isCartOpen && "lg:hidden")}>
+          <div className={cn("flex h-full w-full flex-col overflow-hidden rounded-[2rem] bg-white dark:bg-card", !isCartOpen && "lg:hidden")}>
             <div className="flex-1 w-full overflow-y-auto overflow-x-hidden pt-1 custom-scrollbar">
               <div className="w-full min-w-0 space-y-4 p-3 pb-24 sm:p-4 lg:pb-4 text-left">
                 <div className="w-full rounded-[1.75rem] bg-[#1f2030] p-4 text-white">
@@ -516,7 +512,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
                 </div>
 
-                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] p-4">
+                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Carrito actual</p>
@@ -525,14 +521,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   </div>
 
                   {cartItems.length === 0 ? (
-                    <div className="rounded-[1.25rem] border border-dashed border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+                    <div className="rounded-[1.25rem] border border-dashed border-slate-200 dark:border-border bg-white dark:bg-card p-6 text-center text-sm text-slate-500 dark:text-muted-foreground">
                       Toca cualquier producto para empezar a armar el pedido.
                     </div>
                   ) : (
                     <div className="space-y-3">
                       {cartItems.map((item) => (
-                        <div key={item.productId} className="flex min-w-0 flex-row items-center gap-3 rounded-[1.25rem] bg-white p-3 shadow-sm">
-                          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[1rem] bg-slate-100">
+                        <div key={item.productId} className="flex min-w-0 flex-row items-center gap-3 rounded-[1.25rem] bg-white dark:bg-card p-3 shadow-sm dark:shadow-none">
+                          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[1rem] bg-slate-100 dark:bg-muted">
                             {item.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
@@ -543,23 +539,23 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-semibold leading-tight text-slate-800 line-clamp-3 break-words">{item.name}</h4>
+                            <h4 className="text-sm font-semibold leading-tight text-slate-800 dark:text-foreground line-clamp-3 break-words">{item.name}</h4>
                             <p className="truncate text-xs text-slate-400 mt-1">{formatCurrency(item.price)} / ud</p>
                             <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <button type="button" onClick={() => updateQuantity(item.productId, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200">
+                              <button type="button" onClick={() => updateQuantity(item.productId, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
                                 <Minus className="h-3 w-3" />
                               </button>
-                              <span className="min-w-4 text-center text-sm font-semibold text-slate-700">{item.quantity}</span>
-                              <button type="button" onClick={() => updateQuantity(item.productId, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:bg-slate-200">
+                              <span className="min-w-4 text-center text-sm font-semibold text-slate-700 dark:text-foreground">{item.quantity}</span>
+                              <button type="button" onClick={() => updateQuantity(item.productId, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
                                 <Plus className="h-3 w-3" />
                               </button>
                             </div>
                           </div>
                           <div className="flex h-full shrink-0 flex-col items-end justify-between gap-2 overflow-hidden text-right">
-                            <button type="button" onClick={() => removeItem(item.productId)} className="shrink-0 p-1 hover:bg-slate-50 transition-colors rounded-full">
+                            <button type="button" onClick={() => removeItem(item.productId)} className="shrink-0 p-1 hover:bg-slate-50 dark:hover:bg-muted transition-colors rounded-full">
                               <X className="h-4 w-4 text-slate-300 hover:text-slate-500" />
                             </button>
-                            <p className="truncate text-sm font-bold text-slate-800">{formatCurrency(item.price * item.quantity)}</p>
+                            <p className="truncate text-sm font-bold text-slate-800 dark:text-foreground">{formatCurrency(item.price * item.quantity)}</p>
                           </div>
                         </div>
                       ))}
@@ -567,7 +563,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
                 </div>
 
-                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] p-4">
+                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
                   <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
                   <div className="grid grid-cols-2 gap-3">
                     {paymentOptions.map((option) => {
@@ -582,7 +578,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                             "rounded-[1.15rem] border p-4 text-center transition-all",
                             isActive
                               ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-lg"
-                              : "border-slate-200 bg-white text-slate-400 hover:border-slate-300 hover:text-slate-700"
+                              : "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-400 hover:border-slate-300 hover:text-slate-700 dark:hover:text-foreground"
                           )}
                         >
                           <Icon className="mx-auto mb-2 h-5 w-5" />
@@ -593,23 +589,23 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   </div>
                 </div>
 
-                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-white p-4 shadow-sm">
-                  <div className="space-y-2 text-sm text-slate-500">
+                <div className="w-full rounded-[1.75rem] border border-slate-100 dark:border-border bg-white dark:bg-card p-4 shadow-sm dark:shadow-none">
+                  <div className="space-y-2 text-sm text-slate-500 dark:text-muted-foreground">
                     <div className="flex items-center justify-between">
                       <span>Subtotal</span>
-                      <span className="font-semibold text-slate-700">{formatCurrency(subtotal)}</span>
+                      <span className="font-semibold text-slate-700 dark:text-foreground">{formatCurrency(subtotal)}</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span>Impuestos (15%)</span>
-                      <span className="font-semibold text-slate-700">{formatCurrency(taxAmount)}</span>
+                      <span className="font-semibold text-slate-700 dark:text-foreground">{formatCurrency(taxAmount)}</span>
                     </div>
                   </div>
 
-                  <div className="mt-5 flex flex-wrap items-end justify-between border-t border-slate-100 pt-4 gap-2">
+                  <div className="mt-5 flex flex-wrap items-end justify-between border-t border-slate-100 dark:border-border pt-4 gap-2">
                     <div className="min-w-0">
-                      <p className="text-sm font-bold uppercase tracking-[0.25em] text-slate-500">Total</p>
+                      <p className="text-sm font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-muted-foreground">Total</p>
                     </div>
-                    <p className="min-w-0 truncate text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">{formatCurrency(total)}</p>
+                    <p className="min-w-0 truncate text-3xl font-black tracking-tight text-slate-900 dark:text-foreground sm:text-4xl">{formatCurrency(total)}</p>
                   </div>
 
                   <div className="flex flex-col gap-2 mt-5">
@@ -625,7 +621,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       onClick={moveOrder}
                       disabled={isSubmitting || cartItems.length === 0}
                       variant="outline"
-                      className="h-12 w-full rounded-[1.25rem] border-slate-200 text-sm font-bold uppercase tracking-[0.25em] text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      className="h-12 w-full rounded-[1.25rem] border-slate-200 dark:border-border text-sm font-bold uppercase tracking-[0.25em] text-slate-600 dark:text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted hover:text-slate-900 dark:hover:text-foreground"
                     >
                       Pasar pedido
                     </Button>

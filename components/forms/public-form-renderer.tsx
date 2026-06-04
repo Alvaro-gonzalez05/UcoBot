@@ -435,6 +435,21 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
         </div>
       </div>
 
+      {/* Mobile seguro + branding — shown below form on mobile only */}
+      <div className="w-full max-w-5xl mt-3 flex flex-col gap-3 lg:hidden">
+        <div className="rounded-xl p-3 flex items-start gap-3" style={{ ...panelBase, borderLeft: `3px solid ${color2}` }}>
+          <span style={{ fontFamily: "'Material Symbols Outlined'", fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24", fontSize: 16, color: color2, lineHeight: 1, display: "inline-block", userSelect: "none" as const, flexShrink: 0, marginTop: 1 }}>verified_user</span>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: textPrimary }}>Seguro y confiable</p>
+            <p className="text-xs mt-0.5 leading-relaxed" style={{ color: bodyColor }}>Tus datos están protegidos. Al completar recibirás una confirmación por WhatsApp.</p>
+          </div>
+        </div>
+        <a href="https://codeadesarrollos.com" target="_blank" rel="noopener noreferrer" style={{ display: "flex", flexDirection: "column", alignItems: "center", textDecoration: "none", lineHeight: 1, gap: 4 }}>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.25em", textTransform: "uppercase" as const, color: isDark ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)" }}>powered by</span>
+          <span style={{ fontSize: "clamp(32px, 12vw, 56px)", fontWeight: 900, letterSpacing: "-0.03em", textTransform: "uppercase" as const, lineHeight: 1, color: isDark ? "#ffffff" : "#000000", textShadow: isDark ? "none" : "0 4px 6px rgba(0,0,0,0.25), 0 10px 40px rgba(0,0,0,0.20)" }}>CODEA</span>
+        </a>
+      </div>
+
       {/* Mobile full cotizador — shown below form when products selected */}
       {showCotizador && selectedProducts.length > 0 && (
         <div className="w-full max-w-5xl mt-3 lg:hidden">

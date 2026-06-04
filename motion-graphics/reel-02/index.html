@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>UcoBot — Reel 02 · 3AM</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@hyperframes/shader@latest/dist/index.js"></script>
+
+  <style>
+    /* ── Design tokens ── */
+    :root {
+      --bg:      #000000;
+      --panel:   #0d0d14;
+      --sidebar: #1C1C28;
+      --card:    #18181b;
+      --card2:   #27272a;
+      --ink:     #ffffff;
+      --accent:  #CCFF00;
+      --accent-s:#D1F366;
+      --muted:   #a1a1aa;
+      --muted2:  #52525b;
+      --border:  rgba(255,255,255,0.07);
+      --green:   #22c55e;
+      --font:    "Space Grotesk", sans-serif;
+      --mono:    "JetBrains Mono", monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); overflow: hidden; font-family: var(--font); }
+
+    #main {
+      position: relative;
+      width: 1080px; height: 1920px;
+      overflow: hidden; background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .scene {
+      position: absolute; inset: 0;
+      width: 1080px; height: 1920px; overflow: hidden;
+    }
+
+    /* All scenes are centered */
+    .scene-content {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 0 80px;
+    }
+
+    /* ── Catalog components ── */
+
+    /* Grain Overlay (catalog: grain-overlay) */
+    .grain {
+      position: absolute; inset: 0; pointer-events: none; z-index: 300; opacity: 0.07;
+      background-image:
+        radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1.2px),
+        radial-gradient(rgba(0,0,0,0.22) 1px, transparent 1.2px);
+      background-size: 3px 3px, 5px 5px;
+      background-position: 0 0, 1px 2px;
+      mix-blend-mode: overlay;
+    }
+
+    /* Vignette (catalog: vignette) */
+    .vignette {
+      position: absolute; inset: 0; pointer-events: none; z-index: 290;
+      background: radial-gradient(ellipse 70% 80% at 50% 50%,
+        transparent 40%, rgba(0,0,0,0.55) 100%);
+    }
+
+    /* SVG icon helper */
+    .ico {
+      display: inline-block; flex-shrink: 0;
+      fill: none; stroke: currentColor;
+      stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+    }
+
+    /* Shared eyebrow */
+    .eyebrow {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      font-family: var(--mono); font-size: 22px; font-weight: 600;
+      color: var(--muted2); letter-spacing: 0.16em; text-transform: uppercase;
+      margin-bottom: 28px;
+    }
+    .eyebrow-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+    /* ══════════════════════════════════════
+       S1 — 3:00 AM Clock
+    ══════════════════════════════════════ */
+    #s1-glow {
+      position: absolute;
+      width: 900px; height: 900px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(204,255,0,0.12) 0%, transparent 65%);
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    #s1-time-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    #s1-time {
+      display: flex; align-items: flex-start; justify-content: center; gap: 0;
+      line-height: 1;
+    }
+    .t-digit {
+      font-size: 220px; font-weight: 900; color: var(--accent);
+      letter-spacing: -0.06em; line-height: 1; font-variant-numeric: tabular-nums;
+    }
+    .t-colon {
+      font-size: 180px; font-weight: 900; color: var(--accent);
+      letter-spacing: -0.04em; line-height: 1; padding-bottom: 8px;
+    }
+    #s1-am {
+      font-family: var(--mono); font-size: 36px; font-weight: 600;
+      color: var(--muted2); letter-spacing: 0.2em; margin-top: 8px;
+    }
+    #s1-sub1 { font-size: 38px; font-weight: 300; color: var(--muted); margin-top: 48px; line-height: 1.4; }
+    #s1-sub2 { font-size: 52px; font-weight: 900; color: var(--accent); margin-top: 12px; letter-spacing: -0.02em; }
+
+    /* ══════════════════════════════════════
+       S2 — Chat nocturno
+    ══════════════════════════════════════ */
+    #s2-title-wrap { margin-bottom: 44px; }
+    #s2-title {
+      font-size: 88px; font-weight: 900; color: var(--ink);
+      line-height: 0.95; letter-spacing: -0.045em;
+    }
+    #s2-title span { color: var(--accent); }
+
+    .chat-centered {
+      width: 820px; background: var(--card);
+      border-radius: 2rem; overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 0 0 1px rgba(204,255,0,0.06), 0 32px 80px rgba(0,0,0,0.6);
+    }
+    .chat-hdr {
+      background: var(--card2); padding: 24px 32px;
+      display: flex; align-items: center; gap: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .chat-av {
+      width: 48px; height: 48px; border-radius: 50%;
+      overflow: hidden; flex-shrink: 0;
+      box-shadow: 0 0 14px rgba(204,255,0,0.3);
+    }
+    .chat-av img { width: 100%; height: 100%; object-fit: cover; }
+    .chat-nm { font-size: 22px; font-weight: 700; color: var(--ink); text-align: left; }
+    .chat-st { font-size: 14px; color: var(--green); font-family: var(--mono); text-align: left; }
+    .chat-ts-badge {
+      margin-left: auto; font-family: var(--mono); font-size: 16px;
+      color: var(--accent); background: rgba(204,255,0,0.1);
+      border: 1px solid rgba(204,255,0,0.2);
+      padding: 6px 14px; border-radius: 100px; flex-shrink: 0;
+    }
+    .chat-body { padding: 24px 28px 28px; display: flex; flex-direction: column; gap: 12px; }
+    .bubble {
+      max-width: 84%; padding: 14px 20px;
+      border-radius: 16px; font-size: 21px; line-height: 1.42;
+    }
+    .b-user { background: var(--accent); color: #000; align-self: flex-end; border-bottom-right-radius: 4px; font-weight: 600; }
+    .b-bot  { background: var(--card2); color: var(--ink); align-self: flex-start; border-bottom-left-radius: 4px; }
+    .b-bot strong { color: var(--accent); }
+    .msg-ts { font-family: var(--mono); font-size: 13px; color: var(--muted2); }
+
+    /* ══════════════════════════════════════
+       S3 — Client profile card
+    ══════════════════════════════════════ */
+    #s3-title { font-size: 84px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; line-height: 0.95; margin-bottom: 48px; }
+    #s3-title span { color: var(--accent); }
+
+    .client-card {
+      width: 760px; background: var(--sidebar);
+      border: 1px solid var(--border); border-radius: 2.5rem;
+      padding: 52px 52px 44px;
+      box-shadow: 0 0 0 1px rgba(204,255,0,0.08), 0 40px 80px rgba(0,0,0,0.5);
+    }
+    .client-avatar-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 16px; margin-bottom: 32px;
+    }
+    .client-avatar {
+      width: 100px; height: 100px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent) 0%, #78b800 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 42px; font-weight: 900; color: #000;
+      box-shadow: 0 0 0 3px rgba(204,255,0,0.2), 0 0 32px rgba(204,255,0,0.2);
+    }
+    .client-name  { font-size: 34px; font-weight: 900; color: var(--ink); letter-spacing: -0.02em; }
+    .client-since { font-family: var(--mono); font-size: 16px; color: var(--muted2); letter-spacing: 0.08em; }
+    .client-divider { width: 100%; height: 1px; background: var(--border); margin: 24px 0; }
+    .client-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    .cstat {
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 16px; padding: 22px 16px;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .cstat-num { font-size: 40px; font-weight: 900; color: var(--accent); line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+    .cstat-lbl { font-family: var(--mono); font-size: 14px; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.08em; }
+    .client-badge {
+      margin-top: 28px; display: inline-flex; align-items: center; gap: 10px;
+      background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+      color: var(--green); font-family: var(--mono); font-size: 17px; font-weight: 600;
+      padding: 10px 22px; border-radius: 100px; letter-spacing: 0.06em;
+    }
+
+    /* ══════════════════════════════════════
+       S4 — Revenue counter  [ANCHOR]
+    ══════════════════════════════════════ */
+    #s4-bg-lines {
+      position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+      opacity: 0.04;
+    }
+    #s4-eyebrow { margin-bottom: 20px; }
+    #s4-label {
+      font-family: var(--mono); font-size: 24px; font-weight: 600;
+      color: var(--muted2); letter-spacing: 0.12em; text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    /* Shimmer on revenue number (catalog: shimmer-sweep) */
+    #s4-revenue {
+      font-size: 168px; font-weight: 900; letter-spacing: -0.06em; line-height: 1;
+      color: var(--accent);
+      position: relative; display: inline-block;
+    }
+    #s4-shimmer {
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg,
+        transparent 0%, rgba(255,255,255,0.55) 48%, rgba(255,255,255,0.55) 52%, transparent 100%);
+      background-size: 200% 100%;
+      background-position: -200% 0;
+      -webkit-mask: text; mask: text;
+      pointer-events: none; mix-blend-mode: overlay;
+    }
+    #s4-sub { font-size: 30px; font-weight: 300; color: var(--muted); margin-top: 16px; }
+    #s4-prefix { font-size: 80px; font-weight: 900; color: var(--accent); letter-spacing: -0.04em; }
+    /* Mini order cards */
+    .order-row { display: flex; gap: 16px; margin-top: 52px; justify-content: center; flex-wrap: wrap; }
+    .order-chip {
+      background: var(--sidebar); border: 1px solid var(--border);
+      border-radius: 16px; padding: 18px 24px;
+      display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
+      min-width: 200px;
+    }
+    .order-chip-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; }
+    .order-chip-name { font-size: 18px; font-weight: 600; color: var(--ink); }
+    .order-chip-price { font-size: 20px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+    .order-chip-ts { font-family: var(--mono); font-size: 13px; color: var(--muted2); }
+
+    /* ══════════════════════════════════════
+       S5 — Stats grid  [ANCHOR]
+    ══════════════════════════════════════ */
+    #s5-title { font-size: 80px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; line-height: 0.95; margin-bottom: 52px; }
+    #s5-title span { color: var(--accent); }
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 900px; }
+    .st-card {
+      background: var(--sidebar); border: 1px solid var(--border);
+      border-radius: 24px; padding: 40px 36px;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      text-align: center;
+    }
+    .st-icon { color: var(--accent); margin-bottom: 4px; }
+    .st-num {
+      font-size: 84px; font-weight: 900; color: var(--ink);
+      line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
+    }
+    .st-num .hi { color: var(--accent); }
+    .st-lbl { font-size: 20px; font-weight: 400; color: var(--muted); }
+    .st-bar-track { width: 100%; height: 4px; background: var(--card2); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .st-bar-fill  { height: 100%; background: var(--accent); border-radius: 2px; width: 0; }
+
+    /* ══════════════════════════════════════
+       S6 — Brand reveal  [ANCHOR]
+    ══════════════════════════════════════ */
+    #s6-glow {
+      position: absolute; width: 1000px; height: 1000px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(204,255,0,0.15) 0%, transparent 70%);
+      top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
+    }
+    #s6-logo {
+      width: 160px; height: 160px; border-radius: 50%; overflow: hidden;
+      margin-bottom: 36px;
+      box-shadow:
+        0 0 0 2px rgba(204,255,0,0.2),
+        0 0 50px rgba(204,255,0,0.25),
+        0 20px 60px rgba(0,0,0,0.5);
+    }
+    #s6-logo img { width: 100%; height: 100%; object-fit: cover; }
+    #s6-wordmark { font-size: 112px; font-weight: 900; color: var(--ink); letter-spacing: -0.05em; line-height: 1; margin-bottom: 8px; }
+    #s6-co { font-family: var(--mono); font-size: 18px; color: var(--muted2); letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 40px; }
+
+    /* Highlight sweep (catalog: highlight) behind "Nunca duerme." */
+    #s6-tagline-wrap { position: relative; display: inline-block; margin-bottom: 56px; }
+    #s6-tagline {
+      font-size: 56px; font-weight: 900; color: var(--ink);
+      letter-spacing: -0.03em; position: relative; z-index: 2; padding: 0 12px;
+    }
+    #s6-highlight {
+      position: absolute; inset: 0 0 0 0;
+      background: var(--accent); border-radius: 8px;
+      transform: scaleX(0); transform-origin: left;
+      z-index: 1;
+    }
+    #s6-tagline.lit { color: #000; }
+
+    #s6-cta {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--accent); color: #000;
+      font-size: 30px; font-weight: 700;
+      padding: 26px 76px; border-radius: 100px; margin-bottom: 24px;
+    }
+    #s6-url { font-family: var(--mono); font-size: 20px; color: var(--muted2); letter-spacing: 0.06em; }
+  </style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 8V4H8" /><rect x="3" y="8" width="18" height="14" rx="3" />
+      <circle cx="9" cy="13" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="13" r="1" fill="currentColor" stroke="none" />
+      <path d="M6 17h12" />
+    </symbol>
+    <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+    </symbol>
+    <symbol id="i-bag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <path d="M16 10a4 4 0 0 1-8 0" />
+    </symbol>
+    <symbol id="i-msg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+    </symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+    </symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </symbol>
+  </defs>
+</svg>
+
+<!--
+  REEL-02 · "3:00 AM. Tu local cerrado. El bot, despierto."
+  ──────────────────────────────────────────────────────────
+  S1  0.0 → 3.0s   Clock impact
+  S2  3.0 → 7.0s   Chat nocturno
+  S3  7.0 → 10.5s  Cliente registrado
+  S4 10.5 → 14.5s  Revenue [ANCHOR]
+  S5 14.5 → 18.5s  Stats noche [ANCHOR]
+  S6 18.5 → 22.5s  Brand "Nunca duerme" [ANCHOR]
+
+  Shaders:
+  S4→S5  light-leak     t=14.35  dur=0.3
+  S5→S6  cinematic-zoom t=18.25  dur=0.5
+-->
+<div id="main" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="22.5">
+
+  <div class="grain"></div>
+  <div class="vignette"></div>
+
+  <!-- ═══════════════════════════════════════
+       S1 · 3:00 AM Clock · 0 → 3s
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s1" data-start="0" data-duration="3" data-track-index="0">
+    <div id="s1-glow"></div>
+    <div class="scene-content">
+      <div class="eyebrow" id="s1-ey">
+        <div class="eyebrow-dot"></div>
+        ESTA NOCHE · UCOBOT
+        <div class="eyebrow-dot"></div>
+      </div>
+      <div id="s1-time-wrap">
+        <div id="s1-time">
+          <span class="t-digit" id="s1-d1">3</span>
+          <span class="t-colon" id="s1-col">:</span>
+          <span class="t-digit" id="s1-d2">0</span>
+          <span class="t-digit" id="s1-d3">0</span>
+        </div>
+        <div id="s1-am">AM</div>
+      </div>
+      <p id="s1-sub1">Tu local está cerrado.</p>
+      <p id="s1-sub2">Tu bot, no.</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S2 · Chat nocturno · 3 → 7s
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s2" data-start="3" data-duration="4" data-track-index="0" style="visibility:hidden;">
+    <div class="scene-content">
+      <div id="s2-title-wrap">
+        <div class="eyebrow" id="s2-ey">
+          <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-moon" /></svg>
+          Mientras dormís
+        </div>
+        <div id="s2-title">Cada venta,<br><span>cerrada.</span></div>
+      </div>
+      <div class="chat-centered" id="s2-chat">
+        <div class="chat-hdr">
+          <div class="chat-av"><img src="./ucobot-logo.png" alt="U"></div>
+          <div>
+            <div class="chat-nm">UcoBot</div>
+            <div class="chat-st">en línea · 24/7</div>
+          </div>
+          <div class="chat-ts-badge">3:07 AM</div>
+        </div>
+        <div class="chat-body">
+          <div class="bubble b-user" id="cb1">hola! vi la campera negra oversize en la tienda, la quiero comprar</div>
+          <div class="bubble b-bot" id="cb2">Campera Oversize Negra · Talle M<br><strong>$28.500</strong> — te mando el link de pago<br><strong style="color:var(--accent-s)">mercadopago.com/checkout/...</strong></div>
+          <div class="bubble b-user" id="cb3">listo! ya pague</div>
+          <div class="bubble b-bot" id="cb4">Pago confirmado! Pedido en preparación.<br>Envío: <strong>24–48 hs hábiles</strong></div>
+          <div class="msg-ts" id="cb5" style="align-self:flex-end;">venta cerrada · sin intervención humana</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S3 · Cliente registrado · 7 → 10.5s
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s3" data-start="7" data-duration="3.5" data-track-index="0" style="visibility:hidden;">
+    <div class="scene-content">
+      <div class="eyebrow" id="s3-ey">
+        <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-users" /></svg>
+        CRM en tiempo real
+      </div>
+      <div id="s3-title">Nuevo cliente<br><span>registrado.</span></div>
+      <div class="client-card" id="s3-card">
+        <div class="client-avatar-wrap">
+          <div class="client-avatar" id="s3-av">M</div>
+          <div class="client-name">María González</div>
+          <div class="client-since">CLIENTE DESDE HOY · 3:07 AM</div>
+        </div>
+        <div class="client-divider"></div>
+        <div class="client-stats">
+          <div class="cstat" id="cs1">
+            <div class="cstat-num" id="cs1-n">0</div>
+            <div class="cstat-lbl">Pedidos</div>
+          </div>
+          <div class="cstat" id="cs2">
+            <div class="cstat-num" id="cs2-n">0</div>
+            <div class="cstat-lbl">Puntos</div>
+          </div>
+          <div class="cstat" id="cs3">
+            <div class="cstat-num" style="font-size:28px;letter-spacing:-0.02em">Jun 12</div>
+            <div class="cstat-lbl">Cumple</div>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:center;">
+          <div class="client-badge" id="s3-badge">
+            <svg class="ico" width="14" height="14"><use href="#i-check" /></svg>
+            Registrado automáticamente por el bot
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S4 · Revenue · 10.5 → 14.5s  [ANCHOR]
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s4" data-start="10.5" data-duration="4" data-track-index="0" style="opacity:0;">
+    <!-- Background subtle grid lines — suggests activity/tech -->
+    <div id="s4-bg-lines">
+      <svg width="1080" height="1920" style="position:absolute;inset:0;opacity:0.6">
+        <defs>
+          <pattern id="grid" width="80" height="80" patternUnits="userSpaceOnUse">
+            <path d="M 80 0 L 0 0 0 80" fill="none" stroke="rgba(204,255,0,0.15)" stroke-width="0.5" />
+          </pattern>
+        </defs>
+        <rect width="1080" height="1920" fill="url(#grid)" />
+      </svg>
+    </div>
+    <div class="scene-content">
+      <div class="eyebrow" id="s4-ey">
+        <svg class="ico" width="18" height="18" style="color:var(--accent)"><use href="#i-zap" /></svg>
+        Lo que generó esta noche
+      </div>
+      <div id="s4-label">INGRESOS GENERADOS</div>
+      <div id="s4-revenue">
+        <span id="s4-prefix">$</span><span id="s4-num">0</span>
+        <div id="s4-shimmer"></div>
+      </div>
+      <div id="s4-sub">facturado mientras dormías</div>
+      <!-- Mini order cards -->
+      <div class="order-row">
+        <div class="order-chip" id="oc1">
+          <div class="order-chip-top">
+            <div class="order-chip-name">Campera Oversize</div>
+            <div class="order-chip-price">$28.500</div>
+          </div>
+          <div class="order-chip-ts">3:07 AM · pago confirmado</div>
+        </div>
+        <div class="order-chip" id="oc2">
+          <div class="order-chip-top">
+            <div class="order-chip-name">Vestido Lino Blanco</div>
+            <div class="order-chip-price">$19.900</div>
+          </div>
+          <div class="order-chip-ts">3:42 AM · pago confirmado</div>
+        </div>
+        <div class="order-chip" id="oc3">
+          <div class="order-chip-top">
+            <div class="order-chip-name">Jean Baggy + Remera</div>
+            <div class="order-chip-price">$34.200</div>
+          </div>
+          <div class="order-chip-ts">4:15 AM · pago confirmado</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S5 · Stats · 14.5 → 18.5s  [ANCHOR]
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s5" data-start="14.5" data-duration="4" data-track-index="0" style="opacity:0;">
+    <div class="scene-content">
+      <div class="eyebrow" id="s5-ey">
+        <div class="eyebrow-dot"></div>
+        Resumen de la noche
+        <div class="eyebrow-dot"></div>
+      </div>
+      <div id="s5-title">Solo<br><span>esta noche.</span></div>
+      <div class="stats-grid">
+        <div class="st-card" id="st1">
+          <svg class="st-icon ico" width="28" height="28"><use href="#i-msg" /></svg>
+          <div class="st-num"><span class="hi" id="sn1">0</span></div>
+          <div class="st-lbl">mensajes respondidos</div>
+          <div class="st-bar-track"><div class="st-bar-fill" id="sb1"></div></div>
+        </div>
+        <div class="st-card" id="st2">
+          <svg class="st-icon ico" width="28" height="28"><use href="#i-bag" /></svg>
+          <div class="st-num"><span id="sn2">0</span></div>
+          <div class="st-lbl">pedidos procesados</div>
+          <div class="st-bar-track"><div class="st-bar-fill" id="sb2"></div></div>
+        </div>
+        <div class="st-card" id="st3">
+          <svg class="st-icon ico" width="28" height="28"><use href="#i-users" /></svg>
+          <div class="st-num"><span id="sn3">0</span></div>
+          <div class="st-lbl">clientes nuevos</div>
+          <div class="st-bar-track"><div class="st-bar-fill" id="sb3"></div></div>
+        </div>
+        <div class="st-card" id="st4" style="border-color:rgba(204,255,0,0.22);">
+          <svg class="st-icon ico" width="28" height="28"><use href="#i-star" /></svg>
+          <div class="st-num"><span class="hi" id="sn4">0</span></div>
+          <div class="st-lbl">puntos entregados</div>
+          <div class="st-bar-track"><div class="st-bar-fill" id="sb4"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S6 · Brand · 18.5 → 22.5s  [ANCHOR]
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s6" data-start="18.5" data-duration="4" data-track-index="0" style="opacity:0;">
+    <div id="s6-glow"></div>
+    <div class="scene-content">
+      <div id="s6-logo"><img src="./ucobot-logo.png" alt="UcoBot"></div>
+      <div id="s6-wordmark">UcoBot</div>
+      <div id="s6-co">Codea Desarrollos</div>
+      <!-- Highlight sweep behind "Nunca duerme." -->
+      <div id="s6-tagline-wrap">
+        <div id="s6-highlight"></div>
+        <div id="s6-tagline">Nunca duerme.</div>
+      </div>
+      <div id="s6-cta">
+        Probalo gratis
+        <svg class="ico" width="26" height="26" style="color:#000"><use href="#i-arrow" /></svg>
+      </div>
+      <div id="s6-url"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  window.__timelines = window.__timelines || {};
+  window.__timelines["main"] = tl;
+
+  /* ══════════════════════════════════════
+     S1: 3:00 AM Clock  0 – 3s
+     Kinetic Slam: cada dígito entra desde
+     una dirección distinta (catalog: kinetic-slam)
+  ══════════════════════════════════════ */
+  tl.from("#s1-ey",  { autoAlpha: 0, y: -16, duration: 0.5, ease: "power2.out" }, 0.1);
+  /* "3" entra desde la izquierda */
+  tl.from("#s1-d1", { x: -160, autoAlpha: 0, duration: 0.55, ease: "back.out(1.1)" }, 0.35);
+  /* ":" pulsa desde el centro */
+  tl.from("#s1-col", { scale: 0, autoAlpha: 0, duration: 0.4, ease: "back.out(2.0)" }, 0.62);
+  /* "00" entra desde la derecha */
+  tl.from("#s1-d2", { x: 100, autoAlpha: 0, duration: 0.52, ease: "back.out(1.1)" }, 0.72);
+  tl.from("#s1-d3", { x: 160, autoAlpha: 0, duration: 0.52, ease: "back.out(1.1)" }, 0.82);
+  /* "AM" aparece abajo */
+  tl.from("#s1-am", { y: 20, autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 1.1);
+  /* Subtítulos entran escalonados */
+  tl.from("#s1-sub1", { y: 28, autoAlpha: 0, duration: 0.5, ease: "power2.out" }, 1.4);
+  tl.from("#s1-sub2", { y: 28, autoAlpha: 0, duration: 0.5, ease: "back.out(1.3)" }, 1.75);
+  /* Glow late fuerte al principio luego respira */
+  tl.to("#s1-glow", { scale: 1.3, duration: 0.45, ease: "power3.out" }, 0.3);
+  tl.to("#s1-glow", { scale: 1.0, duration: 1.2, ease: "sine.inOut" }, 0.75);
+  /* Colon pulsa como un reloj real */
+  tl.to("#s1-col", { autoAlpha: 0.3, duration: 0.4, ease: "none", yoyo: true, repeat: 3 }, 1.1);
+  tl.set("#s1", { autoAlpha: 0 }, 3.0);
+
+  /* ══════════════════════════════════════
+     S2: Chat nocturno  3 – 7s
+  ══════════════════════════════════════ */
+  tl.set("#s2", { autoAlpha: 1 }, 3.0);
+  tl.from("#s2-ey",   { y: -20, autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 3.12);
+  tl.from("#s2-title",{ y: -60, autoAlpha: 0, duration: 0.6, ease: "back.out(1.2)" }, 3.32);
+  tl.from("#s2-chat", { y: 60, autoAlpha: 0, scale: 0.96, duration: 0.65, ease: "expo.out" }, 3.72);
+  /* Burbujas aparecen con tiempo para leer */
+  tl.from("#cb1", { x:  52, autoAlpha: 0, duration: 0.4, ease: "back.out(1.5)" }, 4.2);
+  tl.from("#cb2", { x: -52, autoAlpha: 0, duration: 0.42, ease: "back.out(1.5)" }, 4.75);
+  tl.from("#cb3", { x:  52, autoAlpha: 0, duration: 0.38, ease: "back.out(1.5)" }, 5.4);
+  tl.from("#cb4", { x: -52, autoAlpha: 0, duration: 0.42, ease: "back.out(1.5)" }, 5.98);
+  tl.from("#cb5", { autoAlpha: 0, duration: 0.4, ease: "power2.out" }, 6.55);
+  /* Chat window pulsa ligeramente al final — alive feeling */
+  tl.to("#s2-chat", { borderColor: "rgba(204,255,0,0.22)", duration: 0.5, ease: "sine.inOut", yoyo: true, repeat: 1 }, 6.4);
+  tl.set("#s2", { autoAlpha: 0 }, 7.0);
+
+  /* ══════════════════════════════════════
+     S3: Cliente registrado  7 – 10.5s
+  ══════════════════════════════════════ */
+  tl.set("#s3", { autoAlpha: 1 }, 7.0);
+  tl.from("#s3-ey",   { y: -20, autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 7.12);
+  tl.from("#s3-title",{ y: -56, autoAlpha: 0, duration: 0.58, ease: "back.out(1.2)" }, 7.32);
+  /* Card entra desde abajo */
+  tl.from("#s3-card", { y: 80, autoAlpha: 0, scale: 0.94, duration: 0.65, ease: "expo.out" }, 7.72);
+  /* Avatar aparece con bounce */
+  tl.from("#s3-av",   { scale: 0, autoAlpha: 0, duration: 0.6, ease: "elastic.out(1, 0.55)" }, 8.1);
+  /* Stats counters */
+  var c1n = { v: 0 };
+  tl.to(c1n, { v: 1, duration: 0.8, ease: "power2.out",
+    onUpdate: function () { document.getElementById("cs1-n").textContent = Math.round(c1n.v); }
+  }, 8.7);
+  var c2n = { v: 0 };
+  tl.to(c2n, { v: 120, duration: 1.0, ease: "power2.out",
+    onUpdate: function () { document.getElementById("cs2-n").textContent = Math.round(c2n.v); }
+  }, 8.85);
+  /* Badge pop */
+  tl.from("#s3-badge", { scale: 0, autoAlpha: 0, duration: 0.45, ease: "back.out(1.8)" }, 9.5);
+  tl.set("#s3", { autoAlpha: 0 }, 10.5);
+
+  /* ══════════════════════════════════════
+     S4: Revenue counter  10.5 – 14.5s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s4", { opacity: 1 }, 10.5);
+  tl.from("#s4-ey",    { y: -20, autoAlpha: 0, duration: 0.45, ease: "power3.out"   }, 10.62);
+  tl.from("#s4-label", { y: -16, autoAlpha: 0, duration: 0.42, ease: "power2.out"   }, 10.82);
+  /* Revenue number slams in from below */
+  tl.from("#s4-revenue", { y: 100, autoAlpha: 0, scale: 0.85, duration: 0.65, ease: "back.out(1.2)" }, 11.05);
+  tl.from("#s4-sub",     { y: 16, autoAlpha: 0, duration: 0.42, ease: "power2.out"  }, 11.5);
+
+  /* Counter 0 → 18.400 */
+  var rev = { v: 0 };
+  tl.to(rev, { v: 82600, duration: 1.8, ease: "power2.out",
+    onUpdate: function () {
+      var n = Math.round(rev.v);
+      document.getElementById("s4-num").textContent =
+        n.toLocaleString("es-AR");
+    }
+  }, 11.1);
+
+  /* Shimmer sweep over number (catalog: shimmer-sweep)
+     animamos background-position del div overlay */
+  tl.fromTo("#s4-shimmer",
+    { backgroundPosition: "-200% 0" },
+    { backgroundPosition: "300% 0", duration: 1.4, ease: "power1.inOut" },
+    11.5
+  );
+
+  /* Order chips aparecen escalonados */
+  tl.from("#oc1", { y: 40, autoAlpha: 0, scale: 0.9, duration: 0.45, ease: "back.out(1.5)" }, 12.2);
+  tl.from("#oc2", { y: 40, autoAlpha: 0, scale: 0.9, duration: 0.45, ease: "back.out(1.5)" }, 12.55);
+  tl.from("#oc3", { y: 40, autoAlpha: 0, scale: 0.9, duration: 0.45, ease: "back.out(1.5)" }, 12.9);
+  /* Grid background fades in */
+  tl.from("#s4-bg-lines", { autoAlpha: 0, duration: 0.8, ease: "power2.out" }, 10.55);
+
+  /* ══════════════════════════════════════
+     S5: Stats noche  14.5 – 18.5s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s5", { opacity: 1 }, 14.5);
+  tl.from("#s5-ey",   { y: -20, autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 14.62);
+  tl.from("#s5-title",{ y: -56, autoAlpha: 0, duration: 0.6,  ease: "back.out(1.2)" }, 14.82);
+  /* Stat cards entran escalonadas */
+  tl.from("#st1", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 15.25);
+  tl.from("#st2", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 15.5);
+  tl.from("#st3", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 15.75);
+  tl.from("#st4", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 16.0);
+  /* Counters */
+  var n1 = { v: 0 };
+  tl.to(n1, { v: 847, duration: 1.5, ease: "power2.out",
+    onUpdate: function () { document.getElementById("sn1").textContent = Math.round(n1.v); } }, 15.3);
+  var n2 = { v: 0 };
+  tl.to(n2, { v: 23, duration: 1.3, ease: "power2.out",
+    onUpdate: function () { document.getElementById("sn2").textContent = Math.round(n2.v); } }, 15.55);
+  var n3 = { v: 0 };
+  tl.to(n3, { v: 12, duration: 1.2, ease: "power2.out",
+    onUpdate: function () { document.getElementById("sn3").textContent = Math.round(n3.v); } }, 15.8);
+  var n4 = { v: 0 };
+  tl.to(n4, { v: 2340, duration: 1.6, ease: "power2.out",
+    onUpdate: function () { document.getElementById("sn4").textContent = Math.round(n4.v).toLocaleString("es-AR"); } }, 16.05);
+  /* Bars */
+  tl.to("#sb1", { width: "92%", duration: 1.2, ease: "power2.out" }, 15.3);
+  tl.to("#sb2", { width: "65%", duration: 1.1, ease: "power2.out" }, 15.55);
+  tl.to("#sb3", { width: "44%", duration: 1.0, ease: "power2.out" }, 15.8);
+  tl.to("#sb4", { width: "80%", duration: 1.3, ease: "power2.out" }, 16.05);
+  /* st4 border flashes lime mid-scene */
+  tl.to("#st4", { borderColor: "rgba(204,255,0,0.55)", duration: 0.3, ease: "power3.out" }, 17.4);
+  tl.to("#st4", { borderColor: "rgba(204,255,0,0.22)", duration: 0.7, ease: "power2.inOut" }, 17.7);
+
+  /* ══════════════════════════════════════
+     S6: Brand "Nunca duerme."  18.5 – 22.5s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s6", { opacity: 1 }, 18.5);
+  /* Logo con elastic */
+  tl.from("#s6-logo",     { scale: 0, autoAlpha: 0, duration: 0.85, ease: "elastic.out(1, 0.5)" }, 18.6);
+  tl.from("#s6-wordmark", { y: -72, autoAlpha: 0, duration: 0.6, ease: "back.out(1.3)" }, 19.25);
+  tl.from("#s6-co",       { autoAlpha: 0, duration: 0.52, ease: "power3.out" }, 19.68);
+  /* Tagline aparece y el highlight hace un sweep */
+  tl.from("#s6-tagline",  { autoAlpha: 0, duration: 0.01, ease: "none" }, 20.05);
+  tl.to("#s6-highlight",  { scaleX: 1, duration: 0.48, ease: "expo.out" }, 20.05);
+  /* Después del sweep el texto se pone negro */
+  tl.call(function () {
+    document.getElementById("s6-tagline").classList.add("lit");
+  }, null, 20.08);
+  /* CTA y URL entran */
+  tl.from("#s6-cta", { y: 44, scale: 0.82, autoAlpha: 0, duration: 0.58, ease: "back.out(2.0)" }, 20.62);
+  tl.from("#s6-url", { autoAlpha: 0, duration: 0.45, ease: "power2.out" }, 21.1);
+  /* Logo flota */
+  tl.to("#s6-logo", { y: -12, duration: 1.0, ease: "sine.inOut", yoyo: true, repeat: 1 }, 19.4);
+  /* Glow late al entrar */
+  tl.to("#s6-glow", { scale: 1.5, opacity: 0.88, duration: 0.45, ease: "power3.out" }, 18.6);
+  tl.to("#s6-glow", { scale: 1.1, opacity: 1, duration: 1.0, ease: "power2.inOut" }, 19.05);
+  /* CTA pulsa al final */
+  tl.to("#s6-cta", { scale: 1.06, duration: 0.42, ease: "sine.inOut", yoyo: true, repeat: 1 }, 21.6);
+
+  /* ══════════════════════════════════════
+     HyperShader — 2 transiciones
+     S4→S5  light-leak     t=14.35  (14.5 - 0.15)  dur=0.3
+     S5→S6  cinematic-zoom t=18.25  (18.5 - 0.25)  dur=0.5
+  ══════════════════════════════════════ */
+  if (window.HyperShader) {
+    window.HyperShader.init({
+      bgColor: "#000000",
+      scenes: ["s4", "s5", "s6"],
+      timeline: tl,
+      transitions: [
+        { time: 14.35, shader: "light-leak",      duration: 0.3 },
+        { time: 18.25, shader: "cinematic-zoom",  duration: 0.5 }
+      ],
+    });
+  }
+})();
+</script>
+</body>
+</html>

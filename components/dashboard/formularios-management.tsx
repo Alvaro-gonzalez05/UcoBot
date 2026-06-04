@@ -401,17 +401,17 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
     return (
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 px-1 pt-2">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1 pt-2">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setEditingForm(null)}
-              className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex-shrink-0"
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div>
-              <h2 className="text-3xl font-bold dark:text-white">Editar Formulario</h2>
-              <p className="text-muted-foreground text-sm mt-0.5">
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-3xl font-bold dark:text-white truncate">Editar Formulario</h2>
+              <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
                 {editingForm.is_active
                   ? <span className="text-green-500 font-semibold">● Activo</span>
                   : <span className="text-muted-foreground">● Inactivo</span>
@@ -421,11 +421,11 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="flex bg-muted rounded-2xl p-1 gap-1">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex bg-muted rounded-2xl p-1 gap-1 flex-1 sm:flex-none">
               <button
                 onClick={() => setEditorTab("constructor")}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
                   editorTab === "constructor"
                     ? "bg-background shadow text-foreground"
                     : "text-muted-foreground hover:text-foreground"
@@ -435,20 +435,21 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
               </button>
               <button
                 onClick={() => { setEditorTab("preview"); setPreviewStep(0) }}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 ${
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-1.5 ${
                   editorTab === "preview"
                     ? "bg-background shadow text-foreground"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Eye className="w-3.5 h-3.5" />
-                Vista Previa
+                <span className="hidden sm:inline">Vista Previa</span>
+                <span className="sm:hidden">Preview</span>
               </button>
             </div>
             <Button
               onClick={handleSaveEdit}
               disabled={isSaving || !editMeta.name.trim()}
-              className="bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl px-6 gap-2 shadow-lg"
+              className="bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl px-4 sm:px-6 gap-2 shadow-lg flex-shrink-0"
             >
               {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               Guardar
@@ -458,7 +459,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
 
         {/* ── CONSTRUCTOR TAB ── */}
         {editorTab === "constructor" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5">
             {/* Left — steps + cotizador */}
             <div className="lg:col-span-2 space-y-5">
               {/* Form info */}
@@ -604,7 +605,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                                   })
                                 }}
                               >
-                                <SelectTrigger className="w-44 h-8 text-xs rounded-xl shrink-0">
+                                <SelectTrigger className="w-full sm:w-44 h-8 text-xs rounded-xl shrink-0">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -705,7 +706,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                               )}
                               {isSlider && (
                                 <div className="space-y-3">
-                                  <div className="grid grid-cols-3 gap-2">
+                                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-3">
                                     {[
                                       { label: "Minimo", key: "min", default: 0 },
                                       { label: "Maximo", key: "max", default: 100 },
@@ -1204,7 +1205,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
         {editorTab === "preview" && (
           <div
             className="relative overflow-hidden"
-            style={{ backgroundColor: "#11131c", borderRadius: "1.5rem", padding: "2rem", fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif", color: "#e1e1ef", minHeight: 500 }}
+            style={{ backgroundColor: "#11131c", borderRadius: "1.5rem", padding: "clamp(1rem, 4vw, 2rem)", fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif", color: "#e1e1ef", minHeight: 500 }}
           >
             {/* Background blobs */}
             <div className="absolute rounded-full pointer-events-none" style={{ top: "-20%", left: "-10%", width: "40%", height: "40%", background: "rgba(180,245,119,0.05)", filter: "blur(100px)", zIndex: 0 }} />
@@ -1217,7 +1218,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
               <div className="flex flex-col gap-4 lg:col-span-8">
 
                 {/* Header */}
-                <header className="glass-panel rounded-2xl p-6 flex flex-wrap justify-between items-center gap-4">
+                <header className="glass-panel rounded-2xl p-4 sm:p-6 flex flex-wrap justify-between items-center gap-3">
                   <div>
                     <h2 className="text-2xl font-bold flex items-center gap-2" style={{ color: "#ffffff" }}>
                       {editMeta.logo ? (
@@ -1255,14 +1256,14 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
 
                 {/* Active step */}
                 {editSteps[previewStep] && (
-                  <section className="glass-panel rounded-2xl p-6 flex flex-col gap-4">
+                  <section className="glass-panel rounded-2xl p-4 sm:p-6 flex flex-col gap-3 sm:gap-4">
                     <div className="flex items-center gap-3 pb-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
                       <h3 className="text-xl font-semibold" style={{ color: "#ffffff", margin: 0 }}>
                         {editSteps[previewStep].title || `Paso ${previewStep + 1}`}
                       </h3>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1 sm:mt-2">
                       {editSteps[previewStep].fields.length === 0 ? (
                         <div className="md:col-span-2 text-center py-6" style={{ color: "#8c9381", fontSize: 14 }}>
                           Sin campos en este paso
@@ -1369,7 +1370,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                         {editSteps[previewStep + 1].title}
                       </h3>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1 sm:mt-2">
                       {editSteps[previewStep + 1].fields.slice(0, 4).map((f, i) => (
                         <div key={i} className="flex flex-col gap-1.5">
                           <label className="input-label text-xs font-medium">{f.label}</label>
@@ -1467,15 +1468,15 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h2 className="text-3xl font-bold dark:text-white">{responseView.name}</h2>
-            <p className="text-muted-foreground text-sm mt-0.5">
+          <div className="min-w-0">
+            <h2 className="text-2xl sm:text-3xl font-bold dark:text-white truncate">{responseView.name}</h2>
+            <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
               {displayCount} respuesta{displayCount !== 1 ? "s" : ""} · {responseView.type}
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <div className="bg-card rounded-3xl p-5 shadow-lg border border-border flex items-center gap-4">
             <div className="w-12 h-12 bg-[#D1F366]/10 text-[#D1F366] rounded-2xl flex items-center justify-center flex-shrink-0">
               <BarChart3 className="h-6 w-6" />
@@ -1528,7 +1529,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4 p-4 sm:p-6">
               {these.map((s, idx) => {
                 const c1: string = responseView.settings?.color1 || "#6366f1"
                 const c2: string = responseView.settings?.color2 || "#8b5cf6"
@@ -1581,7 +1582,7 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
 
         {/* Submission detail modal */}
         <Dialog open={!!modalSubmission} onOpenChange={open => !open && setModalSubmission(null)}>
-          <DialogContent className="max-w-md p-0 overflow-hidden rounded-3xl border-0 shadow-2xl">
+          <DialogContent className="max-w-[92vw] sm:max-w-md p-0 overflow-hidden rounded-3xl border-0 shadow-2xl">
             {modalSubmission && (() => {
               const c1: string = responseView.settings?.color1 || "#6366f1"
               const c2: string = responseView.settings?.color2 || "#8b5cf6"
@@ -1625,23 +1626,24 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
   // ── Main list view ─────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 mb-6 px-1 pt-2">
-        <div>
-          <h2 className="text-3xl font-bold dark:text-white">Formularios</h2>
-          <p className="text-muted-foreground text-sm mt-1">
+      <div className="flex items-start justify-between gap-3 mb-6 px-1 pt-2">
+        <div className="min-w-0">
+          <h2 className="text-2xl sm:text-3xl font-bold dark:text-white">Formularios</h2>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1 hidden sm:block">
             Formularios web (link) o conversacionales para captar informacion de tus clientes.
           </p>
         </div>
         <button
           onClick={() => setIsDialogOpen(true)}
-          className="bg-[#D1F366] text-[#1C1C28] font-black text-xs uppercase tracking-widest py-3 px-5 rounded-2xl hover:bg-white transition-all shadow-xl shadow-[#D1F366]/5 active:scale-95 flex items-center gap-2 whitespace-nowrap"
+          className="bg-[#D1F366] text-[#1C1C28] font-black text-xs uppercase tracking-widest py-2.5 px-4 sm:py-3 sm:px-5 rounded-2xl hover:bg-white transition-all shadow-xl shadow-[#D1F366]/5 active:scale-95 flex items-center gap-2 whitespace-nowrap flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
-          Nuevo formulario
+          <span className="hidden sm:inline">Nuevo formulario</span>
+          <span className="sm:hidden">Nuevo</span>
         </button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-card rounded-3xl p-5 shadow-lg border border-border flex items-center gap-4">
           <div className="w-12 h-12 bg-[#D1F366]/10 text-[#D1F366] rounded-2xl flex items-center justify-center flex-shrink-0">
             <FileText className="h-6 w-6" />
@@ -1701,23 +1703,23 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                 return (
                   <div
                     key={form.id}
-                    className="bg-card rounded-3xl p-5 shadow-lg border border-border flex items-center justify-between gap-4 hover:shadow-lg hover:-translate-y-0.5 transition-all"
+                    className="bg-card rounded-3xl p-4 sm:p-5 shadow-lg border border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 hover:shadow-lg hover:-translate-y-0.5 transition-all"
                   >
-                    <div className="flex items-center gap-5 flex-1 min-w-0">
-                      <div className={`w-14 h-14 rounded-2xl flex-shrink-0 flex items-center justify-center ${
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex-shrink-0 flex items-center justify-center ${
                         form.is_active
                           ? "bg-[#D1F366]/10 text-[#D1F366]"
                           : "bg-muted text-muted-foreground"
                       }`}>
                         {form.type === "link"
-                          ? <Globe className="h-7 w-7" />
-                          : <MessageSquare className="h-7 w-7" />
+                          ? <Globe className="h-6 w-6 sm:h-7 sm:w-7" />
+                          : <MessageSquare className="h-6 w-6 sm:h-7 sm:w-7" />
                         }
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2.5 mb-1 flex-wrap">
-                          <h4 className="font-bold text-lg dark:text-white truncate">{form.name}</h4>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                          <h4 className="font-bold text-base sm:text-lg dark:text-white truncate">{form.name}</h4>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
                             form.is_active
                               ? "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800"
                               : "bg-muted text-muted-foreground border-border"
@@ -1725,13 +1727,13 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                             {form.is_active ? "Activo" : "Inactivo"}
                           </span>
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-3 text-xs sm:text-sm text-muted-foreground flex-wrap">
                           <span className="capitalize">{form.type}</span>
                           <span>{form.fields?.length ?? 0} campos</span>
                           <span>{count} respuesta{count !== 1 ? "s" : ""}</span>
                         </div>
                         {form.description && (
-                          <p className="text-xs text-muted-foreground mt-1 truncate">{form.description}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{form.description}</p>
                         )}
                       </div>
                     </div>
@@ -1743,18 +1745,18 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                       />
                       <Button
                         onClick={() => openEditor(form)}
-                        className="px-5 py-2.5 h-auto rounded-xl font-bold text-sm bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] shadow-lg gap-1.5"
+                        className="h-9 px-3 sm:px-5 rounded-xl font-bold text-sm bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] shadow-lg gap-1.5"
                       >
                         <Pencil className="w-4 h-4" />
-                        Editar
+                        <span className="hidden sm:inline">Editar</span>
                       </Button>
                       <Button
                         variant="ghost"
                         onClick={() => setResponseView(form)}
-                        className="px-5 py-2.5 h-auto rounded-xl font-bold text-sm bg-muted text-muted-foreground hover:bg-muted/80 gap-1.5"
+                        className="h-9 px-3 sm:px-5 rounded-xl font-bold text-sm bg-muted text-muted-foreground hover:bg-muted/80 gap-1.5"
                       >
                         <Eye className="w-4 h-4" />
-                        Respuestas
+                        <span className="hidden sm:inline">Respuestas</span>
                       </Button>
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>

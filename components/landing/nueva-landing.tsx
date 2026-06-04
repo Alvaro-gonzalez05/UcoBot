@@ -1066,7 +1066,7 @@ export function NuevaLanding() {
                   Acceso Completo
                 </h3>
                 <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-5xl font-black" style={{ color: "#D1F366" }}>$60.000</span>
+                  <span className="text-5xl font-black" style={{ color: "#D1F366" }}>$90.000</span>
                   <span className="text-base font-bold" style={{ color: T.pCard1Suffix, transition: "color 0.35s ease" }}>
                     ARS/mes
                   </span>
