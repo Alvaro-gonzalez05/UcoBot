@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { getGraphVersion } from '@/lib/meta/credentials'
 
 // Helper function to find or create conversation
 async function findOrCreateConversation(bot: any, clientId: string, platform: string, supabase: any) {
@@ -46,67 +47,44 @@ export async function GET(request: NextRequest) {
   const token = url.searchParams.get('hub.verify_token')
   const challenge = url.searchParams.get('hub.challenge')
 
-  console.log('📸 Instagram webhook verification request:')
-  console.log('- Full URL:', request.url)
-  console.log('- Mode:', mode)
-  console.log('- Token received:', token)
-  console.log('- Challenge:', challenge)
-  console.log('- All URL params:', Object.fromEntries(url.searchParams.entries()))
-
-  // Verify the webhook
-  if (mode === 'subscribe') {
-    try {
-      // Check database for user's bot tokens
-      let VERIFY_TOKEN = null
-      
-      if (token) {
-        // Use admin client for webhook operations to bypass RLS
-        const supabase = createAdminClient()
-        
-        // Search for bot by ID (token is the bot ID)
-        const { data: bot, error: botError } = await supabase
-          .from('bots')
-          .select('id, name, user_id')
-          .eq('platform', 'instagram')
-          .eq('id', token)
-          .single()
-        
-        if (!botError && bot) {
-          VERIFY_TOKEN = token
-          console.log('✅ Found Instagram bot:', bot.name, 'with ID:', bot.id)
-        } else {
-          console.log('❌ No Instagram bot found with ID:', token)
-        }
-      }
-      
-      console.log('📸 Final verification result:')
-      console.log('- VERIFY_TOKEN:', VERIFY_TOKEN)
-      console.log('- Match:', VERIFY_TOKEN && token === VERIFY_TOKEN)
-      
-      if (VERIFY_TOKEN && token === VERIFY_TOKEN) {
-        console.log('✅ Verification successful, returning challenge')
-        return new NextResponse(challenge, { 
-          status: 200,
-          headers: {
-            'Content-Type': 'text/plain'
-          }
-        })
-      } else {
-        console.log('❌ Verification failed')
-        return new NextResponse('Verification failed', { status: 403 })
-      }
-    } catch (error) {
-      console.error('Error during Instagram webhook verification:', error)
-      return new NextResponse('Verification error', { status: 500 })
-    }
+  if (mode !== 'subscribe' || !token) {
+    return new NextResponse('Bad request', { status: 400 })
   }
 
-  console.log('❌ Invalid webhook verification request')
-  console.log('- Expected mode: "subscribe", received:', mode)
-  console.log('- Has token:', !!token)
-  console.log('- Has challenge:', !!challenge)
-  
-  return new NextResponse(`Invalid request - mode: ${mode}`, { status: 400 })
+  try {
+    const APP_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN
+
+    if (APP_VERIFY_TOKEN && token === APP_VERIFY_TOKEN) {
+      console.log('✅ Instagram webhook verified via app-level token (Facebook Login mode)')
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    }
+
+    // Legacy: per-bot verify token (token = bot ID). Mantener compatibilidad.
+    const supabase = createAdminClient()
+    const { data: bot } = await supabase
+      .from('bots')
+      .select('id')
+      .eq('platform', 'instagram')
+      .eq('id', token)
+      .single()
+
+    if (bot) {
+      console.log('✅ Instagram webhook verified via legacy per-bot token, bot:', bot.id)
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    }
+
+    console.log('❌ Instagram webhook verification failed for token:', token)
+    return new NextResponse('Verification failed', { status: 403 })
+  } catch (error) {
+    console.error('Error during Instagram webhook verification:', error)
+    return new NextResponse('Verification error', { status: 500 })
+  }
 }
 
 // Handle incoming Instagram messages (POST request)
@@ -561,7 +539,7 @@ async function sendInstagramMessage(accessToken: string, instagramBusinessAccoun
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-    const response = await fetch(`https://graph.instagram.com/v21.0/me/messages`, {
+    const response = await fetch(`https://graph.instagram.com/${getGraphVersion()}/me/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -583,7 +561,7 @@ async function sendInstagramMessage(accessToken: string, instagramBusinessAccoun
       // Try Facebook Graph API as fallback
       console.log('📸 Trying Facebook Graph API as fallback...')
       
-      const fallbackResponse = await fetch(`https://graph.facebook.com/v18.0/${instagramBusinessAccountId}/messages`, {
+      const fallbackResponse = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${instagramBusinessAccountId}/messages`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
@@ -749,7 +727,7 @@ async function processInstagramComment(commentData: any, request: NextRequest) {
 // Función para enviar mensaje directo de Instagram
 async function sendInstagramDM(integration: any, recipientId: string, message: string, conversation: any, supabase: any) {
   try {
-    const response = await fetch(`https://graph.instagram.com/v21.0/${integration.config.instagram_business_account_id}/messages`, {
+    const response = await fetch(`https://graph.instagram.com/${getGraphVersion()}/${integration.config.instagram_business_account_id}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${integration.config.access_token}`,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getWhatsAppToken, getGraphVersion } from '@/lib/meta/credentials'
 
 // Endpoint para obtener plantillas de mensaje desde las APIs de Meta y proveedores externos
 export async function GET(request: NextRequest) {
@@ -118,8 +119,9 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
       .single()
 
     const integrationConfig = integration?.config
+    const whatsappToken = getWhatsAppToken(integration)
 
-    if (!integrationConfig?.business_account_id || !integrationConfig?.access_token) {
+    if (!integrationConfig?.business_account_id || !whatsappToken) {
       console.log('Missing WhatsApp integration configuration')
       return []
     }
@@ -129,15 +131,14 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
     // Para cada bot de WhatsApp, obtener plantillas desde Meta API
     // Nota: Como la integración es por cuenta (user_id), todos los bots comparten la misma WABA
     // por lo que las plantillas serán las mismas para todos.
-    
+
     try {
       // Llamar a Meta Graph API para obtener message templates
-      // Usamos v21.0 como versión estable reciente
       const response = await fetch(
-        `https://graph.facebook.com/v21.0/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
+        `https://graph.facebook.com/${getGraphVersion()}/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
         {
           headers: {
-            'Authorization': `Bearer ${integrationConfig.access_token}`,
+            'Authorization': `Bearer ${whatsappToken}`,
             'Content-Type': 'application/json'
           }
         }
@@ -200,7 +201,7 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
       
       try {
         const response = await fetch(
-          `https://graph.facebook.com/v18.0/${businessAccountId}/message_templates?fields=name,status,language,category,components,quality_score`,
+          `https://graph.facebook.com/${getGraphVersion()}/${businessAccountId}/message_templates?fields=name,status,language,category,components,quality_score`,
           {
             headers: {
               'Authorization': `Bearer ${accessToken}`,
@@ -368,7 +369,7 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
           }
 
           const response = await fetch(
-            `https://graph.facebook.com/v18.0/${accountIdToUse}/message_templates?fields=name,status,language,category,components,quality_score`,
+            `https://graph.facebook.com/${getGraphVersion()}/${accountIdToUse}/message_templates?fields=name,status,language,category,components,quality_score`,
             {
               headers: {
                 'Authorization': authHeader,

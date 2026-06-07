@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/server"
+import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams
@@ -33,14 +34,13 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
       .single()
 
-    if (integrationError || !integration || !integration.config?.access_token) {
+    const accessToken = getWhatsAppToken(integration)
+    if (integrationError || !accessToken) {
       return new NextResponse("Integration not found or invalid", { status: 404 })
     }
 
-    const accessToken = integration.config.access_token
-
     // 1. Get Media URL from WhatsApp API
-    const mediaUrlRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+    const mediaUrlRes = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${mediaId}`, {
       headers: { Authorization: `Bearer ${accessToken}` }
     })
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createNotification } from "@/lib/notifications"
+import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
 
 export async function POST(request: NextRequest) {
   try {
@@ -76,12 +77,11 @@ export async function POST(request: NextRequest) {
           .eq('is_active', true)
           .single();
           
-        if (integration && integration.config?.access_token) {
-          const accessToken = integration.config.access_token;
-          
+        const accessToken = getWhatsAppToken(integration);
+        if (accessToken) {
           // 1. Get Media URL
-          const mediaUrlRes = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, { 
-            headers: { Authorization: `Bearer ${accessToken}` } 
+          const mediaUrlRes = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${mediaId}`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
           });
           
           if (mediaUrlRes.ok) {

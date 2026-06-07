@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
+import { getWhatsAppToken, getInstagramToken, getGraphVersion, getGraphHost } from "@/lib/meta/credentials"
 
 export async function POST(req: NextRequest) {
   try {
@@ -93,16 +94,18 @@ async function executeAfterSubmit(supabase: any, form_id: string, conversation_i
       .limit(1)
 
     const integration = integrations?.[0]
-    const accessToken = integration?.config?.access_token
+    const token = platform === "whatsapp"
+      ? getWhatsAppToken(integration)
+      : getInstagramToken(integration)
 
-    if (accessToken) {
+    if (token) {
       if (platform === "whatsapp") {
-        const phoneNumberId = integration.config?.phone_number_id
+        const phoneNumberId = integration?.config?.phone_number_id
         if (phoneNumberId) {
-          sendWhatsAppMessage(accessToken, phoneNumberId, recipient, messageText).catch(console.error)
+          sendWhatsAppMessage(token, phoneNumberId, recipient, messageText).catch(console.error)
         }
       } else if (platform === "instagram") {
-        sendInstagramMessage(accessToken, recipient, messageText).catch(console.error)
+        sendInstagramMessage(token, recipient, messageText).catch(console.error)
       }
     }
   }
@@ -139,7 +142,7 @@ async function sendWhatsAppMessage(
     normalizedPhone = "54" + recipientPhone.substring(3)
   }
 
-  const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+  const response = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${phoneNumberId}/messages`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -157,9 +160,8 @@ async function sendWhatsAppMessage(
 }
 
 async function sendInstagramMessage(accessToken: string, recipientId: string, message: string) {
-  const isInstagramToken = accessToken.startsWith("IGAA")
-  const host = isInstagramToken ? "graph.instagram.com" : "graph.facebook.com"
-  const version = isInstagramToken ? "v21.0" : "v18.0"
+  const host = getGraphHost(accessToken)
+  const version = getGraphVersion()
 
   const response = await fetch(`https://${host}/${version}/me/messages`, {
     method: "POST",

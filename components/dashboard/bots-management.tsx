@@ -23,7 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { MultiStepBotCreation } from "./multi-step-bot-creation"
-import { MetaBusinessConfig } from "./meta-business-config"
+import { MetaConnectionCard } from "./meta-connection-card"
 import {
   Plus,
   Bot,
@@ -115,7 +115,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   const [bots, setBots] = useState<BotData[]>(initialBots)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isMetaConfigDialogOpen, setIsMetaConfigDialogOpen] = useState(false)
   const [selectedBot, setSelectedBot] = useState<BotData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
@@ -305,20 +304,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
     setEditingBot(bot)
   }
 
-  const openMetaConfigDialog = (bot: BotData) => {
-    // Verificar si el usuario tiene un plan de pago
-    if (userSubscription?.plan_type === "trial") {
-      toast.error("Funcionalidad premium requerida", {
-        description: "La configuración de Meta Business Suite está disponible solo para planes de pago. Actualiza tu suscripción.",
-        duration: 4000,
-      })
-      return
-    }
-
-    setSelectedBot(bot)
-    setIsMetaConfigDialogOpen(true)
-  }
-
   const handleFeatureChange = (featureId: string, checked: boolean) => {
     if (checked) {
       setFormData({ ...formData, features: [...formData.features, featureId] })
@@ -451,30 +436,36 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             </div>
           </div>
 
-          <div className="executive-card space-y-4">
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Estado</p>
-            <div className="flex items-center justify-between">
-              <Label htmlFor="edit-page-is_active" className="font-medium cursor-pointer">Bot activo</Label>
-              <Switch
-                id="edit-page-is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-              />
+          <div className="space-y-3 sm:space-y-5">
+            <div className="executive-card space-y-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Estado</p>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-page-is_active" className="font-medium cursor-pointer">Bot activo</Label>
+                <Switch
+                  id="edit-page-is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                />
+              </div>
+              <div className="pt-2 border-t border-border/50 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Plataforma</span>
+                  <Badge variant="outline">{platformLabels[formData.platform as keyof typeof platformLabels] || formData.platform}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Funcionalidades</span>
+                  <span className="text-xs font-medium">{formData.features.length} activas</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Creado</span>
+                  <span className="text-xs">{formatDate(editingBot.created_at)}</span>
+                </div>
+              </div>
             </div>
-            <div className="pt-2 border-t border-border/50 space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Plataforma</span>
-                <Badge variant="outline">{platformLabels[formData.platform as keyof typeof platformLabels] || formData.platform}</Badge>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Funcionalidades</span>
-                <span className="text-xs font-medium">{formData.features.length} activas</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Creado</span>
-                <span className="text-xs">{formatDate(editingBot.created_at)}</span>
-              </div>
-            </div>
+
+            {(formData.platform === "whatsapp" || formData.platform === "instagram") && (
+              <MetaConnectionCard platform={formData.platform as "whatsapp" | "instagram"} />
+            )}
           </div>
 
           {/* Fila 2: Personalidad (col 3 vacía) */}
@@ -851,16 +842,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                         <Edit className="mr-2 h-4 w-4" />
                         Editar
                       </DropdownMenuItem>
-                      {(bot.platform === "whatsapp" || bot.platform === "instagram") && (
-                        <DropdownMenuItem
-                          onClick={demo ? undefined : () => openMetaConfigDialog(bot)}
-                          disabled={demo}
-                          title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
-                        >
-                          <Zap className="mr-2 h-4 w-4" />
-                          {bot.platform === "whatsapp" ? "Configurar Meta Business (WhatsApp)" : "Configurar Meta Business (Instagram)"}
-                        </DropdownMenuItem>
-                      )}
                       <DropdownMenuItem
                         onClick={demo ? undefined : () => handleToggleBot(bot.id, !bot.is_active)}
                         disabled={demo}
@@ -950,19 +931,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
         onClose={() => setIsCreateDialogOpen(false)}
         onBotCreated={handleBotCreated}
         userId={userId}
-      />
-
-      {/* Meta Business Configuration Dialog */}
-      <MetaBusinessConfig
-        isOpen={isMetaConfigDialogOpen}
-        onClose={() => {
-          setIsMetaConfigDialogOpen(false)
-          setSelectedBot(null)
-        }}
-        bot={selectedBot}
-        onConfigComplete={() => {
-          // Actualizar estado si es necesario
-        }}
       />
 
     </div>

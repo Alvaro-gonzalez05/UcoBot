@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { createNotification } from '@/lib/notifications'
+import { getWhatsAppToken, getInstagramToken, getGraphVersion } from '@/lib/meta/credentials'
 
 // Endpoint para procesar la cola de mensajes programados
 // Se puede llamar manualmente o desde un cron job
@@ -394,8 +395,9 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{ success: b
 
     // Extraer la configuración del JSONB
     const whatsappConfig = integration.config
+    const whatsappToken = getWhatsAppToken(integration)
 
-    if (!whatsappConfig.phone_number_id || !whatsappConfig.access_token) {
+    if (!whatsappConfig.phone_number_id || !whatsappToken) {
       console.error('[WhatsApp] Missing required config fields:', whatsappConfig)
       return { success: false, error: 'WhatsApp configuration incomplete' }
     }
@@ -440,10 +442,10 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{ success: b
     console.log('[WhatsApp] Sending payload:', JSON.stringify(messagePayload, null, 2))
 
     // Enviar via WhatsApp Business API
-    const response = await fetch(`https://graph.facebook.com/v18.0/${whatsappConfig.phone_number_id}/messages`, {
+    const response = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${whatsappConfig.phone_number_id}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${whatsappConfig.access_token}`,
+        'Authorization': `Bearer ${whatsappToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(messagePayload)
@@ -493,8 +495,9 @@ async function sendInstagramMessage(message: any, bot: any): Promise<{ success: 
 
     // Extraer la configuración del JSONB
     const instagramConfig = integration.config
+    const instagramToken = getInstagramToken(integration)
 
-    if (!instagramConfig.page_id || !instagramConfig.access_token) {
+    if (!instagramConfig.page_id || !instagramToken) {
       console.error('[Instagram] Missing required config fields:', instagramConfig)
       return { success: false, error: 'Instagram configuration incomplete' }
     }
@@ -510,10 +513,10 @@ async function sendInstagramMessage(message: any, bot: any): Promise<{ success: 
     }
 
     // Enviar via Instagram Messaging API
-    const response = await fetch(`https://graph.facebook.com/v18.0/${instagramConfig.page_id}/messages`, {
+    const response = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${instagramConfig.page_id}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${instagramConfig.access_token}`,
+        'Authorization': `Bearer ${instagramToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(messagePayload)

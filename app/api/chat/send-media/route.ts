@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getWhatsAppToken, getGraphVersion } from '@/lib/meta/credentials'
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,8 +53,9 @@ export async function POST(request: NextRequest) {
     }
 
     const integration = integrations[0]
-    const accessToken = integration.config?.access_token
+    const accessToken = getWhatsAppToken(integration)
     const phoneNumberId = integration.config?.phone_number_id
+    const graphVersion = getGraphVersion()
 
     if (!accessToken || !phoneNumberId) {
       return NextResponse.json({ error: 'Invalid configuration' }, { status: 500 })
@@ -64,7 +66,7 @@ export async function POST(request: NextRequest) {
     whatsappFormData.append('file', file)
     whatsappFormData.append('messaging_product', 'whatsapp')
 
-    const uploadRes = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/media`, {
+    const uploadRes = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/media`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -111,7 +113,7 @@ export async function POST(request: NextRequest) {
         messageBody[messageType].filename = file.name
     }
 
-    const sendRes = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+    const sendRes = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

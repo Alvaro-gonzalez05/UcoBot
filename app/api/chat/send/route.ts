@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { getGraphHost, getGraphVersion } from '@/lib/meta/credentials'
 
 export async function POST(request: NextRequest) {
   try {
@@ -68,18 +69,16 @@ export async function POST(request: NextRequest) {
     }
 
     const integration = integrations[0]
-    const accessToken = integration.config?.access_token
+
+    // WhatsApp: prefer app-level System Token (Embedded Signup). Fallback to per-client token (legacy).
+    // Instagram: per-client Page Access Token (Facebook Login flow gives this per user).
+    const accessToken = platform === 'whatsapp'
+      ? (process.env.WHATSAPP_SYSTEM_TOKEN || integration.config?.access_token)
+      : integration.config?.access_token
 
     if (!accessToken) {
       return NextResponse.json(
-        { error: 'Invalid configuration: missing access token' },
-        { status: 500 }
-      )
-    }
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: 'Invalid configuration: missing access token' },
+        { error: `Invalid configuration: missing access token for ${platform}` },
         { status: 500 }
       )
     }
@@ -220,7 +219,8 @@ async function sendWhatsAppMessage(
       requestBody.context = { message_id: replyToId }
     }
 
-    const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+    const graphVersion = process.env.META_GRAPH_VERSION || 'v21.0'
+    const response = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -245,12 +245,8 @@ async function sendWhatsAppMessage(
 
 async function sendInstagramMessage(accessToken: string, recipientId: string, message: string) {
     try {
-        // Detect token type to select correct API endpoint
-        // Facebook Graph API tokens usually start with 'EA'
-        // Instagram Basic Display/Graph tokens usually start with 'IGAA'
-        const isInstagramToken = accessToken.startsWith('IGAA');
-        const host = isInstagramToken ? 'graph.instagram.com' : 'graph.facebook.com';
-        const version = isInstagramToken ? 'v21.0' : 'v18.0'; // Use newer version for Instagram host
+        const host = getGraphHost(accessToken);
+        const version = getGraphVersion();
 
         console.log(`Sending Instagram message via ${host} (${version}) to ${recipientId}`);
 

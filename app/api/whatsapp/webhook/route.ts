@@ -9,50 +9,45 @@ export async function GET(request: NextRequest) {
   const token = url.searchParams.get('hub.verify_token')
   const challenge = url.searchParams.get('hub.challenge')
 
-  // Verify the webhook
-  if (mode === 'subscribe') {
-    try {
-      // Check database for user's bot tokens
-      let VERIFY_TOKEN = null
-      
-      if (token) {
-        // Use admin client for webhook operations to bypass RLS
-        const supabase = createAdminClient()
-        
-        // Search for bot by ID (token is the bot ID)
-        const { data: bot, error: botError } = await supabase
-          .from('bots')
-          .select('id, name, user_id')
-          .eq('platform', 'whatsapp')
-          .eq('id', token)
-          .single()
-        
-        if (!botError && bot) {
-          VERIFY_TOKEN = token
-          console.log('✅ Found WhatsApp bot with ID:', bot.id)
-        } else {
-          console.log('❌ No WhatsApp bot found with ID:', token)
-        }
-      }
-      
-      if (VERIFY_TOKEN && token === VERIFY_TOKEN) {
-        return new NextResponse(challenge, { 
-          status: 200,
-          headers: {
-            'Content-Type': 'text/plain'
-          }
-        })
-      } else {
-        return new NextResponse('Verification failed', { status: 403 })
-      }
-    } catch (error) {
-      console.error('Error during webhook verification:', error)
-      return new NextResponse('Verification error', { status: 500 })
-    }
+  if (mode !== 'subscribe' || !token) {
+    return new NextResponse('Bad request', { status: 400 })
   }
 
-  console.log('Invalid webhook verification request - missing mode or not subscribe')
-  return new NextResponse('Bad request', { status: 400 })
+  try {
+    const APP_VERIFY_TOKEN = process.env.WEBHOOK_VERIFY_TOKEN
+
+    if (APP_VERIFY_TOKEN && token === APP_VERIFY_TOKEN) {
+      console.log('✅ WhatsApp webhook verified via app-level token (Embedded Signup mode)')
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    }
+
+    // Legacy: per-bot verify token (token = bot ID). Mantener compatibilidad con clientes
+    // configurados antes de la migración a Embedded Signup.
+    const supabase = createAdminClient()
+    const { data: bot } = await supabase
+      .from('bots')
+      .select('id')
+      .eq('platform', 'whatsapp')
+      .eq('id', token)
+      .single()
+
+    if (bot) {
+      console.log('✅ WhatsApp webhook verified via legacy per-bot token, bot:', bot.id)
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    }
+
+    console.log('❌ WhatsApp webhook verification failed for token:', token)
+    return new NextResponse('Verification failed', { status: 403 })
+  } catch (error) {
+    console.error('Error during webhook verification:', error)
+    return new NextResponse('Verification error', { status: 500 })
+  }
 }
 
 // Webhook event handler (POST request)
@@ -510,15 +505,16 @@ async function generateAndSendAIResponse(
     const aiResponse = await response.json()
     
     if (aiResponse.response) {
-      // Extract credentials from config JSONB
-      const accessToken = integration.config?.access_token
+      // Prefer the app-level System User token (Embedded Signup flow).
+      // Fallback to per-client token for legacy integrations.
+      const accessToken = process.env.WHATSAPP_SYSTEM_TOKEN || integration.config?.access_token
       const phoneNumberId = integration.config?.phone_number_id
-      
+
       if (!accessToken || !phoneNumberId) {
-        console.error('Missing WhatsApp credentials in integration config')
+        console.error('Missing WhatsApp credentials (no system token in env and no per-client token in config)')
         return
       }
-      
+
       // Send response via WhatsApp
       const sent = await sendWhatsAppMessage(accessToken, phoneNumberId, senderPhone, aiResponse.response)
 
@@ -564,7 +560,8 @@ async function sendWhatsAppMessage(accessToken: string, phoneNumberId: string, r
       }
     }
     
-    const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+    const graphVersion = process.env.META_GRAPH_VERSION || 'v21.0'
+    const response = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${tokenToUse}`,
