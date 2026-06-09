@@ -3,7 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 
 export async function POST(request: NextRequest) {
   try {
-    const { stage, contactName, businessName, userMessage } = await request.json()
+    const { stage, contactName, businessName, userMessage, transcript } = await request.json()
 
     const geminiApiKey = process.env.GEMINI_DEMO_API_KEY
     if (!geminiApiKey) {
@@ -16,16 +16,20 @@ export async function POST(request: NextRequest) {
     let prompt = ""
 
     const ucobot_context = `
-UCOBOT — QUÉ ES Y QUÉ PUEDE HACER:
-- Bot de IA para WhatsApp e Instagram que responde, califica y registra leads 24/7
-- CRM interno: historial de conversaciones, etiquetas de calificación, datos del contacto
-- Agenda de citas/visitas coordinadas por el bot (con confirmaciones automáticas)
-- Registro de pedidos, consultas y solicitudes estructuradas
-- Formularios conversacionales: el bot recopila datos específicos del cliente mediante chat natural
-- Calificación automática de leads con tags (Lead Caliente, Inversor, Comprador Final, etc.)
-- Alertas al equipo comercial cuando el bot detecta intención real o necesidad de handover
+UCOBOT — QUÉ ES Y QUÉ PUEDE HACER (lista completa de funcionalidades):
+- Bot de IA para WhatsApp e Instagram que responde, atiende, califica y registra leads 24/7
+- CRM interno: historial de conversaciones, etiquetas de calificación, datos y preferencias del contacto
+- Registro y reconocimiento de clientes recurrentes (los identifica y personaliza la atención)
+- Agenda de citas / visitas / turnos / reservas coordinadas por el bot, con confirmaciones automáticas
+- Toma de pedidos y solicitudes estructuradas (consultas, cotizaciones, presupuestos)
+- Catálogo de productos/servicios con precios que el bot usa para responder y vender
+- Punto de venta para registrar ventas directas de mostrador o para llevar
+- Formularios conversacionales: el bot RECOPILA DATOS específicos del cliente mediante chat natural (registros, fichas, preferencias, encuestas, calificaciones)
+- Puntos de fidelización por compras (ideal para consumo frecuente)
+- Calificación automática de leads con tags (Lead Caliente/Frío, Inversor, Comprador Final, etc.)
+- Alertas al equipo comercial y derivación a humano (handover) cuando detecta intención real
 - Automatizaciones post-conversación (seguimientos, recordatorios, reactivación de leads fríos)
-- Promociones activas que el bot puede comunicar
+- Promociones y campañas activas que el bot puede comunicar
 
 UCOBOT — LO QUE NO TIENE TODAVÍA (pero se puede desarrollar):
 - Integración directa con Meta Ads / Facebook Ads
@@ -40,37 +44,43 @@ UCOBOT — LO QUE NO TIENE TODAVÍA (pero se puede desarrollar):
 ${ucobot_context}
 
 El cliente se llama ${contactName} y su negocio se llama "${businessName}".
-Acaba de describir su negocio y sus necesidades así: "${userMessage}"
+${transcript ? `CONVERSACIÓN HASTA AHORA (no repitas nada de esto):\n${transcript}\n` : `Acaba de describir su negocio así: "${userMessage}"`}
 
-INSTRUCCIONES CRÍTICAS:
-1. Leé bien lo que escribió. Es posible que ya haya respondido varias cosas (canales de entrada, problemas actuales, objetivos). NO repitas preguntas sobre información que ya dio.
-2. Reaccioná en 1-2 oraciones específicas al negocio — mostrá que entendiste el rubro y el contexto real que describió. Nombrá algo concreto de lo que dijo.
-3. Si UcoBot puede resolver algo que mencionaron, decílo con una idea concreta y específica para su negocio (no genérica).
-4. Solo preguntá por información que realmente NO dieron todavía y que sea útil para configurar el bot. Si ya dieron suficiente contexto, podés simplemente confirmar que vas a configurar.
+INSTRUCCIONES CRÍTICAS (sonar humano y personalizado, NO robótico):
+1. PROHIBIDO empezar con "¡Genial!", "¡Perfecto!", "Entiendo que...", "Claro", "Por supuesto" o repetir/parafrasear lo que el cliente dijo. Eso suena a plantilla. Entrá directo con una observación real.
+2. Demostrá conocimiento del rubro: arrancá con UN detalle concreto y específico de ESE tipo de negocio (un caso de uso real, una situación típica del rubro) que muestre que entendés su mundo.
+3. IMPORTANTE — Mostrale TODO lo que UcoBot puede hacer por ESE negocio: recorré las funcionalidades RELEVANTES de la sección "QUÉ PUEDE HACER" (no te limites a un número fijo, incluí todas las que apliquen a su rubro) y traducí cada una a una acción concreta y específica para ellos, en una lista con guiones. Mencioná explícitamente que, si necesita **recolectar datos** de sus clientes (registros, fichas, preferencias, encuestas), UcoBot lo hace con formularios conversacionales. Nada genérico tipo "automatizar tu negocio" — cada punto pegado a su realidad.
+4. Después de mostrarle las posibilidades, invitá al cliente a contarte si quiere ajustar algo, sumar algún detalle, o si ya está conforme para que armes la configuración. Dejá claro que cuando él diga que está listo, vos le configurás todo.
+5. Variá la redacción. Nunca uses la misma estructura de frase dos veces. No re-preguntes nada ya respondido en la conversación.
 
-Tono: español argentino, cálido, consultivo, directo. Máximo 100 palabras. Sin saludos ni despedidas. No digas "claro" ni "por supuesto". Respondé únicamente con el texto del mensaje, sin JSON ni formato adicional.`
+Estructura sugerida: 1 frase de observación del rubro → "Con UcoBot vas a poder:" + lista de guiones con TODO lo relevante → cierre invitando a ajustar o a confirmar que arme la configuración.
+Tono: español argentino, cálido, consultivo, experto. Máximo 160 palabras. Sin saludos ni despedidas.
+FORMATO: markdown liviano — **negrita** en lo importante, guiones ("- item") para las funcionalidades. Respondé únicamente con el texto del mensaje, sin JSON.`
 
     } else if (stage === "react_to_followup") {
       prompt = `Sos el asistente de configuración de UcoBot.
 ${ucobot_context}
 
-El cliente tiene el negocio "${businessName}" y acaba de compartir más contexto operativo: "${userMessage}"
+Negocio: "${businessName}".
+${transcript ? `CONVERSACIÓN HASTA AHORA:\n${transcript}\n` : `El cliente acaba de compartir: "${userMessage}"`}
 
 TAREA 1 — Determinar si hay que preguntar por criterios de calificación de leads:
-¿El negocio claramente necesita calificar leads (inmobiliaria, servicios B2B, consultoría, salud especializada, educación, servicios de alto ticket) Y el cliente NO especificó en ningún momento cómo quiere clasificarlos (no mencionó nombres de tags, criterios, tipos de cliente, hot/cold, urgencia, perfil, etc.)?
+¿El negocio claramente necesita calificar leads (inmobiliaria, servicios B2B, consultoría, salud especializada, educación, servicios de alto ticket) Y en NINGÚN momento de la conversación el cliente especificó cómo quiere clasificarlos (no mencionó tags, criterios, tipos de cliente, hot/cold, urgencia, perfil, etc.)?
 Si AMBAS condiciones se cumplen → needs_tag_question: true. De lo contrario → false.
 
-TAREA 2 — Escribir la respuesta según el resultado de TAREA 1:
-- Si needs_tag_question es TRUE: en 2 oraciones: 1) confirmá que entendiste algo concreto del negocio, 2) preguntá cómo le gustaría clasificar sus leads. Ejemplo de cierre: "¿Cómo querés clasificar tus leads? Podés usar algo como Lead Caliente/Frío, Inversor/Comprador Final, por urgencia, o lo que tenga sentido para tu rubro."
-- Si needs_tag_question es FALSE: 2-3 oraciones confirmando que entendiste algo específico de lo que dijeron y que con toda esa info ya podés configurar el bot.
+TAREA 2 — Escribir el "reply" (que suene humano y personalizado, NO robótico):
+- PROHIBIDO empezar con "¡Genial!", "¡Perfecto!", "Entiendo que...", o parafrasear lo que dijo el cliente. PROHIBIDO repetir preguntas ya respondidas en la conversación.
+- Si needs_tag_question es TRUE: mencioná un detalle concreto del rubro y luego preguntá, de forma natural y variada, cómo querría clasificar a sus clientes/leads (dale 2-3 ejemplos pegados a SU rubro, no genéricos).
+- Si needs_tag_question es FALSE: cerrá con confianza diciendo algo específico de SU negocio que detectaste y que ya tenés todo para armar la configuración. Generá expectativa.
 
-Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código):
+Respondé ÚNICAMENTE con un JSON válido (sin bloques de código):
 {
   "reply": "texto de respuesta al cliente",
   "needs_tag_question": true
 }
 
-Tono: español argentino, cálido y confiado. Sin saludos ni despedidas. Máximo 1 emoji. Máximo 80 palabras para el reply.`
+Tono: español argentino, cálido, confiado, experto. Sin saludos ni despedidas. Máximo 1 emoji. Máximo 75 palabras para el reply.
+FORMATO del campo "reply": markdown liviano — **negrita** en lo importante y guiones si enumerás. Escapá saltos de línea como \\n para que el JSON sea válido.`
     }
 
     if (!prompt) {

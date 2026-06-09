@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { FormattedMessage } from "@/components/demo/formatted-message"
 
 // ─── Icon map ─────────────────────────────────────────────────────────────────
 const SIDEBAR_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -1262,14 +1263,14 @@ interface DemoSidebarProps {
 function DemoSidebar({ session, visibleSections, activeSection, onSelectSection, onProbar }: DemoSidebarProps) {
   return (
     <div className="flex flex-col h-full">
-      <div className="px-4 py-5 border-b border-zinc-900">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-[#CCFF00] flex items-center justify-center flex-shrink-0">
-            <Bot className="w-4 h-4 text-black" />
+      <div className="px-4 py-5 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#CCFF00] flex items-center justify-center flex-shrink-0">
+            <Bot className="w-5 h-5 text-black" />
           </div>
           <div className="min-w-0">
-            <div className="text-white text-xs font-bold tracking-wider uppercase">UCOBOT</div>
-            <div className="text-zinc-500 text-[10px] truncate">{session.business_name}</div>
+            <p className="text-lg font-bold text-white leading-none">UcoBot</p>
+            <p className="text-[10px] text-zinc-500 uppercase tracking-widest mt-0.5">CODEA DESARROLLOS</p>
           </div>
         </div>
       </div>
@@ -1322,10 +1323,11 @@ function DemoSidebar({ session, visibleSections, activeSection, onSelectSection,
                 return (
                   <button key={section.id} onClick={() => onSelectSection(section.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all text-left ${
-                      isActive ? "bg-[#CCFF00] text-black font-semibold" : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
+                      isActive ? "bg-[#CCFF00] text-black font-semibold" : "text-zinc-400 hover:bg-white/5 hover:text-white"
                     }`}>
                     <IconComponent className="w-4 h-4 flex-shrink-0" />
-                    {section.label}
+                    <span className="flex-1 truncate">{section.label}</span>
+                    {!isActive && <Sparkles className="w-3 h-3 text-[#CCFF00]/50 flex-shrink-0" />}
                   </button>
                 )
               })}
@@ -1340,7 +1342,7 @@ function DemoSidebar({ session, visibleSections, activeSection, onSelectSection,
             <p className="text-white text-xs font-semibold">¿Te convenció la demo?</p>
             <p className="text-zinc-600 text-[10px] mt-0.5">Tu configuración queda guardada.</p>
           </div>
-          <Link href="/demo"
+          <Link href="/register"
             className="flex items-center justify-center gap-1.5 bg-[#CCFF00] text-black text-xs font-bold px-3 py-2 rounded-lg hover:bg-[#b8e600] transition-colors w-full">
             Activar mi cuenta <ArrowRight className="w-3 h-3" />
           </Link>
@@ -1810,10 +1812,12 @@ function BotDemoChat({ session, sessionId, onClose }: { session: DemoSession; se
                         <Bot className="w-4 h-4 text-black" />
                       </div>
                     )}
-                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
-                      msg.sender_type === "client" ? "bg-[#CCFF00] text-black rounded-br-sm font-medium" : "bg-zinc-900 text-white rounded-bl-sm border border-zinc-800"
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      msg.sender_type === "client" ? "bg-[#CCFF00] text-black rounded-br-sm font-medium whitespace-pre-wrap" : "bg-zinc-900 text-white rounded-bl-sm border border-zinc-800"
                     }`}>
-                      {msg.content.replace(/\[HANDOVER\]/g, "").trim()}
+                      {msg.sender_type === "client"
+                        ? msg.content.replace(/\[HANDOVER\]/g, "").trim()
+                        : <FormattedMessage content={msg.content} />}
                     </div>
                   </div>
                   <AnimatePresence>
@@ -1887,6 +1891,121 @@ function getFeatureChips(session: DemoSession): { label: string; message: string
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Config assistant overlay (asistente que ayuda a configurar) ──────────────
+function ConfigAssistantChat({ session, onClose }: { session: DemoSession; onClose: () => void }) {
+  const [msgs, setMsgs] = useState<{ role: "user" | "assistant"; content: string }[]>([
+    {
+      role: "assistant",
+      content: `¡Hola! Soy el asistente que configuró a **${session.bot_name}** para **${session.business_name}**.\n\nPodés pedirme:\n- Activar o explicar **funcionalidades**\n- Resolver **dudas** sobre la plataforma\n- Pedir una **integración** que necesites\n\n¿Qué querés ajustar o saber?`,
+    },
+  ])
+  const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs, loading])
+
+  const send = async (text: string) => {
+    if (!text.trim() || loading) return
+    const history = msgs.map((m) => ({ role: m.role === "user" ? "user" : "model", content: m.content }))
+    setMsgs((prev) => [...prev, { role: "user", content: text.trim() }])
+    setInput("")
+    setLoading(true)
+    if (taRef.current) taRef.current.style.height = "auto"
+    try {
+      const res = await fetch("/api/demo/assistant", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          businessName: session.business_name,
+          businessSummary: session.business_summary,
+          features: session.features,
+          history,
+          message: text.trim(),
+        }),
+      })
+      const data = await res.json()
+      setMsgs((prev) => [...prev, { role: "assistant", content: data.reply || "Disculpá, no pude responder ahora. Probá de nuevo." }])
+    } catch {
+      setMsgs((prev) => [...prev, { role: "assistant", content: "Hubo un error de conexión. Probá de nuevo en un momento." }])
+    } finally {
+      setLoading(false)
+      taRef.current?.focus()
+    }
+  }
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose} className="fixed inset-0 bg-black/60 z-[60]" />
+      <motion.div
+        initial={{ opacity: 0, y: 30, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 30, scale: 0.98 }}
+        transition={{ type: "spring", stiffness: 320, damping: 32 }}
+        className="fixed z-[61] inset-x-0 bottom-0 mx-auto w-full sm:max-w-md sm:inset-x-auto sm:right-4 sm:bottom-4 sm:top-auto h-[85vh] sm:h-[600px] bg-zinc-950 sm:rounded-[1.75rem] rounded-t-[1.75rem] border border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#CCFF00] flex items-center justify-center flex-shrink-0">
+            <Sparkles className="w-4 h-4 text-black" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-semibold">Asistente de configuración</p>
+            <p className="text-zinc-500 text-xs">Agregá funcionalidades o hacé preguntas</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white p-1 transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {msgs.map((m, i) => (
+            <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              {m.role === "assistant" && (
+                <div className="w-7 h-7 rounded-lg bg-[#CCFF00] flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Sparkles className="w-3.5 h-3.5 text-black" />
+                </div>
+              )}
+              <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                m.role === "user" ? "bg-[#CCFF00] text-black rounded-br-sm font-medium whitespace-pre-wrap" : "bg-zinc-900 text-zinc-100 rounded-bl-sm border border-zinc-800"
+              }`}>
+                {m.role === "user" ? m.content : <FormattedMessage content={m.content} />}
+              </div>
+            </div>
+          ))}
+          {loading && (
+            <div className="flex gap-2 justify-start">
+              <div className="w-7 h-7 rounded-lg bg-[#CCFF00] flex items-center justify-center flex-shrink-0">
+                <Sparkles className="w-3.5 h-3.5 text-black" />
+              </div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
+                {[0, 150, 300].map((d, i) => (
+                  <span key={i} className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        {/* Input */}
+        <div className="flex-shrink-0 px-3 pb-3 pt-2 border-t border-zinc-800">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl flex items-end gap-2 px-3 py-2.5 focus-within:border-zinc-600 transition-colors">
+            <textarea ref={taRef} value={input} onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
+              placeholder="Escribí tu consulta..." rows={1}
+              className="flex-1 bg-transparent text-white text-sm placeholder:text-zinc-600 resize-none focus:outline-none max-h-28 leading-relaxed"
+              onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = "auto"; t.style.height = Math.min(t.scrollHeight, 112) + "px" }} />
+            <button onClick={() => send(input)} disabled={!input.trim() || loading}
+              className="text-zinc-500 hover:text-[#CCFF00] disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0 mb-0.5">
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
 export default function DemoChatPage() {
   const { sessionId } = useParams<{ sessionId: string }>()
   const { theme, setTheme } = useTheme()
@@ -1901,6 +2020,7 @@ export default function DemoChatPage() {
   const [messageEvents, setMessageEvents] = useState<Record<string, ChatEvent[]>>({})
   const [activeSection, setActiveSection] = useState("dashboard")
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [showAssistant, setShowAssistant] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -1997,9 +2117,9 @@ export default function DemoChatPage() {
   const featureChips = getFeatureChips(session)
 
   return (
-    <div className="h-screen flex overflow-hidden">
-      {/* Desktop sidebar — always dark */}
-      <div className="hidden md:flex w-56 flex-shrink-0 bg-[#0C0C12] border-r border-zinc-900 flex-col">
+    <div className="h-screen flex overflow-hidden bg-background">
+      {/* Desktop sidebar — floating, matches onboarding preview */}
+      <div className="hidden md:flex w-64 flex-shrink-0 m-3 rounded-[2rem] bg-[#1C1C28] flex-col overflow-hidden shadow-2xl">
         <DemoSidebar session={session} visibleSections={visibleSections}
           activeSection={activeSection} onSelectSection={(id) => setActiveSection(id)}
           onProbar={() => setActiveSection("chat")} />
@@ -2011,9 +2131,9 @@ export default function DemoChatPage() {
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={() => setMobileSidebarOpen(false)} className="fixed inset-0 bg-black/70 z-40 md:hidden" />
-            <motion.div initial={{ x: -224 }} animate={{ x: 0 }} exit={{ x: -224 }}
+            <motion.div initial={{ x: -240 }} animate={{ x: 0 }} exit={{ x: -240 }}
               transition={{ type: "spring", stiffness: 400, damping: 35 }}
-              className="fixed left-0 top-0 bottom-0 w-56 bg-[#0C0C12] border-r border-zinc-800 z-50 md:hidden">
+              className="fixed left-0 top-0 bottom-0 w-60 bg-[#1C1C28] border-r border-zinc-800 z-50 md:hidden">
               <button onClick={() => setMobileSidebarOpen(false)}
                 className="absolute top-3 right-3 text-zinc-500 hover:text-white p-1 transition-colors">
                 <X className="w-4 h-4" />
@@ -2054,6 +2174,29 @@ export default function DemoChatPage() {
                 <span className="hidden sm:inline">NUEVO CHAT</span>
               </button>
             )}
+
+            {/* Acciones rápidas */}
+            <button onClick={() => setShowAssistant(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg px-2.5 py-1.5 hover:border-[#CCFF00] hover:text-foreground transition-colors"
+              title="Seguir hablando con el asistente que configura tu bot">
+              <Sparkles className="w-3.5 h-3.5 text-[#CCFF00]" />
+              <span className="hidden lg:inline">Asistente</span>
+            </button>
+            {activeSection !== "chat" && (
+              <button onClick={() => setActiveSection("chat")}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg px-2.5 py-1.5 hover:border-[#CCFF00] hover:text-foreground transition-colors"
+                title="Probar el bot creado">
+                <Bot className="w-3.5 h-3.5 text-[#CCFF00]" />
+                <span className="hidden lg:inline">Probar bot</span>
+              </button>
+            )}
+            <Link href="/register"
+              className="hidden sm:flex items-center gap-1.5 text-xs font-bold bg-[#CCFF00] text-black rounded-lg px-3 py-1.5 hover:bg-[#b8e600] transition-colors"
+              title="Activar tu cuenta">
+              <span>Activar cuenta</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+
             {/* Theme toggle */}
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -2134,12 +2277,14 @@ export default function DemoChatPage() {
                             <Bot className="w-4 h-4 text-black" />
                           </div>
                         )}
-                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                        <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                           msg.sender_type === "client"
-                            ? "bg-[#CCFF00] text-black rounded-br-sm font-medium"
+                            ? "bg-[#CCFF00] text-black rounded-br-sm font-medium whitespace-pre-wrap"
                             : "bg-card text-card-foreground rounded-bl-sm border border-border"
                         }`}>
-                          {msg.content.replace(/\[HANDOVER\]/g, "").trim()}
+                          {msg.sender_type === "client"
+                            ? msg.content.replace(/\[HANDOVER\]/g, "").trim()
+                            : <FormattedMessage content={msg.content} />}
                         </div>
                       </motion.div>
 
@@ -2202,6 +2347,13 @@ export default function DemoChatPage() {
           </div>
         )}
       </div>
+
+      {/* Config assistant overlay */}
+      <AnimatePresence>
+        {showAssistant && (
+          <ConfigAssistantChat session={session} onClose={() => setShowAssistant(false)} />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

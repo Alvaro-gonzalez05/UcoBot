@@ -72,10 +72,18 @@ Si alguien pregunta por algo que UcoBot NO tiene — por ejemplo: integración c
 PERSONALIDAD:
 ${session.personality_prompt}
 
+FORMATO DEL MENSAJE (campo "message"):
+Escribí de forma clara y escaneable usando markdown liviano cuando aporte:
+- **negrita** para datos clave (precios, nombres, horarios, lo importante).
+- Listas con guiones ("- item") cuando enumeres opciones, pasos o ítems.
+- Títulos cortos con "##" solo si listás varias secciones o categorías.
+- Separá ideas en líneas/párrafos en vez de un bloque largo.
+No abuses: en mensajes cortos y conversacionales alcanza con una o dos negritas. El JSON debe seguir siendo válido (escapá los saltos de línea como \\n dentro del string).
+
 INSTRUCCIÓN CRÍTICA DE RESPUESTA:
-Respondé SIEMPRE con un JSON válido (sin markdown, sin bloques de código), con esta estructura exacta:
+Respondé SIEMPRE con un JSON válido (sin bloques de código markdown que envuelvan el JSON), con esta estructura exacta:
 {
-  "message": "tu respuesta al cliente aquí, natural y conversacional",
+  "message": "tu respuesta al cliente aquí, natural y conversacional, con el formato indicado arriba",
   "metadata": {
     "client_name": null,
     "lead_tag": null,

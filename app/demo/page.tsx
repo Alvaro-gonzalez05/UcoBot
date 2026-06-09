@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { Bot, Loader2, Sparkles, CheckCircle2, Send, Check, Pencil, ArrowRight } from "lucide-react"
+import { Bot, Loader2, Sparkles, CheckCircle2, Send, Check, Pencil, ArrowRight, X } from "lucide-react"
+import { FormattedMessage } from "@/components/demo/formatted-message"
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -28,8 +29,10 @@ const FIXED_SECTION_IDS = new Set([...FIXED_SECTIONS.map((s) => s.id), "chat"])
 
 const BUILDING_STEPS = [
   "Analizando tu negocio...",
-  "Diseñando la personalidad del bot...",
+  "Eligiendo el nombre del bot...",
+  "Redactando su personalidad (prompt)...",
   "Seleccionando funcionalidades ideales...",
+  "Configurando la calificación de leads...",
   "Armando las secciones de tu panel...",
 ]
 
@@ -132,8 +135,12 @@ export default function DemoPage() {
   const [buildingStepIndex, setBuildingStepIndex] = useState(-1)
   const [completedSteps, setCompletedSteps] = useState<number[]>([])
   const [showBuilding, setShowBuilding] = useState(false)
+  const [revealName, setRevealName] = useState("")
+  const [revealPrompt, setRevealPrompt] = useState("")
   const [sidebarItems, setSidebarItems] = useState<SidebarPreviewItem[]>([])
   const [savedSession, setSavedSession] = useState<SavedDemoSession | null>(null)
+  const [testSessionId, setTestSessionId] = useState<string | null>(null)
+  const [configuredSessionId, setConfiguredSessionId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -178,6 +185,17 @@ export default function DemoPage() {
     )
   }
 
+  // Build a plain-text transcript of the conversation so far (+ the latest user turn),
+  // so the AI never re-asks something already answered and can personalize.
+  const buildTranscript = (latestUser?: string) => {
+    const turns = [...messages]
+    if (latestUser) turns.push({ id: "live", role: "user", content: latestUser })
+    return turns
+      .filter((m) => m.type !== "summary" && m.content)
+      .map((m) => `${m.role === "user" ? "Cliente" : "Asistente"}: ${m.content}`)
+      .join("\n")
+  }
+
   const handleSend = async () => {
     const text = inputValue.trim()
     if (!text || stageRef.current === "processing" || stageRef.current === "done") return
@@ -201,11 +219,12 @@ export default function DemoPage() {
       stageRef.current = "ask_followup"
       setStage("ask_followup")
       setIsTyping(true)
+      const transcript = buildTranscript(text)
       try {
         const res = await fetch("/api/demo/onboarding", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage: "react_to_goals", contactName, businessName, userMessage: text }),
+          body: JSON.stringify({ stage: "react_to_goals", contactName, businessName, userMessage: text, transcript }),
         })
         const data = await res.json()
         setIsTyping(false)
@@ -219,11 +238,12 @@ export default function DemoPage() {
       setIsTyping(true)
       let replyMsg = "Perfecto, con todo esto ya puedo configurarlo bien 🎯\n\nVoy a analizar tu negocio y armar la configuración ahora mismo..."
       let needsTags = false
+      const transcript = buildTranscript(text)
       try {
         const res = await fetch("/api/demo/onboarding", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ stage: "react_to_followup", contactName, businessName, userMessage: text }),
+          body: JSON.stringify({ stage: "react_to_followup", contactName, businessName, userMessage: text, transcript }),
         })
         const data = await res.json()
         if (data.reply) replyMsg = data.reply
@@ -261,8 +281,10 @@ export default function DemoPage() {
   }
 
   const runProcessing = async (name: string, biz: string, desc: string) => {
+    setRevealName("")
+    setRevealPrompt("")
     setBuildingStepIndex(0)
-    await delay(1100)
+    await delay(850)
     setCompletedSteps([0])
 
     const apiPromise = fetch("/api/demo/configure", {
@@ -277,14 +299,22 @@ export default function DemoPage() {
     }).then((r) => r.json())
 
     setBuildingStepIndex(1)
-    await delay(1100)
+    await delay(850)
     setCompletedSteps([0, 1])
 
     setBuildingStepIndex(2)
-    await delay(1100)
+    await delay(850)
     setCompletedSteps([0, 1, 2])
 
     setBuildingStepIndex(3)
+    await delay(850)
+    setCompletedSteps([0, 1, 2, 3])
+
+    setBuildingStepIndex(4)
+    await delay(850)
+    setCompletedSteps([0, 1, 2, 3, 4])
+
+    setBuildingStepIndex(5)
     const data = await apiPromise
 
     if (!data.sessionId) {
@@ -299,11 +329,17 @@ export default function DemoPage() {
       return
     }
 
-    await delay(700)
-    setCompletedSteps([0, 1, 2, 3])
     await delay(600)
+    setCompletedSteps([0, 1, 2, 3, 4, 5])
+    // Reveal de la preconfiguración: nombre + personalidad asignada
+    setRevealName(data.botNameSuggestion || "Tu asistente")
+    if (data.personalityPrompt) setRevealPrompt(data.personalityPrompt)
+    scrollBottom()
+    await delay(1700)
     setShowBuilding(false)
     await delay(350)
+
+    setConfiguredSessionId(data.sessionId)
 
     // Save session for resume functionality
     try {
@@ -409,7 +445,8 @@ export default function DemoPage() {
         ],
       }),
     })
-    router.push(`/demo/${sessionId}`)
+    // Stay in the same screen — open the bot test inline (no navigation)
+    setTestSessionId(sessionId)
   }
 
   const inputDisabled = stage === "processing" || stage === "done"
@@ -431,6 +468,7 @@ export default function DemoPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
+    <>
     <AnimatePresence mode="wait">
 
       {/* ══ WELCOME ══════════════════════════════════════════════════════════ */}
@@ -653,7 +691,30 @@ export default function DemoPage() {
             </nav>
 
             <AnimatePresence>
-              {contactName && (
+              {stage === "done" && configuredSessionId && (
+                <motion.div
+                  key="actions"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 pt-4 border-t border-white/10 shrink-0 space-y-2"
+                >
+                  <button
+                    onClick={() => setTestSessionId(configuredSessionId)}
+                    className="w-full flex items-center justify-center gap-2 bg-[#CCFF00] text-black text-sm font-bold py-2.5 rounded-xl hover:bg-[#b8e600] active:scale-95 transition-all"
+                  >
+                    <Bot className="w-4 h-4" />
+                    Probar bot
+                  </button>
+                  <button
+                    onClick={() => router.push("/register")}
+                    className="w-full flex items-center justify-center gap-2 bg-white/5 text-white text-sm font-semibold py-2.5 rounded-xl border border-white/10 hover:bg-white/10 active:scale-95 transition-all"
+                  >
+                    <Sparkles className="w-4 h-4 text-[#CCFF00]" />
+                    Activar cuenta
+                  </button>
+                </motion.div>
+              )}
+              {stage !== "done" && contactName && (
                 <motion.div
                   key="greeting"
                   initial={{ opacity: 0, y: 8 }}
@@ -664,9 +725,7 @@ export default function DemoPage() {
                     Hola, {contactName.split(" ")[0]} 👋
                   </p>
                   <p className="text-zinc-500 text-xs mt-0.5">
-                    {stage === "done"
-                      ? "¡Tu bot está listo!"
-                      : stage === "processing"
+                    {stage === "processing"
                       ? "Configurando tu bot..."
                       : "Recopilando información..."}
                   </p>
@@ -717,19 +776,13 @@ export default function DemoPage() {
                     <div
                       className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
                         msg.role === "user"
-                          ? "bg-[#CCFF00] text-black font-medium rounded-br-sm"
-                          : "bg-zinc-800 text-zinc-100 rounded-bl-sm whitespace-pre-line"
+                          ? "bg-[#CCFF00] text-black font-medium rounded-br-sm whitespace-pre-line"
+                          : "bg-zinc-800 text-zinc-100 rounded-bl-sm"
                       }`}
                     >
                       {msg.role === "user"
                         ? msg.content
-                        : msg.content.split(/(\*\*[^*]+\*\*)/).map((part, i) =>
-                            /^\*\*[^*]+\*\*$/.test(part) ? (
-                              <strong key={i}>{part.slice(2, -2)}</strong>
-                            ) : (
-                              part
-                            )
-                          )}
+                        : <FormattedMessage content={msg.content} />}
                     </div>
                   )}
                 </motion.div>
@@ -772,7 +825,7 @@ export default function DemoPage() {
                     <div className="w-7 h-7 rounded-full bg-[#CCFF00] flex items-center justify-center shrink-0 mb-0.5">
                       <Bot className="w-3.5 h-3.5 text-black" />
                     </div>
-                    <div className="bg-zinc-800 rounded-2xl rounded-bl-sm p-4 space-y-2.5 min-w-[240px]">
+                    <div className="bg-zinc-800 rounded-2xl rounded-bl-sm p-4 space-y-2.5 min-w-[240px] max-w-[320px]">
                       {BUILDING_STEPS.map((step, i) => {
                         const done = completedSteps.includes(i)
                         const current = buildingStepIndex === i && !done
@@ -805,6 +858,38 @@ export default function DemoPage() {
                           </div>
                         )
                       })}
+
+                      {/* Reveal de la preconfiguración del bot */}
+                      <AnimatePresence>
+                        {revealName && (
+                          <motion.div
+                            key="reveal"
+                            initial={{ opacity: 0, y: 8, height: 0 }}
+                            animate={{ opacity: 1, y: 0, height: "auto" }}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
+                            className="mt-1 pt-3 border-t border-white/10 space-y-2 overflow-hidden"
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-xl bg-[#CCFF00] flex items-center justify-center shrink-0">
+                                <Bot className="w-4 h-4 text-black" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-zinc-500 uppercase tracking-wider leading-none">Nombre del bot</p>
+                                <p className="text-white font-bold text-sm leading-tight mt-0.5 truncate">{revealName}</p>
+                              </div>
+                            </div>
+                            {revealPrompt && (
+                              <div className="bg-zinc-900/70 rounded-xl p-2.5 border border-white/5">
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <Sparkles className="w-3 h-3 text-[#CCFF00] shrink-0" />
+                                  <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Personalidad asignada</p>
+                                </div>
+                                <p className="text-zinc-400 text-xs leading-relaxed line-clamp-3">{revealPrompt}</p>
+                              </div>
+                            )}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                   </motion.div>
                 )}
@@ -841,6 +926,147 @@ export default function DemoPage() {
         </motion.div>
       )}
     </AnimatePresence>
+
+    {/* Inline bot test overlay — stays in the same screen, no navigation */}
+    <AnimatePresence>
+      {testSessionId && (
+        <BotTestOverlay sessionId={testSessionId} onClose={() => setTestSessionId(null)} onActivate={() => router.push("/register")} />
+      )}
+    </AnimatePresence>
+    </>
+  )
+}
+
+// ── Inline bot test overlay ──────────────────────────────────────────────────
+interface TestSession {
+  bot_name: string
+  business_name: string
+  suggested_questions?: { title: string; description: string }[]
+}
+
+function BotTestOverlay({ sessionId, onClose, onActivate }: { sessionId: string; onClose: () => void; onActivate: () => void }) {
+  const [session, setSession] = useState<TestSession | null>(null)
+  const [msgs, setMsgs] = useState<{ role: "user" | "bot"; content: string }[]>([])
+  const [input, setInput] = useState("")
+  const [loading, setLoading] = useState(false)
+  const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/demo/chat?sessionId=${sessionId}`)
+        const data = await res.json()
+        if (active && res.ok) setSession(data.session)
+      } catch {}
+    })()
+    return () => { active = false }
+  }, [sessionId])
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }) }, [msgs, loading])
+
+  const send = async (text: string) => {
+    if (!text.trim() || loading) return
+    setMsgs((prev) => [...prev, { role: "user", content: text.trim() }])
+    setInput("")
+    setLoading(true)
+    try {
+      const res = await fetch("/api/demo/chat", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, message: text.trim() }),
+      })
+      const data = await res.json()
+      setMsgs((prev) => [...prev, { role: "bot", content: data.response || "Disculpá, no pude responder. Probá de nuevo." }])
+    } catch {
+      setMsgs((prev) => [...prev, { role: "bot", content: "Hubo un error de conexión. Probá de nuevo." }])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const started = msgs.length > 0
+
+  return (
+    <>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+        onClick={onClose} className="fixed inset-0 bg-black/70 z-[60] backdrop-blur-sm" />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.97, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 16 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="fixed z-[61] inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full h-full sm:h-[640px] sm:max-w-lg sm:rounded-[2rem] bg-zinc-950 sm:border border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-[#CCFF00] flex items-center justify-center flex-shrink-0"><Bot className="w-4 h-4 text-black" /></div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-semibold truncate">{session?.bot_name || "Tu bot"}</p>
+            <div className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#CCFF00] animate-pulse" />
+              <span className="text-zinc-500 text-xs truncate">En línea · {session?.business_name || ""}</span>
+            </div>
+          </div>
+          <button onClick={onActivate} className="hidden sm:flex items-center gap-1 bg-[#CCFF00] text-black text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#b8e600] transition-colors flex-shrink-0">
+            Activar cuenta <ArrowRight className="w-3 h-3" />
+          </button>
+          <button onClick={onClose} className="text-zinc-500 hover:text-white p-1 transition-colors flex-shrink-0"><X className="w-5 h-5" /></button>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto demo-scroll p-4 space-y-3">
+          {!started ? (
+            <div className="h-full flex flex-col items-center justify-center text-center gap-5 px-2">
+              <div className="w-16 h-16 rounded-3xl bg-[#CCFF00] flex items-center justify-center"><Bot className="w-8 h-8 text-black" /></div>
+              <div>
+                <p className="text-white text-lg font-bold">Probá a {session?.bot_name || "tu bot"}</p>
+                <p className="text-zinc-500 text-sm mt-1">Escribile como lo haría un cliente real.</p>
+              </div>
+              {session?.suggested_questions && session.suggested_questions.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-md">
+                  {session.suggested_questions.slice(0, 4).map((q, i) => (
+                    <button key={i} onClick={() => send(q.title)}
+                      className="bg-zinc-900 border border-zinc-800 hover:border-[#CCFF00]/40 rounded-xl p-3 text-left transition-colors">
+                      <p className="text-white text-sm font-medium">{q.title}</p>
+                      <p className="text-zinc-500 text-xs mt-0.5">{q.description}</p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            msgs.map((m, i) => (
+              <div key={i} className={`flex gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                {m.role === "bot" && <div className="w-7 h-7 rounded-lg bg-[#CCFF00] flex items-center justify-center flex-shrink-0 mt-0.5"><Bot className="w-3.5 h-3.5 text-black" /></div>}
+                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+                  m.role === "user" ? "bg-[#CCFF00] text-black rounded-br-sm font-medium whitespace-pre-wrap" : "bg-zinc-900 text-zinc-100 rounded-bl-sm border border-zinc-800"
+                }`}>
+                  {m.role === "user" ? m.content.replace(/\[HANDOVER\]/g, "").trim() : <FormattedMessage content={m.content} />}
+                </div>
+              </div>
+            ))
+          )}
+          {loading && (
+            <div className="flex gap-2 justify-start">
+              <div className="w-7 h-7 rounded-lg bg-[#CCFF00] flex items-center justify-center flex-shrink-0"><Bot className="w-3.5 h-3.5 text-black" /></div>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
+                {[0, 150, 300].map((d, i) => (<span key={i} className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />))}
+              </div>
+            </div>
+          )}
+          <div ref={endRef} />
+        </div>
+
+        {/* Input */}
+        <div className="flex-shrink-0 border-t border-zinc-800 bg-zinc-900/80 p-3 flex gap-2">
+          <input value={input} onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
+            placeholder="Escribí un mensaje..." autoFocus
+            className="flex-1 bg-zinc-800 border border-zinc-700/50 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-zinc-600 focus:outline-none focus:border-[#CCFF00]/40 transition-colors" />
+          <button onClick={() => send(input)} disabled={!input.trim() || loading}
+            className="w-10 h-10 rounded-xl bg-[#CCFF00] flex items-center justify-center hover:bg-[#b8e600] active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed shrink-0">
+            <Send className="w-4 h-4 text-black" />
+          </button>
+        </div>
+      </motion.div>
+    </>
   )
 }
 
@@ -857,7 +1083,7 @@ function SummaryCard({
   onGo,
 }: {
   data: SummaryData
-  onGo: (sessionId: string, sections: ConfirmedSection[]) => void
+  onGo: (sessionId: string, sections: ConfirmedSection[]) => void | Promise<void>
 }) {
   const [sections, setSections] = useState<SectionState[]>(
     data.aiSections.map((s) => ({ ...s, editing: false }))
@@ -878,13 +1104,17 @@ function SummaryCard({
   const stopEdit = (id: string) =>
     setSections((prev) => prev.map((s) => (s.id === id ? { ...s, editing: false } : s)))
 
-  const handleGo = () => {
+  const handleGo = async () => {
     if (loading) return
     setLoading(true)
     const confirmed: ConfirmedSection[] = sections
       .filter((s) => s.visible)
       .map((s) => ({ id: s.id, label: s.label, visible: true, icon: s.icon }))
-    onGo(data.sessionId, confirmed)
+    try {
+      await onGo(data.sessionId, confirmed)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

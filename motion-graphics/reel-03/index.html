@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>UcoBot — Reel 03 · Ventas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@hyperframes/shader@latest/dist/index.js"></script>
+  <style>
+    :root {
+      --bg:     #000000;
+      --panel:  #0a0a12;
+      --card:   #18181b;
+      --card2:  #27272a;
+      --ink:    #ffffff;
+      --accent: #CCFF00;
+      --as:     #D1F366;
+      --muted:  #a1a1aa;
+      --muted2: #52525b;
+      --green:  #22c55e;
+      --wa:     #25D366;
+      --ig1:    #f09433; --ig2: #e6683c; --ig3: #dc2743; --ig4: #cc2366; --ig5: #bc1888;
+      --border: rgba(255,255,255,0.07);
+      --font:   "Space Grotesk", sans-serif;
+      --mono:   "JetBrains Mono", monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); overflow: hidden; font-family: var(--font); }
+
+    #main {
+      position: relative; width: 1080px; height: 1920px;
+      overflow: hidden; background: var(--bg);
+    }
+    .scene {
+      position: absolute; inset: 0;
+      width: 1080px; height: 1920px; overflow: hidden;
+    }
+    .scene-content {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      text-align: center; padding: 0 72px;
+    }
+
+    /* ── Catalog: grain + vignette ── */
+    .grain {
+      position: absolute; inset: 0; pointer-events: none; z-index: 300; opacity: 0.07;
+      background-image:
+        radial-gradient(rgba(255,255,255,0.12) 1px, transparent 1.2px),
+        radial-gradient(rgba(0,0,0,0.22) 1px, transparent 1.2px);
+      background-size: 3px 3px, 5px 5px;
+      background-position: 0 0, 1px 2px;
+      mix-blend-mode: overlay;
+    }
+    .vignette {
+      position: absolute; inset: 0; pointer-events: none; z-index: 290;
+      background: radial-gradient(ellipse 75% 85% at 50% 50%,
+        transparent 35%, rgba(0,0,0,0.6) 100%);
+    }
+
+    .ico { display:inline-block; flex-shrink:0; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+
+    .eyebrow {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      font-family: var(--mono); font-size: 20px; font-weight: 600;
+      color: var(--muted2); letter-spacing: 0.16em; text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .ey-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+
+    /* ══════════════════════════════════════
+       S1 — Hero: Kinetic Slam (catalog)
+    ══════════════════════════════════════ */
+    #s1-glow {
+      position: absolute; width: 800px; height: 800px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(204,255,0,0.11) 0%, transparent 68%);
+      top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none;
+    }
+    /* Particle dots — decorative bg */
+    #s1-dots {
+      position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+    }
+    .dot {
+      position: absolute; border-radius: 50%; background: var(--accent);
+    }
+
+    .h-line { width: 72px; height: 5px; background: var(--accent); border-radius: 3px; margin-bottom: 40px; }
+
+    /* Kinetic Slam — each word on its own line, massive */
+    #s1-w1 { font-size: 130px; font-weight: 900; color: var(--ink); letter-spacing: -0.05em; line-height: 0.9; }
+    #s1-w2 { font-size: 130px; font-weight: 900; color: var(--ink); letter-spacing: -0.05em; line-height: 0.9; }
+    #s1-w3 { font-size: 130px; font-weight: 900; color: var(--ink); letter-spacing: -0.05em; line-height: 0.9; }
+    #s1-w4 { font-size: 130px; font-weight: 900; color: var(--accent); letter-spacing: -0.05em; line-height: 0.9; }
+    #s1-w5 { font-size: 130px; font-weight: 900; color: var(--accent); letter-spacing: -0.05em; line-height: 0.9; }
+    #s1-sub { font-size: 30px; font-weight: 300; color: var(--muted); margin-top: 48px; line-height: 1.5; }
+
+    /* ══════════════════════════════════════
+       S2 — Notification rain
+    ══════════════════════════════════════ */
+    .notif-stack { display: flex; flex-direction: column; gap: 18px; width: 900px; }
+    .notif-card {
+      background: rgba(18,18,26,0.96);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 20px; padding: 20px 24px;
+      display: flex; align-items: center; gap: 18px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.4);
+    }
+    .notif-app-icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 24px;
+    }
+    .notif-app-icon.wa  { background: var(--wa); }
+    .notif-app-icon.ig  { background: linear-gradient(135deg, var(--ig1), var(--ig3), var(--ig5)); }
+    .notif-body { flex: 1; text-align: left; min-width: 0; }
+    .notif-header { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .notif-app-name { font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--muted2); letter-spacing: 0.06em; text-transform: uppercase; }
+    .notif-time     { font-family: var(--mono); font-size: 14px; color: var(--muted2); margin-left: auto; }
+    .notif-msg      { font-size: 20px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .notif-check {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--accent); flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+    }
+    #s2-badge {
+      margin-top: 40px;
+      display: flex; align-items: center; gap: 14px;
+      background: rgba(204,255,0,0.1); border: 1px solid rgba(204,255,0,0.25);
+      color: var(--accent); font-family: var(--mono); font-size: 22px; font-weight: 700;
+      padding: 16px 32px; border-radius: 100px; letter-spacing: 0.05em;
+    }
+
+    /* ══════════════════════════════════════
+       S3 — Phone Mockup (catalog: mockup)
+    ══════════════════════════════════════ */
+    #s3-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+    }
+    #s3-title { font-size: 72px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; line-height: 0.95; margin-bottom: 44px; }
+    #s3-title span { color: var(--accent); }
+
+    .phone {
+      width: 420px; position: relative;
+      background: #0e0e14;
+      border-radius: 52px;
+      border: 2px solid rgba(255,255,255,0.1);
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.04),
+        inset 0 0 0 1px rgba(255,255,255,0.06),
+        0 40px 100px rgba(0,0,0,0.7),
+        0 0 60px rgba(204,255,0,0.08);
+      overflow: hidden;
+    }
+    .phone-status {
+      height: 52px; background: #000;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 28px; font-family: var(--mono); font-size: 14px;
+      color: rgba(255,255,255,0.7); flex-shrink: 0;
+    }
+    .phone-notch {
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 130px; height: 34px;
+      background: #000; border-radius: 0 0 22px 22px; z-index: 10;
+    }
+    .phone-screen { background: #000; overflow: hidden; }
+
+    /* WhatsApp inside phone */
+    .wa-header {
+      background: #1f2c34; padding: 14px 18px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .wa-av {
+      width: 38px; height: 38px; border-radius: 50%;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .wa-av img { width: 100%; height: 100%; object-fit: cover; }
+    .wa-name { font-size: 16px; font-weight: 700; color: #e9edef; }
+    .wa-st   { font-size: 12px; color: #8696a0; font-family: var(--mono); }
+    .wa-body {
+      padding: 14px 14px 18px; display: flex; flex-direction: column; gap: 8px;
+      background: #0b141a;
+      min-height: 460px;
+    }
+    .wa-msg {
+      max-width: 85%; padding: 9px 14px;
+      border-radius: 10px; font-size: 15px; line-height: 1.4;
+    }
+    .wm-in  { background: #202c33; color: #e9edef; align-self: flex-start; border-bottom-left-radius: 3px; }
+    .wm-out { background: #005c4b; color: #e9edef; align-self: flex-end; border-bottom-right-radius: 3px; }
+    .wm-out strong { color: var(--accent); }
+    .wa-ts  { font-size: 11px; color: #8696a0; align-self: flex-end; font-family: var(--mono); }
+
+    /* Payment link pill inside phone */
+    .pay-link {
+      background: rgba(204,255,0,0.12); border: 1px solid rgba(204,255,0,0.3);
+      border-radius: 12px; padding: 12px 14px;
+      align-self: flex-end; max-width: 85%;
+    }
+    .pay-link-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .pay-link-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--accent); display: flex; align-items: center; justify-content: center;
+    }
+    .pay-link-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+    .pay-link-url   { font-family: var(--mono); font-size: 12px; color: var(--muted2); }
+
+    /* Confirmed badge inside phone */
+    .wa-confirmed {
+      background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 10px; padding: 10px 14px;
+      align-self: flex-end; max-width: 85%;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 14px; font-weight: 600; color: var(--green);
+    }
+    .phone-home { height: 32px; background: #000; display: flex; align-items: center; justify-content: center; }
+    .phone-home-bar { width: 130px; height: 5px; background: rgba(255,255,255,0.25); border-radius: 3px; }
+
+    /* Floating tag beside phone */
+    .phone-tag {
+      position: absolute; right: -200px; top: 50%;
+      transform: translateY(-50%); display: flex;
+      flex-direction: column; gap: 14px;
+    }
+    .p-tag {
+      background: var(--card);
+      border: 1px solid var(--border); border-radius: 16px; padding: 16px 20px;
+      text-align: left; min-width: 180px;
+    }
+    .p-tag-num { font-size: 30px; font-weight: 900; color: var(--accent); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+    .p-tag-lbl { font-family: var(--mono); font-size: 13px; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
+
+    /* ══════════════════════════════════════
+       S4 — Conversion / Revenue  [ANCHOR]
+    ══════════════════════════════════════ */
+    #s4-title { font-size: 68px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; line-height: 0.95; margin-bottom: 52px; }
+    #s4-title span { color: var(--accent); }
+
+    .conv-grid { display: grid; grid-template-columns: 1fr; gap: 24px; width: 860px; }
+    .conv-big {
+      background: var(--card);
+      border: 1px solid rgba(204,255,0,0.2);
+      border-radius: 28px; padding: 48px 52px;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .conv-pct {
+      font-size: 160px; font-weight: 900; color: var(--accent); line-height: 1;
+      letter-spacing: -0.06em; font-variant-numeric: tabular-nums;
+    }
+    .conv-label { font-size: 28px; font-weight: 300; color: var(--muted); }
+    .conv-sub   { font-family: var(--mono); font-size: 18px; color: var(--muted2); letter-spacing: 0.08em; text-transform: uppercase; }
+    .conv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .conv-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 22px; padding: 32px 28px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .conv-num { font-size: 72px; font-weight: 900; color: var(--ink); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+    .conv-num span { color: var(--accent); }
+    .conv-lbl { font-size: 19px; font-weight: 400; color: var(--muted); }
+
+    /* ══════════════════════════════════════
+       S5 — Stats  [ANCHOR]
+    ══════════════════════════════════════ */
+    #s5-title { font-size: 76px; font-weight: 900; color: var(--ink); letter-spacing: -0.04em; line-height: 0.95; margin-bottom: 48px; }
+    #s5-title span { color: var(--accent); }
+    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; width: 920px; }
+    .st-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 24px; padding: 36px 28px;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .st-num { font-size: 86px; font-weight: 900; color: var(--ink); line-height: 1; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+    .st-num .hi { color: var(--accent); }
+    .st-lbl { font-size: 19px; font-weight: 400; color: var(--muted); }
+    .bar-track { width: 100%; height: 4px; background: var(--card2); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+    .bar-fill  { height: 100%; background: var(--accent); border-radius: 2px; width: 0; }
+
+    /* ══════════════════════════════════════
+       S6 — Brand  [ANCHOR]
+    ══════════════════════════════════════ */
+    #s6-glow {
+      position: absolute; width: 1100px; height: 1100px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(204,255,0,0.14) 0%, transparent 68%);
+      top: 50%; left: 50%; transform: translate(-50%,-50%); pointer-events: none;
+    }
+    #s6-logo {
+      width: 160px; height: 160px; border-radius: 50%; overflow: hidden;
+      margin-bottom: 38px;
+      box-shadow: 0 0 0 2px rgba(204,255,0,0.2), 0 0 55px rgba(204,255,0,0.22), 0 24px 60px rgba(0,0,0,0.5);
+    }
+    #s6-logo img { width: 100%; height: 100%; object-fit: cover; }
+    #s6-word { font-size: 116px; font-weight: 900; color: var(--ink); letter-spacing: -0.05em; line-height: 1; margin-bottom: 10px; }
+    #s6-co   { font-family: var(--mono); font-size: 18px; color: var(--muted2); letter-spacing: 0.22em; text-transform: uppercase; margin-bottom: 44px; }
+    #s6-tag  { font-size: 40px; font-weight: 900; color: var(--ink); letter-spacing: -0.02em; margin-bottom: 16px; line-height: 1.1; }
+    #s6-tag span { color: var(--accent); }
+    #s6-tag2 { font-size: 26px; font-weight: 300; color: var(--muted); margin-bottom: 60px; }
+    #s6-cta {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--accent); color: #000;
+      font-size: 30px; font-weight: 700;
+      padding: 26px 76px; border-radius: 100px; margin-bottom: 24px;
+    }
+    #s6-url { font-family: var(--mono); font-size: 20px; color: var(--muted2); letter-spacing: 0.06em; }
+  </style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-arrow"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></symbol>
+    <symbol id="i-check"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="i-zap"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="i-msg"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-bag"    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></symbol>
+    <symbol id="i-users"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-star"   viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></symbol>
+    <symbol id="i-credit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></symbol>
+    <symbol id="i-wa-icon" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></symbol>
+  </defs>
+</svg>
+
+<!--
+  REEL-03 · "No son mensajes. Son ventas."
+  ──────────────────────────────────────────
+  S1  0.0 → 3.0s   Kinetic Slam hero
+  S2  3.0 → 7.5s   Notification rain → bot checks all
+  S3  7.5 → 12.0s  Phone mockup WhatsApp → pago
+  S4 12.0 → 16.0s  [ANCHOR] Conversion rate + revenue
+  S5 16.0 → 20.0s  [ANCHOR] Stats grid
+  S6 20.0 → 24.0s  [ANCHOR] Brand reveal
+
+  Shaders:
+  S4→S5  domain-warp    t=15.85  dur=0.3
+  S5→S6  cinematic-zoom t=19.75  dur=0.5
+-->
+<div id="main" data-composition-id="main" data-width="1080" data-height="1920" data-start="0" data-duration="24">
+  <div class="grain"></div>
+  <div class="vignette"></div>
+
+  <!-- ═══════════════════════════════════════
+       S1 · Kinetic Slam · 0 → 3s
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s1" data-start="0" data-duration="3" data-track-index="0">
+    <div id="s1-glow"></div>
+    <!-- Background particle dots -->
+    <div id="s1-dots">
+      <div class="dot" id="d1" style="width:5px;height:5px;top:22%;left:15%;"></div>
+      <div class="dot" id="d2" style="width:3px;height:3px;top:38%;left:82%;"></div>
+      <div class="dot" id="d3" style="width:6px;height:6px;top:65%;left:8%;"></div>
+      <div class="dot" id="d4" style="width:4px;height:4px;top:18%;left:75%;"></div>
+      <div class="dot" id="d5" style="width:5px;height:5px;top:78%;left:88%;"></div>
+      <div class="dot" id="d6" style="width:3px;height:3px;top:55%;left:58%;"></div>
+    </div>
+    <div class="scene-content">
+      <div class="eyebrow" id="s1-ey">
+        <div class="ey-dot"></div>UCOBOT · VENTAS AUTOMÁTICAS<div class="ey-dot"></div>
+      </div>
+      <div class="h-line" id="s1-line"></div>
+      <!-- Each word slams in from alternating direction -->
+      <div id="s1-w1">No son</div>
+      <div id="s1-w2">mensajes.</div>
+      <div style="height:20px"></div>
+      <div id="s1-w4">Son</div>
+      <div id="s1-w5">ventas.</div>
+      <p id="s1-sub">WhatsApp · Instagram · 24 horas · sin parar</p>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S2 · Notification Rain · 3 → 7.5s
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s2" data-start="3" data-duration="4.5" data-track-index="0" style="visibility:hidden;">
+    <div class="scene-content">
+      <div class="eyebrow" id="s2-ey">
+        <svg class="ico" width="16" height="16" style="color:var(--accent)"><use href="#i-msg"/></svg>
+        Entrando ahora mismo
+      </div>
+      <div class="notif-stack">
+        <!-- Notification 1 — WhatsApp -->
+        <div class="notif-card" id="n1">
+          <div class="notif-app-icon wa">
+            <svg width="28" height="28"><use href="#i-wa-icon"/></svg>
+          </div>
+          <div class="notif-body">
+            <div class="notif-header">
+              <span class="notif-app-name">WhatsApp</span>
+              <span class="notif-time">ahora</span>
+            </div>
+            <div class="notif-msg">Valentina M.: "hola quiero el vestido rojo talle S"</div>
+          </div>
+          <div class="notif-check" id="nc1"><svg class="ico" width="16" height="16" style="color:#000"><use href="#i-check"/></svg></div>
+        </div>
+        <!-- Notification 2 — Instagram -->
+        <div class="notif-card" id="n2">
+          <div class="notif-app-icon ig" style="color:white;font-weight:700;font-size:18px;font-family:var(--font)">IG</div>
+          <div class="notif-body">
+            <div class="notif-header">
+              <span class="notif-app-name">Instagram</span>
+              <span class="notif-time">hace 1 min</span>
+            </div>
+            <div class="notif-msg">nuevomensaje_: "tienen el jean cargo en negro?"</div>
+          </div>
+          <div class="notif-check" id="nc2"><svg class="ico" width="16" height="16" style="color:#000"><use href="#i-check"/></svg></div>
+        </div>
+        <!-- Notification 3 — WhatsApp -->
+        <div class="notif-card" id="n3">
+          <div class="notif-app-icon wa">
+            <svg width="28" height="28"><use href="#i-wa-icon"/></svg>
+          </div>
+          <div class="notif-body">
+            <div class="notif-header">
+              <span class="notif-app-name">WhatsApp</span>
+              <span class="notif-time">hace 3 min</span>
+            </div>
+            <div class="notif-msg">Lucas R.: "cuánto sale el combo remera + jean?"</div>
+          </div>
+          <div class="notif-check" id="nc3"><svg class="ico" width="16" height="16" style="color:#000"><use href="#i-check"/></svg></div>
+        </div>
+        <!-- Notification 4 — Instagram -->
+        <div class="notif-card" id="n4">
+          <div class="notif-app-icon ig" style="color:white;font-weight:700;font-size:18px;font-family:var(--font)">IG</div>
+          <div class="notif-body">
+            <div class="notif-header">
+              <span class="notif-app-name">Instagram</span>
+              <span class="notif-time">hace 5 min</span>
+            </div>
+            <div class="notif-msg">sofia.ruiz: "me podés mandar el link de pago?"</div>
+          </div>
+          <div class="notif-check" id="nc4"><svg class="ico" width="16" height="16" style="color:#000"><use href="#i-check"/></svg></div>
+        </div>
+      </div>
+      <!-- Badge: "Todo respondido en <1s" -->
+      <div id="s2-badge" style="opacity:0;">
+        <svg class="ico" width="18" height="18"><use href="#i-zap"/></svg>
+        Respondido en &lt;1 segundo
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S3 · Phone Mockup · 7.5 → 12s
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s3" data-start="7.5" data-duration="4.5" data-track-index="0" style="visibility:hidden;">
+    <div class="scene-content" style="padding:0 60px;">
+      <div class="eyebrow" id="s3-ey">
+        <svg class="ico" width="16" height="16" style="color:var(--accent)"><use href="#i-bag"/></svg>
+        Conversación → venta cerrada
+      </div>
+      <div id="s3-title">Del chat<br>a la <span>caja</span>.</div>
+
+      <div style="position:relative; display:inline-block;">
+        <!-- Phone mockup -->
+        <div class="phone" id="s3-phone">
+          <div class="phone-notch"></div>
+          <div class="phone-status">
+            <span>9:41</span>
+            <span style="display:flex;gap:6px;align-items:center;">
+              <span>●●●</span><span>WiFi</span><span>100%</span>
+            </span>
+          </div>
+          <div class="phone-screen">
+            <!-- WhatsApp chat inside -->
+            <div class="wa-header">
+              <div class="wa-av"><img src="./ucobot-logo.png" alt="U"></div>
+              <div>
+                <div class="wa-name">UcoBot</div>
+                <div class="wa-st">en línea · automático</div>
+              </div>
+            </div>
+            <div class="wa-body">
+              <div class="wa-msg wm-in"  id="pm1">hola! vi la campera oversize negra en las stories, la quiero!</div>
+              <div class="wa-msg wm-out" id="pm2">Campera Oversize Negra · M<br><strong>$28.500</strong> · Envío: 24–48hs</div>
+              <!-- Payment link -->
+              <div class="pay-link" id="pm3">
+                <div class="pay-link-top">
+                  <div class="pay-link-icon">
+                    <svg class="ico" width="14" height="14" style="color:#000"><use href="#i-credit"/></svg>
+                  </div>
+                  <div class="pay-link-title">Link de pago listo</div>
+                </div>
+                <div class="pay-link-url">mpago.com/checkout/u/camp-over-n...</div>
+              </div>
+              <div class="wa-msg wm-in"  id="pm4">listo! ya pagué</div>
+              <!-- Confirmed -->
+              <div class="wa-confirmed" id="pm5">
+                <svg class="ico" width="14" height="14"><use href="#i-check"/></svg>
+                Pago confirmado · Pedido en camino
+              </div>
+              <div class="wa-ts" id="pm6">venta cerrada · sin intervención humana</div>
+            </div>
+          </div>
+          <div class="phone-home"><div class="phone-home-bar"></div></div>
+        </div>
+
+        <!-- Floating stat tags beside phone -->
+        <div class="phone-tag" id="s3-tags">
+          <div class="p-tag" id="pt1">
+            <div class="p-tag-num">0.8s</div>
+            <div class="p-tag-lbl">respuesta</div>
+          </div>
+          <div class="p-tag" id="pt2">
+            <div class="p-tag-num" id="pt2-n">0</div>
+            <div class="p-tag-lbl">ventas hoy</div>
+          </div>
+          <div class="p-tag" id="pt3">
+            <div class="p-tag-num">24/7</div>
+            <div class="p-tag-lbl">disponible</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S4 · Conversion Rate · 12 → 16s  [ANCHOR]
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s4" data-start="12" data-duration="4" data-track-index="0" style="opacity:0;">
+    <div class="scene-content">
+      <div class="eyebrow" id="s4-ey">
+        <div class="ey-dot"></div>Resultados reales<div class="ey-dot"></div>
+      </div>
+      <div id="s4-title">La tasa de<br><span>conversión</span><br>que importa.</div>
+      <div class="conv-grid">
+        <div class="conv-big" id="s4-conv">
+          <div class="conv-pct"><span id="conv-n">0</span>%</div>
+          <div class="conv-label">de consultas se convierten en ventas</div>
+          <div class="conv-sub">industria promedio: 22%</div>
+        </div>
+        <div class="conv-row">
+          <div class="conv-card" id="cc1">
+            <div class="conv-num">$<span id="cc1-n">0</span></div>
+            <div class="conv-lbl">ticket promedio</div>
+          </div>
+          <div class="conv-card" id="cc2">
+            <div class="conv-num"><span id="cc2-n">0</span></div>
+            <div class="conv-lbl">ventas esta semana</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S5 · Stats · 16 → 20s  [ANCHOR]
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s5" data-start="16" data-duration="4" data-track-index="0" style="opacity:0;">
+    <div class="scene-content">
+      <div class="eyebrow" id="s5-ey">
+        <div class="ey-dot"></div>Esta semana<div class="ey-dot"></div>
+      </div>
+      <div id="s5-title">Números que<br><span>hablan solos.</span></div>
+      <div class="stat-grid">
+        <div class="st-card" id="st1">
+          <svg class="ico" width="28" height="28" style="color:var(--accent)"><use href="#i-msg"/></svg>
+          <div class="st-num"><span class="hi" id="sn1">0</span></div>
+          <div class="st-lbl">mensajes respondidos</div>
+          <div class="bar-track"><div class="bar-fill" id="sb1"></div></div>
+        </div>
+        <div class="st-card" id="st2">
+          <svg class="ico" width="28" height="28" style="color:var(--accent)"><use href="#i-bag"/></svg>
+          <div class="st-num"><span id="sn2">0</span></div>
+          <div class="st-lbl">ventas cerradas</div>
+          <div class="bar-track"><div class="bar-fill" id="sb2"></div></div>
+        </div>
+        <div class="st-card" id="st3">
+          <svg class="ico" width="28" height="28" style="color:var(--accent)"><use href="#i-users"/></svg>
+          <div class="st-num"><span id="sn3">0</span></div>
+          <div class="st-lbl">clientes nuevos</div>
+          <div class="bar-track"><div class="bar-fill" id="sb3"></div></div>
+        </div>
+        <div class="st-card" id="st4" style="border-color:rgba(204,255,0,0.2);">
+          <svg class="ico" width="28" height="28" style="color:var(--accent)"><use href="#i-star"/></svg>
+          <div class="st-num">$<span class="hi" id="sn4">0</span></div>
+          <div class="st-lbl">facturado</div>
+          <div class="bar-track"><div class="bar-fill" id="sb4"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       S6 · Brand · 20 → 24s  [ANCHOR]
+  ═══════════════════════════════════════ -->
+  <div class="scene clip" id="s6" data-start="20" data-duration="4" data-track-index="0" style="opacity:0;">
+    <div id="s6-glow"></div>
+    <div class="scene-content">
+      <div id="s6-logo"><img src="./ucobot-logo.png" alt="UcoBot"></div>
+      <div id="s6-word">UcoBot</div>
+      <div id="s6-co">Codea Desarrollos</div>
+      <div id="s6-tag">Tu canal de ventas,<br><span>automatizado.</span></div>
+      <div id="s6-tag2">WhatsApp · Instagram · 24/7</div>
+      <div id="s6-cta">
+        Probalo gratis
+        <svg class="ico" width="26" height="26" style="color:#000"><use href="#i-arrow"/></svg>
+      </div>
+      <div id="s6-url">ucobot.app · sin tarjeta de crédito</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var tl = gsap.timeline({ paused: true });
+  window.__timelines = window.__timelines || {};
+  window.__timelines["main"] = tl;
+
+  /* ══════════════════════════════════════
+     S1: Kinetic Slam Hero  0 – 3s
+     Cada palabra entra desde dirección
+     alternante — catalog: kinetic-slam
+  ══════════════════════════════════════ */
+  /* Dots flotan desde abajo con delay */
+  ["#d1","#d2","#d3","#d4","#d5","#d6"].forEach(function(s, i) {
+    tl.from(s, { y: 60, autoAlpha: 0, duration: 0.8, ease: "power2.out" }, 0.1 + i * 0.08);
+    tl.to(s, { y: -8, duration: 1.8 + i * 0.3, ease: "sine.inOut", yoyo: true, repeat: 2 }, 0.3 + i * 0.1);
+  });
+  tl.from("#s1-ey",  { y: -16, autoAlpha: 0, duration: 0.45, ease: "power3.out" }, 0.1);
+  tl.from("#s1-line",{ width: 0, duration: 0.4, ease: "power4.out" }, 0.3);
+  /* "No son" — entra desde izquierda */
+  tl.from("#s1-w1",  { x: -200, autoAlpha: 0, duration: 0.55, ease: "back.out(1.0)" }, 0.45);
+  /* "mensajes." — entra desde derecha */
+  tl.from("#s1-w2",  { x:  200, autoAlpha: 0, duration: 0.55, ease: "back.out(1.0)" }, 0.65);
+  /* "Son" — cae desde arriba */
+  tl.from("#s1-w4",  { y: -100, autoAlpha: 0, duration: 0.52, ease: "back.out(1.1)" }, 1.05);
+  /* "ventas." — sube desde abajo con bounce */
+  tl.from("#s1-w5",  { y:  100, autoAlpha: 0, duration: 0.52, ease: "back.out(1.2)" }, 1.25);
+  tl.from("#s1-sub", { y: 22, autoAlpha: 0, duration: 0.5, ease: "power2.out" }, 1.65);
+  /* Glow se expande al ritmo del slam */
+  tl.to("#s1-glow", { scale: 1.25, duration: 0.35, ease: "power3.out" }, 0.45);
+  tl.to("#s1-glow", { scale: 1.05, duration: 0.5,  ease: "power2.out"  }, 0.8);
+  tl.to("#s1-glow", { scale: 1.18, duration: 0.35, ease: "power3.out" }, 1.05);
+  tl.to("#s1-glow", { scale: 1.0,  duration: 0.8,  ease: "sine.inOut"  }, 1.4);
+  tl.set("#s1", { autoAlpha: 0 }, 3.0);
+
+  /* ══════════════════════════════════════
+     S2: Notification Rain  3 – 7.5s
+  ══════════════════════════════════════ */
+  tl.set("#s2", { autoAlpha: 1 }, 3.0);
+  tl.from("#s2-ey", { y: -18, autoAlpha: 0, duration: 0.4, ease: "power3.out" }, 3.12);
+  /* Notificaciones caen una a una desde arriba */
+  tl.from("#n1", { y: -80, autoAlpha: 0, duration: 0.5, ease: "expo.out" }, 3.35);
+  tl.from("#n2", { y: -80, autoAlpha: 0, duration: 0.5, ease: "expo.out" }, 3.8);
+  tl.from("#n3", { y: -80, autoAlpha: 0, duration: 0.5, ease: "expo.out" }, 4.25);
+  tl.from("#n4", { y: -80, autoAlpha: 0, duration: 0.5, ease: "expo.out" }, 4.7);
+  /* Bot hace check en cada notificación (catalog: highlight) */
+  tl.to("#nc1", { autoAlpha: 1, scale: 1, duration: 0.3, ease: "back.out(2.0)" }, 5.15);
+  tl.to("#nc2", { autoAlpha: 1, scale: 1, duration: 0.3, ease: "back.out(2.0)" }, 5.38);
+  tl.to("#nc3", { autoAlpha: 1, scale: 1, duration: 0.3, ease: "back.out(2.0)" }, 5.61);
+  tl.to("#nc4", { autoAlpha: 1, scale: 1, duration: 0.3, ease: "back.out(2.0)" }, 5.84);
+  /* Cards se ponen verdes al ser checkeadas */
+  tl.to("#n1", { borderColor: "rgba(34,197,94,0.3)", duration: 0.25, ease: "power2.out" }, 5.15);
+  tl.to("#n2", { borderColor: "rgba(34,197,94,0.3)", duration: 0.25, ease: "power2.out" }, 5.38);
+  tl.to("#n3", { borderColor: "rgba(34,197,94,0.3)", duration: 0.25, ease: "power2.out" }, 5.61);
+  tl.to("#n4", { borderColor: "rgba(34,197,94,0.3)", duration: 0.25, ease: "power2.out" }, 5.84);
+  /* Badge final */
+  tl.to("#s2-badge", { autoAlpha: 1, y: 0, duration: 0.5, ease: "back.out(1.4)" }, 6.2);
+  tl.set("#s2", { autoAlpha: 0 }, 7.5);
+
+  /* ══════════════════════════════════════
+     S3: Phone Mockup  7.5 – 12s
+  ══════════════════════════════════════ */
+  tl.set("#s3", { autoAlpha: 1 }, 7.5);
+  tl.from("#s3-ey",    { y: -18, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 7.62);
+  tl.from("#s3-title", { y: -56, autoAlpha: 0, duration: 0.6,  ease: "back.out(1.2)" }, 7.82);
+  /* Phone entra con escala */
+  tl.from("#s3-phone", { y: 80, autoAlpha: 0, scale: 0.88, duration: 0.7, ease: "expo.out" }, 8.22);
+  /* Mensajes dentro del phone aparecen */
+  tl.from("#pm1", { x: -36, autoAlpha: 0, duration: 0.38, ease: "back.out(1.5)" }, 8.85);
+  tl.from("#pm2", { x:  36, autoAlpha: 0, duration: 0.38, ease: "back.out(1.5)" }, 9.35);
+  tl.from("#pm3", { y:  24, autoAlpha: 0, scale: 0.95, duration: 0.42, ease: "back.out(1.4)" }, 9.9);
+  tl.from("#pm4", { x: -36, autoAlpha: 0, duration: 0.35, ease: "back.out(1.5)" }, 10.48);
+  tl.from("#pm5", { x:  36, autoAlpha: 0, scale: 0.95, duration: 0.42, ease: "back.out(1.6)" }, 10.98);
+  tl.from("#pm6", { autoAlpha: 0, duration: 0.35, ease: "power2.out" }, 11.5);
+  /* Tags flotantes entran escalonados */
+  tl.from("#pt1", { x: 40, autoAlpha: 0, duration: 0.4, ease: "back.out(1.5)" }, 9.1);
+  tl.from("#pt2", { x: 40, autoAlpha: 0, duration: 0.4, ease: "back.out(1.5)" }, 9.55);
+  tl.from("#pt3", { x: 40, autoAlpha: 0, duration: 0.4, ease: "back.out(1.5)" }, 10.0);
+  /* pt2 counter */
+  var pt2v = { v: 0 };
+  tl.to(pt2v, { v: 34, duration: 1.4, ease: "power2.out",
+    onUpdate: function () { document.getElementById("pt2-n").textContent = Math.round(pt2v.v); }
+  }, 9.55);
+  /* Phone gentle float */
+  tl.to("#s3-phone", { y: -10, duration: 1.1, ease: "sine.inOut", yoyo: true, repeat: 1 }, 8.8);
+  /* Confirmed badge glows */
+  tl.to("#pm5", { boxShadow: "0 0 0 3px rgba(34,197,94,0.25)", duration: 0.4, ease: "power2.out" }, 11.0);
+  tl.set("#s3", { autoAlpha: 0 }, 12.0);
+
+  /* ══════════════════════════════════════
+     S4: Conversion + Revenue  12 – 16s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s4", { opacity: 1 }, 12.0);
+  tl.from("#s4-ey",   { y: -18, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 12.12);
+  tl.from("#s4-title",{ y: -60, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)" }, 12.32);
+  tl.from("#s4-conv", { y: 64, autoAlpha: 0, scale: 0.93, duration: 0.65, ease: "expo.out" }, 12.75);
+  /* Big counter: 0 → 94% */
+  var convN = { v: 0 };
+  tl.to(convN, { v: 94, duration: 1.6, ease: "power2.out",
+    onUpdate: function () { document.getElementById("conv-n").textContent = Math.round(convN.v); }
+  }, 12.82);
+  /* Smaller cards */
+  tl.from("#cc1", { y: 40, autoAlpha: 0, scale: 0.92, duration: 0.5, ease: "back.out(1.5)" }, 13.6);
+  tl.from("#cc2", { y: 40, autoAlpha: 0, scale: 0.92, duration: 0.5, ease: "back.out(1.5)" }, 13.85);
+  var cc1n = { v: 0 };
+  tl.to(cc1n, { v: 24800, duration: 1.3, ease: "power2.out",
+    onUpdate: function () {
+      document.getElementById("cc1-n").textContent = Math.round(cc1n.v).toLocaleString("es-AR");
+    }
+  }, 13.65);
+  var cc2n = { v: 0 };
+  tl.to(cc2n, { v: 89, duration: 1.1, ease: "power2.out",
+    onUpdate: function () { document.getElementById("cc2-n").textContent = Math.round(cc2n.v); }
+  }, 13.9);
+  /* Conv card border breathes */
+  tl.to("#s4-conv", { borderColor: "rgba(204,255,0,0.45)", duration: 0.5, ease: "sine.inOut", yoyo: true, repeat: 1 }, 14.8);
+
+  /* ══════════════════════════════════════
+     S5: Stats  16 – 20s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s5", { opacity: 1 }, 16.0);
+  tl.from("#s5-ey",   { y: -18, autoAlpha: 0, duration: 0.42, ease: "power3.out"    }, 16.12);
+  tl.from("#s5-title",{ y: -56, autoAlpha: 0, duration: 0.62, ease: "back.out(1.2)" }, 16.32);
+  tl.from("#st1", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 16.75);
+  tl.from("#st2", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 17.0);
+  tl.from("#st3", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 17.25);
+  tl.from("#st4", { y: 56, autoAlpha: 0, scale: 0.9, duration: 0.52, ease: "back.out(1.5)" }, 17.5);
+  var n1v={v:0}, n2v={v:0}, n3v={v:0}, n4v={v:0};
+  tl.to(n1v, { v: 1247, duration: 1.5, ease: "power2.out",
+    onUpdate: function() { document.getElementById("sn1").textContent = Math.round(n1v.v).toLocaleString("es-AR"); }}, 16.8);
+  tl.to(n2v, { v: 89, duration: 1.3, ease: "power2.out",
+    onUpdate: function() { document.getElementById("sn2").textContent = Math.round(n2v.v); }}, 17.05);
+  tl.to(n3v, { v: 47, duration: 1.2, ease: "power2.out",
+    onUpdate: function() { document.getElementById("sn3").textContent = Math.round(n3v.v); }}, 17.3);
+  tl.to(n4v, { v: 183400, duration: 1.6, ease: "power2.out",
+    onUpdate: function() { document.getElementById("sn4").textContent = Math.round(n4v.v).toLocaleString("es-AR"); }}, 17.55);
+  tl.to("#sb1", { width: "95%", duration: 1.2, ease: "power2.out" }, 16.8);
+  tl.to("#sb2", { width: "72%", duration: 1.1, ease: "power2.out" }, 17.05);
+  tl.to("#sb3", { width: "58%", duration: 1.0, ease: "power2.out" }, 17.3);
+  tl.to("#sb4", { width: "85%", duration: 1.3, ease: "power2.out" }, 17.55);
+  tl.to("#st4", { borderColor: "rgba(204,255,0,0.45)", duration: 0.3, ease: "power3.out" }, 19.0);
+  tl.to("#st4", { borderColor: "rgba(204,255,0,0.2)",  duration: 0.65, ease: "power2.inOut" }, 19.3);
+
+  /* ══════════════════════════════════════
+     S6: Brand Reveal  20 – 24s  [ANCHOR]
+  ══════════════════════════════════════ */
+  tl.set("#s6", { opacity: 1 }, 20.0);
+  tl.from("#s6-logo", { scale: 0, autoAlpha: 0, duration: 0.85, ease: "elastic.out(1, 0.5)" }, 20.1);
+  tl.from("#s6-word", { y: -80, autoAlpha: 0, duration: 0.62, ease: "back.out(1.3)" }, 20.75);
+  tl.from("#s6-co",   { autoAlpha: 0, duration: 0.5, ease: "power3.out" }, 21.2);
+  tl.from("#s6-tag",  { y: 32, autoAlpha: 0, duration: 0.58, ease: "power2.out" }, 21.55);
+  tl.from("#s6-tag2", { y: 18, autoAlpha: 0, duration: 0.48, ease: "power2.out" }, 21.95);
+  tl.from("#s6-cta",  { y: 44, scale: 0.82, autoAlpha: 0, duration: 0.58, ease: "back.out(2.0)" }, 22.3);
+  tl.from("#s6-url",  { autoAlpha: 0, duration: 0.45, ease: "power2.out" }, 22.8);
+  tl.to("#s6-logo", { y: -12, duration: 1.0, ease: "sine.inOut", yoyo: true, repeat: 1 }, 20.8);
+  tl.to("#s6-glow", { scale: 1.5, opacity: 0.9, duration: 0.48, ease: "power3.out" }, 20.1);
+  tl.to("#s6-glow", { scale: 1.1, opacity: 1,   duration: 1.0, ease: "power2.inOut"}, 20.58);
+  tl.to("#s6-cta",  { scale: 1.06, duration: 0.42, ease: "sine.inOut", yoyo: true, repeat: 1 }, 23.1);
+
+  /* ══════════════════════════════════════
+     HyperShader — 2 transiciones
+     S4→S5  domain-warp    t=15.85  (16.0 - 0.15)  dur=0.3
+     S5→S6  cinematic-zoom t=19.75  (20.0 - 0.25)  dur=0.5
+  ══════════════════════════════════════ */
+  if (window.HyperShader) {
+    window.HyperShader.init({
+      bgColor: "#000000",
+      scenes: ["s4", "s5", "s6"],
+      timeline: tl,
+      transitions: [
+        { time: 15.85, shader: "domain-warp",    duration: 0.3 },
+        { time: 19.75, shader: "cinematic-zoom", duration: 0.5 }
+      ],
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -73,7 +73,7 @@ Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código)
   "personality_prompt": "prompt de personalidad detallado (mínimo 250 palabras). Debe incluir: nombre del bot, tono y estilo específico para este rubro, cómo presentarse al cliente, qué preguntas estratégicas hacer para calificar/entender al cliente, cómo manejar objeciones típicas del rubro, qué información nunca inventar, cuándo derivar a un humano con [HANDOVER]. Si 'custom_forms' está en features, incluir un párrafo específico sobre cuándo y cómo el bot debe dirigir al cliente a completar un formulario (ej: 'Cuando el cliente solicite una cotización o quiera registrarse, indicale que complete el formulario disponible: [enlace del formulario]. Los formularios disponibles aparecen automáticamente en el contexto del bot con sus enlaces reales.'). Escribir en segunda persona (sos, respondés) en español argentino.",
   "allowed_tags": ["tags relevantes para clasificar leads de este negocio, máximo 6"],
   "business_summary": "resumen en una oración de qué hace el bot para este negocio específico",
-  "feature_gaps": ["máximo 3 — cosas concretas que el cliente mencionó en su descripción que UcoBot NO tiene todavía. Solo incluir si el cliente las mencionó explícitamente. Formato: descripción corta de la funcionalidad faltante (ej: 'Integración con Meta Ads', 'Conexión con GoHighLevel', 'Sincronización con Google Calendar'). Si no hay gaps relevantes, devolver array vacío []"],
+  "feature_gaps": [],
   "suggested_questions": [
     {"title": "Título corto (3-5 palabras)", "description": "descripción de 5-8 palabras"},
     {"title": "Título corto", "description": "descripción"},
@@ -132,7 +132,14 @@ REGLAS CRÍTICAS PARA sidebar_config:
 - Los labels de "clients", "punto_de_venta", "forms" y "promotions" son FIJOS — no los cambies, respetá exactamente los valores del template.
 - Solo "reservations" y "orders" tienen labels variables — elegí UNA palabra o término corto apropiado al rubro.
 - "visible": true SOLO si la funcionalidad es CENTRAL al negocio y se usaría a diario.
-- Ante la duda sobre visible, preferí false.`
+- Ante la duda sobre visible, preferí false.
+
+REGLAS CRÍTICAS PARA feature_gaps:
+- Por defecto debe ser un array VACÍO [].
+- Incluí un ítem ÚNICAMENTE si el cliente, en su DESCRIPCIÓN literal de arriba, nombró de forma EXPLÍCITA una herramienta o integración externa concreta (ej: si escribió textualmente "Meta Ads", "Google Calendar", "HubSpot", etc.).
+- NUNCA inventes, supongas ni copies los ejemplos de la sección "LO QUE UCOBOT NO TIENE TODAVÍA". Esa sección es solo contexto para vos, NO es una lista de gaps del cliente.
+- "CRM", "automatizaciones", "redes sociales", "WhatsApp", "Instagram" NO son gaps: UcoBot ya los cubre. No los incluyas.
+- Si el cliente no nombró textualmente ninguna herramienta externa que UcoBot no tenga, devolvé feature_gaps: [].`
 
     const result = await model.generateContent(configPrompt)
     const rawText = result.response.text().trim()
@@ -184,6 +191,7 @@ REGLAS CRÍTICAS PARA sidebar_config:
       sessionId: session.id,
       sessionToken: session.session_token,
       botNameSuggestion: session.bot_name,
+      personalityPrompt: session.personality_prompt,
       businessSummary: session.business_summary,
       features: session.features,
       featureJustifications: aiConfig.feature_justifications || {},
