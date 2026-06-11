@@ -3,7 +3,16 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, Loader2, Link2, AlertCircle, RefreshCw, Instagram } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { CheckCircle2, Loader2, Link2, AlertCircle, RefreshCw, Instagram, Settings2, Copy } from "lucide-react"
 import { FaWhatsapp } from "react-icons/fa"
 import { toast } from "sonner"
 
@@ -58,10 +67,217 @@ function loadFacebookSdk(appId: string): Promise<void> {
   })
 }
 
+function CopyField({ label, value }: { label: string; value: string }) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success(`${label} copiado`)
+    } catch {
+      toast.error("No se pudo copiar")
+    }
+  }
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 text-xs bg-muted rounded-md px-2 py-1.5 break-all">{value}</code>
+        <Button type="button" variant="outline" size="icon" className="h-8 w-8 flex-shrink-0" onClick={copy}>
+          <Copy className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function ManualWhatsAppDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSaved: () => void
+}) {
+  const [wabaId, setWabaId] = useState("")
+  const [phoneNumberId, setPhoneNumberId] = useState("")
+  const [accessToken, setAccessToken] = useState("")
+  const [submitting, setSubmitting] = useState(false)
+  const [webhook, setWebhook] = useState<{ url: string; verify_token: string } | null>(null)
+
+  // Si ya hay una integración manual, mostrar los datos del webhook existente
+  useEffect(() => {
+    if (!open) return
+    fetch("/api/integrations/whatsapp/manual")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.manual && json.webhook?.verify_token) {
+          setWebhook(json.webhook)
+          setWabaId(json.integration?.waba_id || "")
+          setPhoneNumberId(json.integration?.phone_number_id || "")
+        }
+      })
+      .catch(() => {})
+  }, [open])
+
+  const handleSubmit = async () => {
+    if (!wabaId.trim() || !phoneNumberId.trim() || !accessToken.trim()) {
+      toast.error("Completá los tres campos")
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch("/api/integrations/whatsapp/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          waba_id: wabaId.trim(),
+          phone_number_id: phoneNumberId.trim(),
+          access_token: accessToken.trim(),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || "No se pudo guardar la configuración")
+        return
+      }
+      toast.success(
+        json.integration?.display_phone_number
+          ? `Número ${json.integration.display_phone_number} conectado`
+          : "WhatsApp configurado correctamente"
+      )
+      setWebhook(json.webhook)
+      setAccessToken("")
+      onSaved()
+    } catch {
+      toast.error("Error de red al guardar la configuración")
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Configuración manual de WhatsApp</DialogTitle>
+          <DialogDescription>
+            Conectá tu número usando tu propia app de Meta, sin pasar por el flujo de Embedded Signup.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-muted-foreground">
+            <p>
+              <b className="text-foreground">Importante:</b> el número que uses no puede estar
+              activo en la app de WhatsApp. Si es tu número actual, primero hacé un backup de tus
+              chats y eliminá la cuenta desde la app (Configuración → Cuenta → Eliminar cuenta), o
+              usá un número nuevo dedicado al bot.
+            </p>
+          </div>
+
+          <div className="rounded-lg bg-muted/50 border border-border/50 p-3 text-xs text-muted-foreground space-y-1.5">
+            <p className="font-semibold text-foreground">Dónde encontrar estos datos:</p>
+            <p>
+              1. Entrá a{" "}
+              <a
+                href="https://developers.facebook.com"
+                target="_blank"
+                rel="noreferrer"
+                className="underline text-foreground"
+              >
+                developers.facebook.com
+              </a>{" "}
+              → tu app → <b>WhatsApp → Configuración de la API</b>. Ahí vas a ver el{" "}
+              <b>Identificador del número de teléfono</b> y el{" "}
+              <b>Identificador de la cuenta de WhatsApp Business (WABA)</b>.
+            </p>
+            <p>
+              2. El token tiene que ser <b>permanente</b>: creá un <b>Usuario del sistema</b> en{" "}
+              business.facebook.com → Configuración del negocio → Usuarios del sistema, asignale tu
+              app y tu WABA, y generá un token con permisos{" "}
+              <code className="text-[10px]">whatsapp_business_messaging</code> y{" "}
+              <code className="text-[10px]">whatsapp_business_management</code>. (El token temporal
+              de la página de la API vence a las 24 hs.)
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="manual-waba-id">WABA ID (cuenta de WhatsApp Business)</Label>
+            <Input
+              id="manual-waba-id"
+              placeholder="Ej: 102290129340398"
+              value={wabaId}
+              onChange={(e) => setWabaId(e.target.value)}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="manual-phone-id">Phone Number ID (identificador del número)</Label>
+            <Input
+              id="manual-phone-id"
+              placeholder="Ej: 106540352242922"
+              value={phoneNumberId}
+              onChange={(e) => setPhoneNumberId(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Es un ID numérico, no el número de teléfono.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="manual-token">Token de acceso permanente</Label>
+            <Input
+              id="manual-token"
+              type="password"
+              placeholder="EAAG..."
+              value={accessToken}
+              onChange={(e) => setAccessToken(e.target.value)}
+            />
+          </div>
+
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Validando con Meta…
+              </>
+            ) : (
+              "Guardar y validar"
+            )}
+          </Button>
+
+          {webhook && (
+            <div className="space-y-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <p className="text-xs font-semibold text-foreground">
+                Último paso: configurá el webhook en tu app de Meta
+              </p>
+              <p className="text-xs text-muted-foreground">
+                En developers.facebook.com → tu app → <b>WhatsApp → Configuración</b> →{" "}
+                <b>Webhook</b>, pegá estos valores y suscribite al campo <b>messages</b>:
+              </p>
+              <CopyField label="URL de devolución de llamada (Callback URL)" value={webhook.url} />
+              <CopyField label="Token de verificación (Verify token)" value={webhook.verify_token} />
+              <p className="text-xs text-muted-foreground">
+                Sin este paso el bot no recibe los mensajes entrantes. Una vez configurado, envía un
+                mensaje de prueba a tu número para verificar que todo funcione.
+              </p>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
   const [status, setStatus] = useState<IntegrationStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
+  const [manualOpen, setManualOpen] = useState(false)
 
   const fetchStatus = async () => {
     try {
@@ -271,27 +487,59 @@ export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
               {connecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
               Reconectar
             </Button>
+            {platform === "whatsapp" && status?.connection_method === "manual" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs gap-2 text-muted-foreground"
+                onClick={() => setManualOpen(true)}
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                Ver configuración manual
+              </Button>
+            )}
           </div>
         ) : (
-          <Button
-            onClick={handleConnect}
-            disabled={connecting}
-            className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2"
-          >
-            {connecting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Conectando…
-              </>
-            ) : (
-              <>
-                <Link2 className="w-4 h-4" />
-                Conectar {platformLabel}
-              </>
+          <div className="space-y-2">
+            <Button
+              onClick={handleConnect}
+              disabled={connecting}
+              className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2"
+            >
+              {connecting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Conectando…
+                </>
+              ) : (
+                <>
+                  <Link2 className="w-4 h-4" />
+                  Conectar {platformLabel}
+                </>
+              )}
+            </Button>
+            {platform === "whatsapp" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full text-xs gap-2"
+                onClick={() => setManualOpen(true)}
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                Configurar manualmente
+              </Button>
             )}
-          </Button>
+          </div>
         )}
       </div>
+
+      {platform === "whatsapp" && (
+        <ManualWhatsAppDialog
+          open={manualOpen}
+          onOpenChange={setManualOpen}
+          onSaved={fetchStatus}
+        />
+      )}
 
       {!loading && !isConnected && (
         <p className="text-xs text-muted-foreground flex items-start gap-2">

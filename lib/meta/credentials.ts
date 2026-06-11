@@ -2,8 +2,10 @@
  * Resolución centralizada de credenciales de Meta (WhatsApp + Instagram).
  *
  * Estrategia:
- *  - WhatsApp: System User Token único (Embedded Signup) con fallback al token
- *    por cliente en `integration.config.access_token` para integraciones legacy.
+ *  - WhatsApp: si la integración tiene token propio (`integration.config.access_token`,
+ *    configuración manual o legacy) se usa ese, porque el System Token de UcoBot
+ *    no tiene acceso a WABAs que no pasaron por Embedded Signup. Si no hay token
+ *    propio, se usa el System User Token único (Embedded Signup).
  *  - Instagram: Long-lived Page Access Token por cliente (Facebook Login).
  *
  * Toda llamada a la Graph API de Meta debe pasar por este módulo para mantener
@@ -18,11 +20,11 @@ type Integration = {
 } | null | undefined
 
 export function getWhatsAppToken(integration?: Integration): string | null {
-  const systemToken = process.env.WHATSAPP_SYSTEM_TOKEN?.trim()
-  if (systemToken) return systemToken
+  const ownToken = integration?.config?.access_token?.trim()
+  if (ownToken) return ownToken
 
-  const legacyToken = integration?.config?.access_token?.trim()
-  return legacyToken || null
+  const systemToken = process.env.WHATSAPP_SYSTEM_TOKEN?.trim()
+  return systemToken || null
 }
 
 export function getInstagramToken(integration?: Integration): string | null {

@@ -24,9 +24,26 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Configuración manual: cada integración manual tiene su propio verify_token
+    // generado por UcoBot, que el cliente pega en la config de webhooks de su app de Meta.
+    const supabase = createAdminClient()
+    const { data: manualIntegration } = await supabase
+      .from('integrations')
+      .select('id')
+      .eq('platform', 'whatsapp')
+      .eq('config->>verify_token', token)
+      .maybeSingle()
+
+    if (manualIntegration) {
+      console.log('✅ WhatsApp webhook verified via per-integration token (manual mode):', manualIntegration.id)
+      return new NextResponse(challenge, {
+        status: 200,
+        headers: { 'Content-Type': 'text/plain' }
+      })
+    }
+
     // Legacy: per-bot verify token (token = bot ID). Mantener compatibilidad con clientes
     // configurados antes de la migración a Embedded Signup.
-    const supabase = createAdminClient()
     const { data: bot } = await supabase
       .from('bots')
       .select('id')
@@ -505,9 +522,9 @@ async function generateAndSendAIResponse(
     const aiResponse = await response.json()
     
     if (aiResponse.response) {
-      // Prefer the app-level System User token (Embedded Signup flow).
-      // Fallback to per-client token for legacy integrations.
-      const accessToken = process.env.WHATSAPP_SYSTEM_TOKEN || integration.config?.access_token
+      // Token propio del cliente primero (configuración manual / legacy):
+      // el System Token solo sirve para WABAs conectados vía Embedded Signup.
+      const accessToken = integration.config?.access_token || process.env.WHATSAPP_SYSTEM_TOKEN
       const phoneNumberId = integration.config?.phone_number_id
 
       if (!accessToken || !phoneNumberId) {
