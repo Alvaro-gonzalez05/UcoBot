@@ -70,7 +70,7 @@ Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código)
     "requests_confirm_phrase": "frase de confirmación (ej: CONSULTA REGISTRADA)",
     "catalog_label": "cómo llamar al catálogo (ej: propiedades, servicios, productos, proyectos)"
   },
-  "personality_prompt": "prompt de personalidad detallado (mínimo 250 palabras). Debe incluir: nombre del bot, tono y estilo específico para este rubro, cómo presentarse al cliente, qué preguntas estratégicas hacer para calificar/entender al cliente, cómo manejar objeciones típicas del rubro, qué información nunca inventar, cuándo derivar a un humano con [HANDOVER]. Si 'custom_forms' está en features, incluir un párrafo específico sobre cuándo y cómo el bot debe dirigir al cliente a completar un formulario (ej: 'Cuando el cliente solicite una cotización o quiera registrarse, indicale que complete el formulario disponible: [enlace del formulario]. Los formularios disponibles aparecen automáticamente en el contexto del bot con sus enlaces reales.'). Escribir en segunda persona (sos, respondés) en español argentino.",
+  "personality_prompt": "prompt de personalidad detallado (mínimo 250 palabras), ESTRUCTURADO OBLIGATORIAMENTE en secciones markdown — NUNCA un solo párrafo corrido. Usá exactamente esta estructura (escapando saltos de línea como \\n dentro del string JSON):\\n## Identidad\\n- Nombre, rol y negocio al que representa\\n\\n## Tono y estilo\\n- 2-4 guiones con el tono específico del rubro (español argentino)\\n\\n## Presentación\\n- Cómo se presenta al cliente (frase exacta)\\n\\n## Preguntas estratégicas\\n- 2-4 guiones con preguntas para calificar/entender al cliente\\n\\n## Manejo de situaciones\\n- Un guion por situación típica del rubro (reservas, pedidos, objeciones, promociones, etc.) con la respuesta o acción esperada\\n\\n## Reglas\\n- Qué información NUNCA inventar\\n- Cuándo y cómo derivar a un humano con [HANDOVER]\\n- Si 'custom_forms' está en features: cuándo dirigir al cliente a completar un formulario ('los formularios disponibles aparecen automáticamente en el contexto del bot con sus enlaces reales'). Escribir en segunda persona (sos, respondés).",
   "allowed_tags": ["tags relevantes para clasificar leads de este negocio, máximo 6"],
   "business_summary": "resumen en una oración de qué hace el bot para este negocio específico",
   "feature_gaps": [],
@@ -208,7 +208,7 @@ REGLAS CRÍTICAS PARA feature_gaps:
 // Actualizar nombre del bot después de que el usuario lo personalice
 export async function PATCH(request: NextRequest) {
   try {
-    const { sessionId, bot_name, sidebar_config } = await request.json()
+    const { sessionId, bot_name, sidebar_config, personality_prompt } = await request.json()
     if (!sessionId) {
       return NextResponse.json({ error: "Faltan campos" }, { status: 400 })
     }
@@ -217,6 +217,7 @@ export async function PATCH(request: NextRequest) {
     const updates: Record<string, any> = {}
     if (bot_name) updates.bot_name = bot_name
     if (sidebar_config) updates.sidebar_config = sidebar_config
+    if (typeof personality_prompt === "string" && personality_prompt.trim().length > 0) updates.personality_prompt = personality_prompt.trim()
 
     const { error } = await supabase
       .from("demo_sessions")

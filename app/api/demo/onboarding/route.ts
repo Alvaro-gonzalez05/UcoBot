@@ -48,14 +48,25 @@ ${transcript ? `CONVERSACIÓN HASTA AHORA (no repitas nada de esto):\n${transcri
 
 INSTRUCCIONES CRÍTICAS (sonar humano y personalizado, NO robótico):
 1. PROHIBIDO empezar con "¡Genial!", "¡Perfecto!", "Entiendo que...", "Claro", "Por supuesto" o repetir/parafrasear lo que el cliente dijo. Eso suena a plantilla. Entrá directo con una observación real.
-2. Demostrá conocimiento del rubro: arrancá con UN detalle concreto y específico de ESE tipo de negocio (un caso de uso real, una situación típica del rubro) que muestre que entendés su mundo.
-3. IMPORTANTE — Mostrale TODO lo que UcoBot puede hacer por ESE negocio: recorré las funcionalidades RELEVANTES de la sección "QUÉ PUEDE HACER" (no te limites a un número fijo, incluí todas las que apliquen a su rubro) y traducí cada una a una acción concreta y específica para ellos, en una lista con guiones. Mencioná explícitamente que, si necesita **recolectar datos** de sus clientes (registros, fichas, preferencias, encuestas), UcoBot lo hace con formularios conversacionales. Nada genérico tipo "automatizar tu negocio" — cada punto pegado a su realidad.
-4. Después de mostrarle las posibilidades, invitá al cliente a contarte si quiere ajustar algo, sumar algún detalle, o si ya está conforme para que armes la configuración. Dejá claro que cuando él diga que está listo, vos le configurás todo.
-5. Variá la redacción. Nunca uses la misma estructura de frase dos veces. No re-preguntes nada ya respondido en la conversación.
+2. "intro": 1-2 oraciones con UN detalle concreto y específico de ESE tipo de negocio (una situación típica real del rubro) que muestre que entendés su mundo. Acá podés usar **negrita**.
+3. "capabilities": TODO lo que UcoBot puede hacer por ESE negocio — recorré las funcionalidades RELEVANTES de la sección "QUÉ PUEDE HACER" (no te limites a un número fijo: incluí todas las que apliquen al rubro, típicamente entre 5 y 10). Cada una con:
+   - "icon": UN nombre de Material Symbols de esta lista exacta: smart_toy, group, calendar_month, shopping_cart, restaurant_menu, point_of_sale, description, loyalty, label, notifications, account_tree, local_offer, storefront, chat_bubble, payments, support_agent
+   - "title": máximo 4 palabras, concreto (ej: "Pedidos por WhatsApp")
+   - "description": máximo 14 palabras, pegada a SU negocio, no genérica (ej: "Toma pedidos para llevar sin que nadie atienda el teléfono")
+   Si el negocio necesita juntar datos de clientes (fichas, preferencias, encuestas), incluí una card de formularios conversacionales con icon "description".
+4. "outro": 1-2 oraciones invitando a ajustar, sumar algo, o confirmar para que armes la configuración. Dejá claro que cuando esté conforme, vos le configurás todo. Podés usar **negrita** y 1 emoji.
+5. Variá la redacción. No re-preguntes nada ya respondido en la conversación.
 
-Estructura sugerida: 1 frase de observación del rubro → "Con UcoBot vas a poder:" + lista de guiones con TODO lo relevante → cierre invitando a ajustar o a confirmar que arme la configuración.
-Tono: español argentino, cálido, consultivo, experto. Máximo 160 palabras. Sin saludos ni despedidas.
-FORMATO: markdown liviano — **negrita** en lo importante, guiones ("- item") para las funcionalidades. Respondé únicamente con el texto del mensaje, sin JSON.`
+Respondé ÚNICAMENTE con un JSON válido (sin bloques de código), con esta estructura exacta:
+{
+  "intro": "texto",
+  "capabilities": [
+    { "icon": "calendar_month", "title": "Reservas sin solaparse", "description": "El bot agenda mesas y confirma automáticamente" }
+  ],
+  "outro": "texto"
+}
+
+Tono: español argentino, cálido, consultivo, experto. Sin saludos ni despedidas. Escapá saltos de línea como \\n para que el JSON sea válido.`
 
     } else if (stage === "react_to_followup") {
       prompt = `Sos el asistente de configuración de UcoBot.
@@ -101,6 +112,33 @@ FORMATO del campo "reply": markdown liviano — **negrita** en lo importante y g
         })
       } catch {
         return NextResponse.json({ reply: rawText, needsTagQuestion: false })
+      }
+    }
+
+    if (stage === "react_to_goals") {
+      try {
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/)
+        if (!jsonMatch) throw new Error("No JSON")
+        const parsed = JSON.parse(jsonMatch[0])
+        const capabilities = (Array.isArray(parsed.capabilities) ? parsed.capabilities : [])
+          .filter((c: any) => c && c.title)
+          .map((c: any) => ({
+            icon: typeof c.icon === "string" ? c.icon : "smart_toy",
+            title: String(c.title),
+            description: String(c.description || ""),
+          }))
+        if (capabilities.length > 0) {
+          return NextResponse.json({
+            intro: parsed.intro || "",
+            capabilities,
+            outro: parsed.outro || "",
+          })
+        }
+        // JSON came back but without cards — fall back to plain reply
+        return NextResponse.json({ reply: parsed.intro || rawText })
+      } catch {
+        // Model ignored the JSON instruction — use raw text as a normal reply
+        return NextResponse.json({ reply: rawText })
       }
     }
 

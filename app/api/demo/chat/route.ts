@@ -160,7 +160,7 @@ export async function GET(request: NextRequest) {
 
   const { data: session } = await supabase
     .from("demo_sessions")
-    .select("id, contact_name, business_name, bot_name, business_summary, features, feature_config, suggested_questions, allowed_tags, sidebar_config, status")
+    .select("id, contact_name, business_name, bot_name, business_summary, features, feature_config, suggested_questions, allowed_tags, sidebar_config, status, personality_prompt")
     .eq("id", sessionId)
     .single()
 

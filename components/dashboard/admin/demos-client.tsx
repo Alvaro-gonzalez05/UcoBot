@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Bot,
-  ExternalLink,
   Clock,
   CheckCircle2,
   Building2,
@@ -196,17 +195,6 @@ export function DemosClient({ demos }: DemosClientProps) {
                           demoId={demo.id}
                           demoName={demo.business_name}
                         />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          asChild
-                          className="rounded-xl h-8 text-xs"
-                        >
-                          <Link href={`/demo/${demo.id}`} target="_blank">
-                            <ExternalLink className="w-3.5 h-3.5 mr-1" />
-                            Ver demo
-                          </Link>
-                        </Button>
                         {demo.status === "active" && (
                           <Button
                             size="sm"

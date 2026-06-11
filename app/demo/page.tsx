@@ -93,12 +93,25 @@ interface ConfirmedSection {
   icon: string
 }
 
+interface CapabilityCard {
+  icon: string
+  title: string
+  description: string
+}
+
+interface CapabilitiesData {
+  intro: string
+  capabilities: CapabilityCard[]
+  outro: string
+}
+
 interface ChatMessage {
   id: string
   role: "bot" | "user"
   content: string
-  type?: "summary"
+  type?: "summary" | "capabilities"
   summaryData?: SummaryData
+  capabilitiesData?: CapabilitiesData
 }
 
 interface SidebarPreviewItem {
@@ -141,6 +154,10 @@ export default function DemoPage() {
   const [savedSession, setSavedSession] = useState<SavedDemoSession | null>(null)
   const [testSessionId, setTestSessionId] = useState<string | null>(null)
   const [configuredSessionId, setConfiguredSessionId] = useState<string | null>(null)
+  const configuredFeaturesRef = useRef<string[]>([])
+  const [showPromptPanel, setShowPromptPanel] = useState(false)
+  const [botPrompt, setBotPrompt] = useState("")
+  const [promptVersion, setPromptVersion] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -185,6 +202,49 @@ export default function DemoPage() {
     )
   }
 
+  // Restore a saved session: rebuild the full demo screen (sidebar + chat +
+  // config assistant + action buttons) without redoing the onboarding.
+  const resumeSession = async (saved: SavedDemoSession) => {
+    setContactName(saved.contactName)
+    setBusinessName(saved.businessName)
+    stageRef.current = "done"
+    setStage("done")
+    setIsTyping(true)
+    try {
+      const res = await fetch(`/api/demo/chat?sessionId=${saved.sessionId}`)
+      const data = await res.json()
+      if (!res.ok || !data.session) throw new Error("not found")
+      const session = data.session
+
+      setConfiguredSessionId(saved.sessionId)
+      configuredFeaturesRef.current = session.features || []
+      if (session.business_summary) setGoalsText(session.business_summary)
+
+      // Rebuild the sidebar from the stored config
+      const cfg: { id: string; label: string; visible: boolean }[] = Array.isArray(session.sidebar_config) ? session.sidebar_config : []
+      const items: SidebarPreviewItem[] = []
+      for (const f of FIXED_SECTIONS) {
+        items.push({ id: f.id, label: f.label, materialIcon: f.materialIcon, isFixed: true })
+      }
+      for (const s of cfg) {
+        if (FIXED_SECTION_IDS.has(s.id) || s.visible !== true) continue
+        items.push({ id: s.id, label: s.label || s.id, materialIcon: MATERIAL_ICON_MAP[s.id] || "circle", isFixed: false })
+      }
+      setSidebarItems(items)
+
+      setIsTyping(false)
+      appendBot(
+        `¡Hola de nuevo, **${saved.contactName.split(" ")[0]}**! 👋\n\nTu bot **${session.bot_name}** para **${saved.businessName}** sigue configurado y listo.\n\n- Tocá **Probar bot** para chatear como un cliente\n- Escribime acá si querés **ajustar algo** o preguntar sobre la plataforma\n- O tocá **Activar cuenta** cuando quieras dejarlo andando de verdad`
+      )
+    } catch {
+      setIsTyping(false)
+      try { localStorage.removeItem("ucobot_demo_session") } catch {}
+      setSavedSession(null)
+      stageRef.current = "welcome"
+      setStage("welcome")
+    }
+  }
+
   // Build a plain-text transcript of the conversation so far (+ the latest user turn),
   // so the AI never re-asks something already answered and can personalize.
   const buildTranscript = (latestUser?: string) => {
@@ -198,7 +258,7 @@ export default function DemoPage() {
 
   const handleSend = async () => {
     const text = inputValue.trim()
-    if (!text || stageRef.current === "processing" || stageRef.current === "done") return
+    if (!text || stageRef.current === "processing") return
     setInputValue("")
 
     setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", content: text }])
@@ -228,7 +288,16 @@ export default function DemoPage() {
         })
         const data = await res.json()
         setIsTyping(false)
-        appendBot(data.reply || "¡Perfecto! Contame más: ¿cuál es el mayor problema hoy en la atención al cliente y de dónde te llegan los clientes?")
+        if (Array.isArray(data.capabilities) && data.capabilities.length > 0) {
+          // Texto plano en content para que el transcript conserve lo mostrado
+          const asText = `${data.intro}\nCon UcoBot vas a poder: ${data.capabilities.map((c: CapabilityCard) => c.title).join(", ")}.\n${data.outro}`
+          appendBot(asText, {
+            type: "capabilities",
+            capabilitiesData: { intro: data.intro || "", capabilities: data.capabilities, outro: data.outro || "" },
+          })
+        } else {
+          appendBot(data.reply || "¡Perfecto! Contame más: ¿cuál es el mayor problema hoy en la atención al cliente y de dónde te llegan los clientes?")
+        }
       } catch {
         setIsTyping(false)
         appendBot("¡Perfecto! Para configurarlo bien: ¿cuál es el mayor problema hoy en la atención al cliente y de dónde te llegan los clientes?")
@@ -275,6 +344,38 @@ export default function DemoPage() {
       scrollBottom()
       const fullDesc = `${goalsText}\n\nPain points y contexto operativo: ${followupTextRef.current}\n\nCriterios de calificación de leads: ${text}`
       runProcessing(contactName, businessName, fullDesc)
+    } else if (stageRef.current === "done") {
+      // Seguir hablando con el asistente de configuración después de armar el bot
+      setIsTyping(true)
+      const history = messages
+        .filter((m) => m.type !== "summary" && m.content)
+        .map((m) => ({ role: m.role === "user" ? "user" : "model", content: m.content }))
+      try {
+        const res = await fetch("/api/demo/assistant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            businessName,
+            businessSummary: goalsText,
+            features: configuredFeaturesRef.current,
+            history,
+            message: text,
+            sessionId: configuredSessionId,
+          }),
+        })
+        const data = await res.json()
+        setIsTyping(false)
+        if (Array.isArray(data.features)) configuredFeaturesRef.current = data.features
+        if (typeof data.personalityPrompt === "string" && data.personalityPrompt) {
+          // El configurador actualizó el prompt — reflejarlo en vivo en el panel
+          setBotPrompt(data.personalityPrompt)
+          setPromptVersion((v) => v + 1)
+        }
+        appendBot(data.reply || "Disculpá, no pude responder ahora. Probá de nuevo en un momento.")
+      } catch {
+        setIsTyping(false)
+        appendBot("Hubo un error de conexión. Probá de nuevo en un momento.")
+      }
     }
 
     inputRef.current?.focus()
@@ -333,13 +434,17 @@ export default function DemoPage() {
     setCompletedSteps([0, 1, 2, 3, 4, 5])
     // Reveal de la preconfiguración: nombre + personalidad asignada
     setRevealName(data.botNameSuggestion || "Tu asistente")
-    if (data.personalityPrompt) setRevealPrompt(data.personalityPrompt)
+    if (data.personalityPrompt) {
+      setRevealPrompt(data.personalityPrompt)
+      setBotPrompt(data.personalityPrompt)
+    }
     scrollBottom()
     await delay(1700)
     setShowBuilding(false)
     await delay(350)
 
     setConfiguredSessionId(data.sessionId)
+    configuredFeaturesRef.current = data.features || []
 
     // Save session for resume functionality
     try {
@@ -449,14 +554,14 @@ export default function DemoPage() {
     setTestSessionId(sessionId)
   }
 
-  const inputDisabled = stage === "processing" || stage === "done"
+  const inputDisabled = stage === "processing"
   const canSend = inputValue.trim().length > 0 && !inputDisabled
 
   const inputPlaceholder =
     stage === "processing"
       ? "Analizando tu negocio..."
       : stage === "done"
-      ? "¡Tu bot está listo! 🎉"
+      ? "¿Querés ajustar algo o preguntarme sobre la plataforma?"
       : stage === "ask_business"
       ? "Nombre de tu negocio..."
       : stage === "ask_goals"
@@ -530,7 +635,7 @@ export default function DemoPage() {
                 className="flex flex-col sm:flex-row gap-3 mt-8"
               >
                 <button
-                  onClick={() => router.push(`/demo/${savedSession.sessionId}`)}
+                  onClick={() => resumeSession(savedSession)}
                   className="flex items-center justify-center gap-2 bg-[#CCFF00] text-black font-semibold px-6 py-3 rounded-xl hover:bg-[#b8e600] active:scale-95 transition-all text-sm"
                 >
                   Volver a mi demo
@@ -772,6 +877,8 @@ export default function DemoPage() {
                   )}
                   {msg.type === "summary" && msg.summaryData ? (
                     <SummaryCard data={msg.summaryData} onGo={handleGoToDemo} />
+                  ) : msg.type === "capabilities" && msg.capabilitiesData ? (
+                    <CapabilitiesMessage data={msg.capabilitiesData} />
                   ) : (
                     <div
                       className={`max-w-[78%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
@@ -800,14 +907,8 @@ export default function DemoPage() {
                     <div className="w-7 h-7 rounded-full bg-[#CCFF00] flex items-center justify-center shrink-0">
                       <Bot className="w-3.5 h-3.5 text-black" />
                     </div>
-                    <div className="bg-zinc-800 rounded-2xl rounded-bl-sm px-4 py-3 flex gap-1.5 items-center">
-                      {[0, 150, 300].map((d, i) => (
-                        <span
-                          key={i}
-                          className="w-1.5 h-1.5 bg-zinc-500 rounded-full animate-bounce"
-                          style={{ animationDelay: `${d}ms` }}
-                        />
-                      ))}
+                    <div className="bg-zinc-800 rounded-2xl rounded-bl-sm px-4 py-3">
+                      <ThinkingIndicator />
                     </div>
                   </motion.div>
                 )}
@@ -930,7 +1031,26 @@ export default function DemoPage() {
     {/* Inline bot test overlay — stays in the same screen, no navigation */}
     <AnimatePresence>
       {testSessionId && (
-        <BotTestOverlay sessionId={testSessionId} onClose={() => setTestSessionId(null)} onActivate={() => router.push("/register")} />
+        <BotTestOverlay
+          sessionId={testSessionId}
+          onClose={() => { setTestSessionId(null); setShowPromptPanel(false) }}
+          onActivate={() => router.push("/register")}
+          onTogglePrompt={() => setShowPromptPanel((v) => !v)}
+          promptPanelOpen={showPromptPanel}
+        />
+      )}
+    </AnimatePresence>
+
+    {/* Prompt panel — left of the bot test panel, live-updates when the assistant edits it */}
+    <AnimatePresence>
+      {testSessionId && showPromptPanel && (
+        <PromptPanel
+          sessionId={testSessionId}
+          prompt={botPrompt}
+          setPrompt={setBotPrompt}
+          version={promptVersion}
+          onClose={() => setShowPromptPanel(false)}
+        />
       )}
     </AnimatePresence>
     </>
@@ -944,7 +1064,7 @@ interface TestSession {
   suggested_questions?: { title: string; description: string }[]
 }
 
-function BotTestOverlay({ sessionId, onClose, onActivate }: { sessionId: string; onClose: () => void; onActivate: () => void }) {
+function BotTestOverlay({ sessionId, onClose, onActivate, onTogglePrompt, promptPanelOpen }: { sessionId: string; onClose: () => void; onActivate: () => void; onTogglePrompt: () => void; promptPanelOpen: boolean }) {
   const [session, setSession] = useState<TestSession | null>(null)
   const [msgs, setMsgs] = useState<{ role: "user" | "bot"; content: string }[]>([])
   const [input, setInput] = useState("")
@@ -988,12 +1108,10 @@ function BotTestOverlay({ sessionId, onClose, onActivate }: { sessionId: string;
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        onClick={onClose} className="fixed inset-0 bg-black/70 z-[60] backdrop-blur-sm" />
       <motion.div
-        initial={{ opacity: 0, scale: 0.97, y: 16 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97, y: 16 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed z-[61] inset-0 sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 w-full h-full sm:h-[640px] sm:max-w-lg sm:rounded-[2rem] bg-zinc-950 sm:border border-zinc-800 shadow-2xl flex flex-col overflow-hidden">
+        initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }}
+        transition={{ type: "spring", stiffness: 320, damping: 30 }}
+        className="fixed z-[61] inset-x-0 bottom-0 h-[80vh] sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[400px] sm:h-[620px] sm:max-h-[80vh] bg-zinc-950 rounded-t-[1.75rem] sm:rounded-[1.75rem] border border-zinc-800 shadow-[0_24px_80px_rgba(0,0,0,0.65)] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 flex-shrink-0">
           <div className="w-9 h-9 rounded-xl bg-[#CCFF00] flex items-center justify-center flex-shrink-0"><Bot className="w-4 h-4 text-black" /></div>
@@ -1004,6 +1122,18 @@ function BotTestOverlay({ sessionId, onClose, onActivate }: { sessionId: string;
               <span className="text-zinc-500 text-xs truncate">En línea · {session?.business_name || ""}</span>
             </div>
           </div>
+          <button
+            onClick={onTogglePrompt}
+            title="Ver y editar el prompt del bot"
+            className={`hidden sm:flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors flex-shrink-0 ${
+              promptPanelOpen
+                ? "bg-[#CCFF00]/15 text-[#CCFF00] border-[#CCFF00]/40"
+                : "bg-transparent text-zinc-400 border-zinc-700 hover:text-white hover:border-zinc-500"
+            }`}
+          >
+            <Pencil className="w-3 h-3" />
+            Prompt
+          </button>
           <button onClick={onActivate} className="hidden sm:flex items-center gap-1 bg-[#CCFF00] text-black text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-[#b8e600] transition-colors flex-shrink-0">
             Activar cuenta <ArrowRight className="w-3 h-3" />
           </button>
@@ -1067,6 +1197,293 @@ function BotTestOverlay({ sessionId, onClose, onActivate }: { sessionId: string;
         </div>
       </motion.div>
     </>
+  )
+}
+
+// ── Thinking indicator (spinner + frases rotativas) ────────────────────────────
+
+const THINKING_PHRASES = [
+  "Interpretando la solicitud...",
+  "Analizando tu rubro...",
+  "Repasando lo que UcoBot puede hacer...",
+  "Pensando ideas para tu negocio...",
+  "Armando la respuesta...",
+]
+
+function ThinkingIndicator() {
+  const [idx, setIdx] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % THINKING_PHRASES.length), 1800)
+    return () => clearInterval(t)
+  }, [])
+  return (
+    <div className="flex items-center gap-2.5">
+      <Loader2 className="w-4 h-4 text-[#CCFF00] animate-spin shrink-0" />
+      <AnimatePresence mode="wait">
+        <motion.span
+          key={idx}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.25 }}
+          className="text-sm text-zinc-400"
+        >
+          {THINKING_PHRASES[idx]}
+        </motion.span>
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ── Capabilities message (tarjetitas de lo que UcoBot puede hacer) ─────────────
+
+function CapabilitiesMessage({ data }: { data: CapabilitiesData }) {
+  return (
+    <div className="max-w-[92%] sm:max-w-[85%] space-y-2.5">
+      {data.intro && (
+        <div className="bg-zinc-800 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm leading-relaxed text-zinc-100 w-fit">
+          <FormattedMessage content={data.intro} />
+        </div>
+      )}
+
+      <div className="bg-zinc-800/60 border border-zinc-700/40 rounded-2xl p-3">
+        <div className="flex items-center gap-1.5 px-1 mb-2.5">
+          <Sparkles className="w-3.5 h-3.5 text-[#CCFF00]" />
+          <span className="text-[#CCFF00] text-[11px] font-semibold uppercase tracking-wider">
+            Con UcoBot vas a poder
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {data.capabilities.map((cap, i) => (
+            <motion.div
+              key={i}
+              initial={{ opacity: 0, y: 10, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 0.15 + i * 0.09, duration: 0.3, ease: "easeOut" }}
+              className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 flex items-start gap-2.5 hover:border-[#CCFF00]/30 transition-colors"
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#CCFF00]/10 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[#CCFF00]" style={{ fontSize: 18 }}>
+                  {cap.icon || "smart_toy"}
+                </span>
+              </div>
+              <div className="min-w-0">
+                <p className="text-white text-[13px] font-semibold leading-tight">{cap.title}</p>
+                {cap.description && (
+                  <p className="text-zinc-500 text-xs mt-0.5 leading-snug">{cap.description}</p>
+                )}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {data.outro && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 + data.capabilities.length * 0.09 + 0.2 }}
+          className="bg-zinc-800 rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm leading-relaxed text-zinc-100 w-fit"
+        >
+          <FormattedMessage content={data.outro} />
+        </motion.div>
+      )}
+    </div>
+  )
+}
+
+// ── Prompt panel (ver/editar el prompt del bot, con update en vivo) ────────────
+
+function PromptPanel({ sessionId, prompt, setPrompt, version, onClose }: {
+  sessionId: string
+  prompt: string
+  setPrompt: (p: string) => void
+  version: number
+  onClose: () => void
+}) {
+  const [draft, setDraft] = useState(prompt)
+  const [loading, setLoading] = useState(!prompt)
+  const [animating, setAnimating] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+  const viewRef = useRef<HTMLDivElement>(null)
+  const prevVersion = useRef(version)
+
+  // Carga inicial si todavía no tenemos el prompt (ej: sesión retomada)
+  useEffect(() => {
+    if (prompt) { setDraft(prompt); setLoading(false); return }
+    let active = true
+    ;(async () => {
+      try {
+        const res = await fetch(`/api/demo/chat?sessionId=${sessionId}`)
+        const data = await res.json()
+        const p = data.session?.personality_prompt || ""
+        if (active) { setPrompt(p); setDraft(p) }
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Efecto typewriter cuando el configurador actualiza el prompt en vivo
+  useEffect(() => {
+    if (version === prevVersion.current) return
+    prevVersion.current = version
+    const full = prompt
+    if (!full) return
+    setEditing(false)
+    setAnimating(true)
+    setDraft("")
+    let i = 0
+    const step = Math.max(3, Math.round(full.length / 140))
+    const t = setInterval(() => {
+      i += step
+      setDraft(full.slice(0, i))
+      if (viewRef.current) viewRef.current.scrollTop = viewRef.current.scrollHeight
+      if (i >= full.length) {
+        clearInterval(t)
+        setDraft(full)
+        setAnimating(false)
+      }
+    }, 16)
+    return () => clearInterval(t)
+  }, [version, prompt])
+
+  const save = async () => {
+    if (saving || animating || !draft.trim()) return
+    setSaving(true)
+    try {
+      await fetch("/api/demo/configure", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, personality_prompt: draft }),
+      })
+      setPrompt(draft)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const dirty = draft !== prompt && !animating
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 24, scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 320, damping: 30 }}
+      className="fixed z-[62] inset-x-0 bottom-0 h-[80vh] sm:inset-x-auto sm:right-[445px] sm:bottom-5 sm:w-[400px] sm:h-[620px] sm:max-h-[80vh] bg-zinc-950 rounded-t-[1.75rem] sm:rounded-[1.75rem] border border-zinc-800 shadow-[0_24px_80px_rgba(0,0,0,0.65)] flex flex-col overflow-hidden"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 bg-zinc-900/80 flex-shrink-0">
+        <div className="w-9 h-9 rounded-xl bg-[#CCFF00] flex items-center justify-center flex-shrink-0">
+          <Pencil className="w-4 h-4 text-black" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-semibold">Prompt del bot</p>
+          <p className="text-zinc-500 text-xs truncate">
+            {animating ? "El configurador lo está actualizando..." : "Editalo acá o pedíselo al configurador"}
+          </p>
+        </div>
+        <button onClick={onClose} className="text-zinc-500 hover:text-white p-1 transition-colors flex-shrink-0"><X className="w-5 h-5" /></button>
+      </div>
+
+      {/* Live update badge */}
+      <AnimatePresence>
+        {animating && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+            className="flex items-center gap-2 px-4 py-2 bg-[#CCFF00]/10 border-b border-[#CCFF00]/20 flex-shrink-0"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-[#CCFF00] animate-pulse" />
+            <span className="text-[#CCFF00] text-xs font-semibold">Reescribiendo el prompt en tiempo real...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Body */}
+      <div className="flex-1 p-3 overflow-hidden">
+        {loading ? (
+          <div className="h-full flex items-center justify-center">
+            <Loader2 className="w-5 h-5 text-[#CCFF00] animate-spin" />
+          </div>
+        ) : editing ? (
+          <textarea
+            ref={taRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            spellCheck={false}
+            autoFocus
+            className="w-full h-full bg-zinc-900 border border-zinc-800 rounded-2xl p-4 text-sm leading-relaxed resize-none focus:outline-none focus:border-[#CCFF00]/40 transition-colors text-zinc-200 demo-scroll"
+          />
+        ) : (
+          <div
+            ref={viewRef}
+            className={`w-full h-full overflow-y-auto demo-scroll bg-zinc-900 border rounded-2xl p-4 transition-colors ${
+              animating ? "border-[#CCFF00]/40" : "border-zinc-800"
+            }`}
+          >
+            <FormattedMessage
+              content={draft}
+              className={`text-sm leading-relaxed space-y-0.5 [&_p.font-bold]:text-[#CCFF00] [&_p.font-semibold]:text-[#CCFF00] [&_p.font-bold]:mt-3 [&_strong]:text-white ${
+                animating ? "text-[#d8ffb0]" : "text-zinc-300"
+              }`}
+            />
+            {animating && <span className="inline-block w-1.5 h-4 bg-[#CCFF00] animate-pulse align-text-bottom ml-0.5" />}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-2 px-4 py-3 border-t border-zinc-800 bg-zinc-900/80 flex-shrink-0">
+        <p className="text-zinc-600 text-[10px] leading-tight">
+          {editing
+            ? (dirty ? "Tenés cambios sin guardar" : "Editando el prompt")
+            : "El bot usa este prompt en cada respuesta"}
+        </p>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {editing ? (
+            <>
+              <button
+                onClick={() => { setDraft(prompt); setEditing(false) }}
+                disabled={saving}
+                className="text-zinc-400 hover:text-white text-xs font-semibold px-3 py-2 rounded-lg border border-zinc-700 hover:border-zinc-500 transition-colors disabled:opacity-30"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => { await save(); setEditing(false) }}
+                disabled={saving || !dirty}
+                className="flex items-center gap-1.5 bg-[#CCFF00] text-black text-xs font-bold px-4 py-2 rounded-lg hover:bg-[#b8e600] active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                Guardar
+              </button>
+            </>
+          ) : (
+            <>
+              {saved && (
+                <span className="flex items-center gap-1 text-[#CCFF00] text-xs font-semibold">
+                  <Check className="w-3.5 h-3.5" /> Guardado
+                </span>
+              )}
+              <button
+                onClick={() => setEditing(true)}
+                disabled={animating}
+                className="flex items-center gap-1.5 bg-[#CCFF00] text-black text-xs font-bold px-4 py-2 rounded-lg hover:bg-[#b8e600] active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Editar
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </motion.div>
   )
 }
 
