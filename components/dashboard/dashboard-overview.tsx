@@ -11,7 +11,7 @@ import { startOfMonth, subMonths } from "date-fns"
 import { MultiStepBotCreation } from "./multi-step-bot-creation"
 import { MultiStepAutomationCreation } from "./multi-step-automation-creation"
 import { ClientCreationDialog } from "./client-creation-dialog"
-import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts"
+import { Area, AreaChart, Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts"
 
 interface DashboardOverviewProps {
   user: User
@@ -40,33 +40,23 @@ const currencyFmt = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0,
 })
 
-// Dynamic tip generators — all based on real stats
+const chartTooltipStyle = {
+  backgroundColor: "#1C1C28",
+  border: "none",
+  borderRadius: "8px",
+  color: "#fff",
+  fontSize: "12px",
+  fontWeight: "bold",
+  padding: "10px",
+  boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
+} as const
+
 function getLeadsTip(clientsGrowth: number, totalClients: number): string {
   if (totalClients === 0) return "Conectá tu primer asistente para empezar a capturar leads."
-  if (clientsGrowth >= 30) return `Creciste ${clientsGrowth.toFixed(0)}% en leads este mes. ¡Excelente ritmo!`
-  if (clientsGrowth >= 5) return `Tus leads crecen de forma constante. Activá automatizaciones para acelerar.`
-  if (clientsGrowth >= 0) return `Crecimiento estable este mes. Revisá el flujo de tu bot para mejorarlo.`
-  return `Tus leads bajaron ${Math.abs(clientsGrowth).toFixed(0)}% este mes. Revisá el estado de tu bot.`
-}
-
-function getMessagesTip(peakDay: string | null, monthlyMessages: number): string {
-  if (monthlyMessages === 0) return "Sin mensajes este mes. Verificá que tu asistente esté activo."
-  if (peakDay) return `Tu día con más actividad esta semana fue el ${peakDay}.`
-  return `${monthlyMessages.toLocaleString()} interacciones registradas este mes.`
-}
-
-function getSalesTip(pendingLeads: number, activeConversations: number): string {
-  if (pendingLeads > 0) return `${pendingLeads} conversación${pendingLeads > 1 ? "es requieren" : " requiere"} tu atención ahora.`
-  if (activeConversations === 0) return "Sin conversaciones activas. Chequeá que tu bot esté conectado."
-  return `${activeConversations} conversaciones activas en las últimas 24 h. ¡Todo en orden!`
-}
-
-function getProgressQuote(messagesGrowth: number, businessName: string): string {
-  const name = businessName || "emprendedor"
-  if (messagesGrowth > 20) return `¡Excelente, ${name}! Tus interacciones crecieron un ${messagesGrowth.toFixed(0)}% este mes.`
-  if (messagesGrowth > 0) return `Bien, ${name}. Tu actividad creció un ${messagesGrowth.toFixed(0)}% respecto al mes pasado.`
-  if (messagesGrowth < 0) return `${name}, podés reactivar clientes con una campaña de mensajes masivos.`
-  return `Primer mes activo, ${name}. ¡Cada conversación cuenta para crecer!`
+  if (clientsGrowth >= 30) return `Creciste ${clientsGrowth.toFixed(0)}% este mes. ¡Excelente ritmo!`
+  if (clientsGrowth >= 5) return `Tus leads crecen de forma constante.`
+  if (clientsGrowth >= 0) return `Crecimiento estable este mes.`
+  return `Bajaron ${Math.abs(clientsGrowth).toFixed(0)}% este mes. Revisá tu bot.`
 }
 
 interface TopProduct {
@@ -96,8 +86,10 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     conversionRate: 0,
     salesFromBot: 0,
     outOfHoursMessages: 0,
+    dayMessages: 0,
   })
   const [chartData, setChartData] = useState<{ name: string; value: number }[]>([])
+  const [revenueChart, setRevenueChart] = useState<{ name: string; value: number }[]>([])
   const [pendingLeads, setPendingLeads] = useState(0)
   const [peakDay, setPeakDay] = useState<string | null>(null)
   const [activeBotsList, setActiveBotsList] = useState<{ id: string; name: string; platform: string }[]>([])
@@ -165,7 +157,6 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         supabase.from('orders').select('total_amount, source').eq('user_id', user.id).neq('status', 'cancelled').gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
       ])
 
-      // Extract values safely
       const totalClients = totalClientsRes.status === 'fulfilled' ? (totalClientsRes.value.count || 0) : 0
       const lastMonthClients = lastMonthClientsRes.status === 'fulfilled' ? (lastMonthClientsRes.value.count || 0) : 0
       const activeBots = activeBotsCountRes.status === 'fulfilled' ? (activeBotsCountRes.value.count || 0) : 0
@@ -196,8 +187,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       })
       const peak = weeklyChart.reduce((a, b) => b.value > a.value ? b : a, weeklyChart[0])
 
-      // ── Métricas nuevas ──────────────────────────────────────────────────
-      // Ingresos generados por el bot
+      // Ingresos por bot + serie diaria de los últimos 14 días (bot + pos)
       const botRevenue = ordersMonth
         .filter((o: any) => o.source === 'bot')
         .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
@@ -206,19 +196,29 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
       const botRevenueGrowth = botRevenueLast > 0 ? (botRevenue - botRevenueLast) / botRevenueLast * 100 : 0
 
+      const dailyRevenue = Array.from({ length: 14 }, (_, i) => {
+        const date = new Date(now)
+        date.setDate(date.getDate() - (13 - i))
+        const dateStr = date.toISOString().split('T')[0]
+        const value = ordersMonth
+          .filter((o: any) => o.created_at.startsWith(dateStr))
+          .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
+        return { name: String(date.getDate()), value }
+      })
+
       // Conversión: conversaciones del mes que generaron al menos un pedido
       const salesFromBot = new Set(
         ordersMonth.map((o: any) => o.conversation_id).filter(Boolean)
       ).size
       const conversionRate = thisMonthConvCount > 0 ? (salesFromBot / thisMonthConvCount) * 100 : 0
 
-      // Mensajes atendidos fuera de horario (21:00 a 09:00, hora local)
+      // Mensajes fuera de horario (21:00 a 09:00, hora local)
       const outOfHoursMessages = monthMsgRows.filter((m: any) => {
         const h = new Date(m.created_at).getHours()
         return h >= 21 || h < 9
       }).length
 
-      // Top productos del mes (desde los items de los pedidos)
+      // Top productos del mes
       const productMap = new Map<string, TopProduct>()
       for (const order of ordersMonth) {
         const items = Array.isArray(order.items) ? order.items : []
@@ -240,13 +240,14 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5)
 
-      // Commit all state at once
       setStats({
         totalClients, clientsGrowth, activeBots, monthlyMessages, messagesGrowth,
         activeConversations, totalConversations: userConversations.length, conversationsGrowth,
         botRevenue, botRevenueGrowth, conversionRate, salesFromBot, outOfHoursMessages,
+        dayMessages: monthMsgRows.length - outOfHoursMessages,
       })
       setChartData(weeklyChart)
+      setRevenueChart(dailyRevenue)
       setPeakDay(peak?.value > 0 ? peak.name : null)
       setPendingLeads(pendingCount)
       setActiveBotsList(botsList)
@@ -267,7 +268,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     return () => clearTimeout(safety)
   }, [user.id])
 
-  // Buscador de métricas: cada bloque declara sus palabras clave
+  // Buscador de métricas: cada tile declara sus palabras clave
   const matches = (keywords: string) => {
     const q = search.trim().toLowerCase()
     return !q || keywords.toLowerCase().includes(q)
@@ -281,9 +282,14 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     )
   }
 
-  const progressPercent = stats.totalConversations > 0
-    ? Math.min(100, Math.round((stats.activeConversations / stats.totalConversations) * 100))
+  const maxProductQty = topProducts.length > 0 ? topProducts[0].quantity : 1
+  const nightPct = stats.dayMessages + stats.outOfHoursMessages > 0
+    ? Math.round((stats.outOfHoursMessages / (stats.dayMessages + stats.outOfHoursMessages)) * 100)
     : 0
+  // Anillo de conversión (SVG)
+  const ringRadius = 52
+  const ringCircumference = 2 * Math.PI * ringRadius
+  const ringOffset = ringCircumference * (1 - Math.min(stats.conversionRate, 100) / 100)
 
   return (
     <div>
@@ -311,332 +317,344 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         </div>
       </header>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto hide-scrollbar px-4 pb-4">
-        <div className="flex flex-col xl:flex-row gap-6">
+      {/* ============== BENTO GRID ============== */}
+      <div className="px-4 pb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 auto-rows-[minmax(0,auto)]">
 
-          {/* ============== LEFT COLUMN ============== */}
-          <div className="flex-1 space-y-6">
-
-            {/* KPI Cards — fila 1 */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {matches("leads generados clientes nuevos contactos") && (
-              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-[#D1F366]/10 rounded-2xl flex items-center justify-center text-[#D1F366]">
-                    <span className="material-symbols-outlined text-2xl">person_add</span>
-                  </div>
-                  <span className={cn(
-                    "text-[11px] font-bold px-2 py-1 rounded-lg",
-                    stats.clientsGrowth >= 0 ? "text-green-500 bg-green-500/10" : "text-red-500 bg-red-500/10"
-                  )}>
-                    {stats.clientsGrowth >= 0 ? "+" : ""}{stats.clientsGrowth.toFixed(1)}%
-                  </span>
-                </div>
-                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Leads Generados</h3>
-                <p className="text-3xl font-black mt-1">{stats.totalClients.toLocaleString()}</p>
-                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-[#D1F366] font-bold">Tip:</span> {getLeadsTip(stats.clientsGrowth, stats.totalClients)}
-                </p>
+          {/* ── Tile destacado: Ingresos del Bot con gráfico diario ── */}
+          {matches("ingresos del bot ventas dinero facturacion plata revenue") && (
+          <div className="sm:col-span-2 lg:col-span-2 lg:row-span-2 executive-card flex flex-col bg-gradient-to-br from-[#D1F366]/[0.07] via-transparent to-transparent">
+            <div className="flex items-start justify-between">
+              <div className="w-12 h-12 bg-[#D1F366]/15 rounded-2xl flex items-center justify-center text-[#D1F366]">
+                <span className="material-symbols-outlined text-2xl">smart_toy</span>
               </div>
-              )}
-
-              {matches("interacciones mensajes actividad chat") && (
-              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-blue-500">
-                    <span className="material-symbols-outlined text-2xl">chat_bubble</span>
-                  </div>
-                  <span className={cn(
-                    "text-[11px] font-bold px-2 py-1 rounded-lg",
-                    stats.messagesGrowth >= 0 ? "text-blue-500 bg-blue-500/10" : "text-red-500 bg-red-500/10"
-                  )}>
-                    {stats.messagesGrowth >= 0 ? "+" : ""}{stats.messagesGrowth.toFixed(1)}%
-                  </span>
-                </div>
-                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Interacciones</h3>
-                <p className="text-3xl font-black mt-1">{stats.monthlyMessages.toLocaleString()}</p>
-                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-blue-500 font-bold">Info:</span> {getMessagesTip(peakDay, stats.monthlyMessages)}
-                </p>
-              </div>
-              )}
-
-              {matches("cierres de venta conversaciones activas atencion") && (
-              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center text-orange-500">
-                    <span className="material-symbols-outlined text-2xl">payments</span>
-                  </div>
-                  <span className={cn(
-                    "text-[11px] font-bold px-2 py-1 rounded-lg",
-                    stats.conversationsGrowth >= 0 ? "text-orange-500 bg-orange-500/10" : "text-red-500 bg-red-500/10"
-                  )}>
-                    {stats.conversationsGrowth >= 0 ? "+" : ""}{stats.conversationsGrowth.toFixed(1)}%
-                  </span>
-                </div>
-                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Cierres de Venta</h3>
-                <p className="text-3xl font-black mt-1">{stats.activeConversations}</p>
-                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-orange-500 font-bold">Tip:</span> {getSalesTip(pendingLeads, stats.activeConversations)}
-                </p>
-              </div>
-              )}
-            </section>
-
-            {/* KPI Cards — fila 2: métricas de impacto del bot */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {matches("ingresos del bot ventas dinero facturacion plata revenue") && (
-              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/20 rounded-2xl flex items-center justify-center text-emerald-500">
-                    <span className="material-symbols-outlined text-2xl">smart_toy</span>
-                  </div>
-                  {stats.botRevenueGrowth !== 0 && (
-                    <span className={cn(
-                      "text-[11px] font-bold px-2 py-1 rounded-lg",
-                      stats.botRevenueGrowth >= 0 ? "text-emerald-500 bg-emerald-500/10" : "text-red-500 bg-red-500/10"
-                    )}>
-                      {stats.botRevenueGrowth >= 0 ? "+" : ""}{stats.botRevenueGrowth.toFixed(1)}%
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Ingresos del Bot</h3>
-                <p className="text-3xl font-black mt-1">{currencyFmt.format(stats.botRevenue)}</p>
-                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-emerald-500 font-bold">Info:</span>{" "}
-                  {stats.botRevenue > 0
-                    ? "Ventas concretadas por tu asistente este mes, sin intervención humana."
-                    : "Cuando tu bot tome pedidos, acá vas a ver la plata que te genera."}
-                </p>
-              </div>
-              )}
-
-              {matches("conversion tasa ventas pedidos efectividad") && (
-              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-2xl flex items-center justify-center text-purple-500">
-                    <span className="material-symbols-outlined text-2xl">percent</span>
-                  </div>
-                </div>
-                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Conversión del Bot</h3>
-                <p className="text-3xl font-black mt-1">{stats.conversionRate.toFixed(1)}%</p>
-                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-purple-500 font-bold">Info:</span>{" "}
-                  {stats.salesFromBot > 0
-                    ? `${stats.salesFromBot} de las conversaciones de este mes terminaron en pedido.`
-                    : "Porcentaje de conversaciones que terminan en un pedido."}
-                </p>
-              </div>
-              )}
-
-              {matches("fuera de horario nocturno mientras dormias 24 horas noche") && (
-              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center text-indigo-500">
-                    <span className="material-symbols-outlined text-2xl">bedtime</span>
-                  </div>
-                </div>
-                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Fuera de Horario</h3>
-                <p className="text-3xl font-black mt-1">{stats.outOfHoursMessages.toLocaleString()}</p>
-                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                  <span className="text-indigo-500 font-bold">Info:</span>{" "}
-                  {stats.outOfHoursMessages > 0
-                    ? "Mensajes atendidos entre las 21 y las 9 hs este mes — tu bot trabaja mientras descansás."
-                    : "Mensajes que tu bot atiende entre las 21 y las 9 hs."}
-                </p>
-              </div>
-              )}
-            </section>
-
-            {/* Chart + Assistants */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {matches("rendimiento de ia grafico conversiones chatbot semana") && (
-              <div className="executive-card">
-                <div className="flex justify-between items-start mb-6">
-                  <div>
-                    <h3 className="text-lg font-bold">Rendimiento de IA</h3>
-                    <p className="text-xs text-[#64748B] mt-1">Conversiones asistidas por Chatbot</p>
-                  </div>
-                  {stats.messagesGrowth !== 0 && (
-                    <div className={cn(
-                      "flex items-center gap-1.5 text-[11px] font-bold px-2 py-1 rounded-lg",
-                      stats.messagesGrowth >= 0 ? "text-green-500 bg-green-500/5" : "text-red-500 bg-red-500/5"
-                    )}>
-                      <span className="material-symbols-outlined text-sm">{stats.messagesGrowth >= 0 ? "trending_up" : "trending_down"}</span>
-                      <span>{stats.messagesGrowth >= 0 ? "+" : ""}{stats.messagesGrowth.toFixed(1)}% vs mes ant.</span>
-                    </div>
-                  )}
-                </div>
-                <div className="relative h-48 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartData}>
-                      <defs>
-                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#D1F366" stopOpacity={0.1} />
-                          <stop offset="95%" stopColor="#D1F366" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8' }} />
-                      <Tooltip contentStyle={{ backgroundColor: '#1C1C28', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px', fontWeight: 'bold', padding: '10px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }} itemStyle={{ color: '#D1F366' }} labelStyle={{ color: '#94A3B8', fontSize: '10px' }} />
-                      <Area type="monotone" dataKey="value" stroke="#D1F366" strokeWidth={3} fill="url(#colorValue)" dot={false} activeDot={{ r: 6, fill: '#D1F366', stroke: '#fff', strokeWidth: 2 }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-              )}
-
-              {matches("asistentes activos bots operativos") && (
-              <div className="executive-card">
-                <div className="flex justify-between items-center mb-6">
-                  <div>
-                    <h3 className="text-lg font-bold">Asistentes Activos</h3>
-                    <p className="text-xs text-[#64748B] mt-1">{stats.activeBots} operativos ahora</p>
-                  </div>
-                  <Link href="/dashboard/bots" className="text-[11px] font-bold text-gray-400 hover:text-[#D1F366] transition-colors uppercase tracking-wider">
-                    Ver todos
-                  </Link>
-                </div>
-                <div className="space-y-3">
-                  {activeBotsList.length === 0 ? (
-                    <div className="text-center py-6 text-[#64748B] text-xs">
-                      <span className="material-symbols-outlined text-2xl block mb-2 opacity-30">smart_toy</span>
-                      No hay asistentes activos aún
-                    </div>
-                  ) : activeBotsList.map(bot => (
-                    <Link key={bot.id} href="/dashboard/bots" className="flex items-center justify-between p-3.5 bg-gray-50 dark:bg-white/5 rounded-2xl group cursor-pointer hover:bg-[#D1F366]/5 transition-all">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-[#D1F366]/20 flex items-center justify-center text-[#D1F366]">
-                          <span className="material-symbols-outlined text-lg">{PLATFORM_ICONS[bot.platform] || "support_agent"}</span>
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-sm">{bot.name}</h4>
-                          <p className="text-[10px] text-gray-400 capitalize">{bot.platform}</p>
-                        </div>
-                      </div>
-                      <span className="material-symbols-outlined text-gray-300 group-hover:text-[#D1F366] transition-colors">chevron_right</span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              {stats.botRevenueGrowth !== 0 && (
+                <span className={cn(
+                  "text-[11px] font-bold px-2 py-1 rounded-lg",
+                  stats.botRevenueGrowth >= 0 ? "text-emerald-500 bg-emerald-500/10" : "text-red-500 bg-red-500/10"
+                )}>
+                  {stats.botRevenueGrowth >= 0 ? "+" : ""}{stats.botRevenueGrowth.toFixed(1)}% vs mes ant.
+                </span>
               )}
             </div>
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider mt-4">Ingresos del Bot</h3>
+            <p className="text-4xl font-black mt-1">{currencyFmt.format(stats.botRevenue)}</p>
+            <p className="text-[11px] text-[#64748B] mt-1 mb-4">
+              {stats.botRevenue > 0
+                ? "Ventas concretadas por tu asistente este mes, sin intervención humana."
+                : "Cuando tu bot tome pedidos, acá vas a ver la plata que te genera."}
+            </p>
+            <div className="flex-1 min-h-[150px] -mx-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueChart} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 600, fill: '#94A3B8' }} interval={1} />
+                  <Tooltip
+                    formatter={(value: number) => [currencyFmt.format(value), "Ventas"]}
+                    labelFormatter={(label: string) => `Día ${label}`}
+                    cursor={{ fill: "rgba(148,163,184,0.08)" }}
+                    contentStyle={chartTooltipStyle}
+                    itemStyle={{ color: '#D1F366' }}
+                    labelStyle={{ color: '#94A3B8', fontSize: '10px' }}
+                  />
+                  <Bar dataKey="value" fill="#D1F366" radius={[5, 5, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="text-[10px] text-[#64748B] text-center mt-2">Ventas por día · últimos 14 días (todos los canales)</p>
+          </div>
+          )}
 
-            {/* Automatizaciones Críticas */}
-            {matches("automatizaciones criticas flujos") && (
-            <section className="executive-card overflow-hidden">
-              <div className="flex justify-between items-center mb-5">
-                <h3 className="text-lg font-bold">Automatizaciones Críticas</h3>
-                <button className="w-8 h-8 rounded-full bg-[#1C1C28] text-[#D1F366] flex items-center justify-center hover:scale-110 transition-transform">
-                  <span className="material-symbols-outlined text-lg">bolt</span>
-                </button>
+          {/* ── Conversión del Bot: anillo ── */}
+          {matches("conversion tasa ventas pedidos efectividad") && (
+          <div className="executive-card flex flex-col items-center justify-center text-center lg:row-span-2 py-6">
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider mb-4">Conversión del Bot</h3>
+            <div className="relative w-[130px] h-[130px]">
+              <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90">
+                <circle cx="60" cy="60" r={ringRadius} fill="none" strokeWidth="10" className="stroke-gray-100 dark:stroke-white/10" />
+                <circle
+                  cx="60" cy="60" r={ringRadius} fill="none" strokeWidth="10" strokeLinecap="round"
+                  stroke="#D1F366"
+                  strokeDasharray={ringCircumference}
+                  strokeDashoffset={ringOffset}
+                  style={{ transition: "stroke-dashoffset 0.8s ease" }}
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-3xl font-black leading-none">{stats.conversionRate.toFixed(0)}%</p>
+                <p className="text-[9px] text-[#64748B] uppercase tracking-wider mt-1">convierte</p>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="border-b border-gray-100 dark:border-white/5">
-                    <tr className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest">
-                      <th className="pb-3">Flujo</th>
-                      <th className="pb-3">Estado</th>
-                      <th className="pb-3 text-right">Impacto</th>
+            </div>
+            <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed px-2">
+              {stats.salesFromBot > 0
+                ? `${stats.salesFromBot} de las conversaciones de este mes terminaron en pedido.`
+                : "Conversaciones que terminan en un pedido."}
+            </p>
+          </div>
+          )}
+
+          {/* ── Fuera de horario: día vs noche ── */}
+          {matches("fuera de horario nocturno mientras dormias noche dia") && (
+          <div className="executive-card lg:row-span-2 flex flex-col py-6">
+            <div className="w-11 h-11 bg-indigo-100 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center text-indigo-400 mb-4">
+              <span className="material-symbols-outlined text-xl">bedtime</span>
+            </div>
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Fuera de Horario</h3>
+            <p className="text-3xl font-black mt-1">{stats.outOfHoursMessages.toLocaleString()}</p>
+            <p className="text-[11px] text-[#64748B] mt-1">mensajes entre 21 y 9 hs este mes</p>
+
+            <div className="mt-auto pt-5 space-y-3">
+              <div>
+                <div className="flex justify-between text-[10px] font-bold text-[#64748B] mb-1">
+                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">light_mode</span> Día</span>
+                  <span>{stats.dayMessages.toLocaleString()}</span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                  <div className="h-full bg-amber-400 rounded-full" style={{ width: `${100 - nightPct}%` }} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[10px] font-bold text-[#64748B] mb-1">
+                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-xs">dark_mode</span> Noche</span>
+                  <span>{stats.outOfHoursMessages.toLocaleString()}</span>
+                </div>
+                <div className="h-2 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                  <div className="h-full bg-indigo-400 rounded-full" style={{ width: `${nightPct}%` }} />
+                </div>
+              </div>
+              <p className="text-[10px] text-[#64748B] italic pt-1">
+                {nightPct > 0 ? `El ${nightPct}% de tu atención sucede mientras descansás.` : "Tu bot atiende 24/7, incluso de noche."}
+              </p>
+            </div>
+          </div>
+          )}
+
+          {/* ── KPIs compactos ── */}
+          {matches("leads generados clientes nuevos contactos") && (
+          <div className="executive-card group hover:translate-y-[-2px] transition-transform">
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-[#D1F366]/10 rounded-xl flex items-center justify-center text-[#D1F366]">
+                <span className="material-symbols-outlined text-xl">person_add</span>
+              </div>
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-lg",
+                stats.clientsGrowth >= 0 ? "text-green-500 bg-green-500/10" : "text-red-500 bg-red-500/10"
+              )}>
+                {stats.clientsGrowth >= 0 ? "+" : ""}{stats.clientsGrowth.toFixed(1)}%
+              </span>
+            </div>
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-[11px] font-semibold uppercase tracking-wider">Leads Generados</h3>
+            <p className="text-2xl font-black mt-0.5">{stats.totalClients.toLocaleString()}</p>
+            <p className="text-[10px] text-[#64748B] mt-2 leading-relaxed">{getLeadsTip(stats.clientsGrowth, stats.totalClients)}</p>
+          </div>
+          )}
+
+          {matches("interacciones mensajes actividad chat") && (
+          <div className="executive-card group hover:translate-y-[-2px] transition-transform">
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-xl flex items-center justify-center text-blue-500">
+                <span className="material-symbols-outlined text-xl">chat_bubble</span>
+              </div>
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-lg",
+                stats.messagesGrowth >= 0 ? "text-blue-500 bg-blue-500/10" : "text-red-500 bg-red-500/10"
+              )}>
+                {stats.messagesGrowth >= 0 ? "+" : ""}{stats.messagesGrowth.toFixed(1)}%
+              </span>
+            </div>
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-[11px] font-semibold uppercase tracking-wider">Interacciones</h3>
+            <p className="text-2xl font-black mt-0.5">{stats.monthlyMessages.toLocaleString()}</p>
+            <p className="text-[10px] text-[#64748B] mt-2 leading-relaxed">
+              {peakDay ? `Tu día más activo fue el ${peakDay}.` : "Mensajes de este mes."}
+            </p>
+          </div>
+          )}
+
+          {/* ── Rendimiento semanal (área) ── */}
+          {matches("rendimiento de ia grafico actividad semanal mensajes semana") && (
+          <div className="sm:col-span-2 lg:col-span-2 executive-card">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-base font-bold">Actividad Semanal</h3>
+                <p className="text-[11px] text-[#64748B] mt-0.5">Mensajes atendidos por la IA</p>
+              </div>
+              {stats.messagesGrowth !== 0 && (
+                <div className={cn(
+                  "flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg",
+                  stats.messagesGrowth >= 0 ? "text-green-500 bg-green-500/5" : "text-red-500 bg-red-500/5"
+                )}>
+                  <span className="material-symbols-outlined text-sm">{stats.messagesGrowth >= 0 ? "trending_up" : "trending_down"}</span>
+                  <span>{stats.messagesGrowth >= 0 ? "+" : ""}{stats.messagesGrowth.toFixed(1)}%</span>
+                </div>
+              )}
+            </div>
+            <div className="relative h-36 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#D1F366" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#D1F366" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8' }} />
+                  <Tooltip contentStyle={chartTooltipStyle} itemStyle={{ color: '#D1F366' }} labelStyle={{ color: '#94A3B8', fontSize: '10px' }} />
+                  <Area type="monotone" dataKey="value" stroke="#D1F366" strokeWidth={3} fill="url(#colorValue)" dot={false} activeDot={{ r: 6, fill: '#D1F366', stroke: '#fff', strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          )}
+
+          {/* ── Top productos con barras ── */}
+          {matches("top productos vendidos catalogo mas vendido") && (
+          <div className="sm:col-span-2 lg:col-span-2 executive-card">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-base font-bold">Top Productos</h3>
+                <p className="text-[11px] text-[#64748B] mt-0.5">Los más vendidos este mes</p>
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-[#D1F366]/10 flex items-center justify-center text-[#D1F366]">
+                <span className="material-symbols-outlined text-lg">trophy</span>
+              </div>
+            </div>
+            {topProducts.length === 0 ? (
+              <div className="text-center py-8 text-[#64748B] text-xs">
+                <span className="material-symbols-outlined text-2xl block mb-2 opacity-30">shopping_bag</span>
+                Sin ventas registradas este mes
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {topProducts.map((product, idx) => (
+                  <div key={product.name}>
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <p className="font-semibold truncate pr-2">
+                        <span className={cn("font-black mr-1.5", idx === 0 ? "text-[#D1F366]" : "text-[#64748B]")}>{idx + 1}.</span>
+                        {product.name}
+                      </p>
+                      <p className="font-bold flex-shrink-0">
+                        {product.quantity} u. · {currencyFmt.format(product.revenue)}
+                      </p>
+                    </div>
+                    <div className="h-2 rounded-full bg-gray-100 dark:bg-white/10 overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full", idx === 0 ? "bg-[#D1F366]" : "bg-[#D1F366]/40")}
+                        style={{ width: `${Math.max(6, (product.quantity / maxProductQty) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* ── Cierres de venta compacto ── */}
+          {matches("cierres de venta conversaciones activas atencion pendientes") && (
+          <div className="executive-card group hover:translate-y-[-2px] transition-transform">
+            <div className="flex items-start justify-between mb-3">
+              <div className="w-10 h-10 bg-orange-100 dark:bg-orange-900/20 rounded-xl flex items-center justify-center text-orange-500">
+                <span className="material-symbols-outlined text-xl">payments</span>
+              </div>
+              <span className={cn(
+                "text-[10px] font-bold px-2 py-0.5 rounded-lg",
+                stats.conversationsGrowth >= 0 ? "text-orange-500 bg-orange-500/10" : "text-red-500 bg-red-500/10"
+              )}>
+                {stats.conversationsGrowth >= 0 ? "+" : ""}{stats.conversationsGrowth.toFixed(1)}%
+              </span>
+            </div>
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-[11px] font-semibold uppercase tracking-wider">Conversaciones Activas</h3>
+            <p className="text-2xl font-black mt-0.5">{stats.activeConversations}</p>
+            <p className="text-[10px] text-[#64748B] mt-2 leading-relaxed">
+              {pendingLeads > 0
+                ? `${pendingLeads} requieren tu atención ahora.`
+                : "Últimas 24 horas. Todo en orden."}
+            </p>
+          </div>
+          )}
+
+          {/* ── Asistentes activos compacto ── */}
+          {matches("asistentes activos bots operativos") && (
+          <div className="executive-card">
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="text-[#64748B] dark:text-[#94A3B8] text-[11px] font-semibold uppercase tracking-wider">Asistentes</h3>
+              <Link href="/dashboard/bots" className="text-[10px] font-bold text-gray-400 hover:text-[#D1F366] transition-colors uppercase">
+                Ver todos
+              </Link>
+            </div>
+            <div className="space-y-2">
+              {activeBotsList.length === 0 ? (
+                <div className="text-center py-4 text-[#64748B] text-xs">
+                  <span className="material-symbols-outlined text-xl block mb-1 opacity-30">smart_toy</span>
+                  Sin asistentes activos
+                </div>
+              ) : activeBotsList.map(bot => (
+                <Link key={bot.id} href="/dashboard/bots" className="flex items-center gap-2.5 p-2 bg-gray-50 dark:bg-white/5 rounded-xl group cursor-pointer hover:bg-[#D1F366]/5 transition-all">
+                  <div className="w-8 h-8 rounded-lg bg-[#D1F366]/20 flex items-center justify-center text-[#D1F366] flex-shrink-0">
+                    <span className="material-symbols-outlined text-base">{PLATFORM_ICONS[bot.platform] || "support_agent"}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-xs truncate">{bot.name}</h4>
+                    <p className="text-[9px] text-gray-400 capitalize">{bot.platform}</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </div>
+          )}
+
+          {/* ── Automatizaciones (ancho completo) ── */}
+          {matches("automatizaciones criticas flujos") && (
+          <section className="sm:col-span-2 lg:col-span-4 executive-card overflow-hidden">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-bold">Automatizaciones Críticas</h3>
+              <button className="w-8 h-8 rounded-full bg-[#1C1C28] text-[#D1F366] flex items-center justify-center hover:scale-110 transition-transform">
+                <span className="material-symbols-outlined text-lg">bolt</span>
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="border-b border-gray-100 dark:border-white/5">
+                  <tr className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest">
+                    <th className="pb-3">Flujo</th>
+                    <th className="pb-3">Estado</th>
+                    <th className="pb-3 text-right">Impacto</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {automationsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={3} className="py-6 text-center text-[#64748B] text-xs">
+                        No hay automatizaciones creadas aún
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="text-sm">
-                    {automationsList.length === 0 ? (
-                      <tr>
-                        <td colSpan={3} className="py-6 text-center text-[#64748B] text-xs">
-                          No hay automatizaciones creadas aún
-                        </td>
-                      </tr>
-                    ) : automationsList.map((auto, idx) => (
-                      <tr key={auto.id} className={idx < automationsList.length - 1 ? "border-b border-gray-50 dark:border-white/5" : ""}>
-                        <td className="py-3.5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-7 h-7 rounded-lg bg-[#D1F366]/10 text-[#D1F366] flex items-center justify-center">
-                              <span className="material-symbols-outlined text-sm">bolt</span>
-                            </div>
-                            <span className="font-semibold text-xs truncate max-w-[120px]">{auto.name}</span>
+                  ) : automationsList.map((auto, idx) => (
+                    <tr key={auto.id} className={idx < automationsList.length - 1 ? "border-b border-gray-50 dark:border-white/5" : ""}>
+                      <td className="py-3.5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-7 h-7 rounded-lg bg-[#D1F366]/10 text-[#D1F366] flex items-center justify-center">
+                            <span className="material-symbols-outlined text-sm">bolt</span>
                           </div>
-                        </td>
-                        <td className="py-3.5">
-                          <span className={cn(
-                            "px-2 py-0.5 text-[9px] font-black rounded-md uppercase",
-                            auto.is_active ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400"
-                          )}>
-                            {auto.is_active ? "Activo" : "Pausado"}
-                          </span>
-                        </td>
-                        <td className="py-3.5 text-right font-bold text-xs text-[#64748B]">
-                          {TRIGGER_LABELS[auto.trigger_type] || auto.trigger_type}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-            )}
-          </div>
-
-          {/* ============== RIGHT COLUMN ============== */}
-          <div className="w-full xl:w-[350px] flex-shrink-0 space-y-6">
-
-            {/* Top productos del mes */}
-            {matches("top productos vendidos catalogo mas vendido") && (
-            <div className="executive-card">
-              <div className="flex justify-between items-center mb-5">
-                <div>
-                  <h3 className="text-lg font-bold">Top Productos</h3>
-                  <p className="text-xs text-[#64748B] mt-1">Los más vendidos este mes</p>
-                </div>
-                <div className="w-9 h-9 rounded-xl bg-[#D1F366]/10 flex items-center justify-center text-[#D1F366]">
-                  <span className="material-symbols-outlined text-lg">trophy</span>
-                </div>
-              </div>
-              {topProducts.length === 0 ? (
-                <div className="text-center py-6 text-[#64748B] text-xs">
-                  <span className="material-symbols-outlined text-2xl block mb-2 opacity-30">shopping_bag</span>
-                  Sin ventas registradas este mes
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {topProducts.map((product, idx) => (
-                    <div key={product.name} className="flex items-center gap-3">
-                      <span className={cn(
-                        "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black flex-shrink-0",
-                        idx === 0 ? "bg-[#D1F366] text-[#1C1C28]" : "bg-gray-100 dark:bg-white/5 text-[#64748B]"
-                      )}>
-                        {idx + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-semibold truncate">{product.name}</p>
-                        <p className="text-[10px] text-[#64748B]">{product.quantity} vendido{product.quantity === 1 ? "" : "s"}</p>
-                      </div>
-                      <p className="text-xs font-bold flex-shrink-0">{currencyFmt.format(product.revenue)}</p>
-                    </div>
+                          <span className="font-semibold text-xs truncate max-w-[160px]">{auto.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5">
+                        <span className={cn(
+                          "px-2 py-0.5 text-[9px] font-black rounded-md uppercase",
+                          auto.is_active ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400"
+                        )}>
+                          {auto.is_active ? "Activo" : "Pausado"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 text-right font-bold text-xs text-[#64748B]">
+                        {TRIGGER_LABELS[auto.trigger_type] || auto.trigger_type}
+                      </td>
+                    </tr>
                   ))}
-                </div>
-              )}
+                </tbody>
+              </table>
             </div>
-            )}
-
-            {/* Progreso Mensual */}
-            {matches("progreso mensual actividad") && (
-            <div className="bg-[#D1F366]/10 border border-[#D1F366]/20 p-5 rounded-3xl relative overflow-hidden group">
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-[#B3D93C]">Progreso Mensual</span>
-                  <span className="text-xs font-bold">{progressPercent}%</span>
-                </div>
-                <div className="w-full bg-white dark:bg-white/10 h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-[#B3D93C] h-full" style={{ width: `${progressPercent}%` }}></div>
-                </div>
-                <p className="text-[10px] text-[#64748B] dark:text-gray-400 mt-4 leading-relaxed italic">
-                  &quot;{getProgressQuote(stats.messagesGrowth, profile?.business_name)}&quot;
-                </p>
-              </div>
-            </div>
-            )}
-          </div>
+          </section>
+          )}
 
         </div>
       </div>

@@ -2,6 +2,7 @@ import type React from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DashboardSidebar, MobileHeader } from "@/components/dashboard/dashboard-sidebar"
+import { MobileBottomBar } from "@/components/dashboard/mobile-bottom-bar"
 
 export default async function DashboardLayout({
   children,
@@ -30,10 +31,13 @@ export default async function DashboardLayout({
         {/* Mobile header with hamburger — only visible on mobile */}
         <MobileHeader user={data.user} profile={profile} />
 
-        <main className="flex-1 overflow-y-auto hide-scrollbar py-4 pr-4 pl-4 lg:pl-0">
+        <main id="dashboard-main" className="flex-1 overflow-y-auto hide-scrollbar py-4 pr-4 pl-4 lg:pl-0 pb-28 lg:pb-4">
           {children}
         </main>
       </div>
+
+      {/* Downbar móvil estilo glass (reemplaza al sidebar en mobile) */}
+      <MobileBottomBar user={data.user} profile={profile} />
     </div>
   )
 }

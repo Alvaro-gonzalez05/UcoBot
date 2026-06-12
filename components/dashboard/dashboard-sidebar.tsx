@@ -279,26 +279,11 @@ interface MobileHeaderProps {
 }
 
 export function MobileHeader({ user, profile }: MobileHeaderProps) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-
+  // La navegación móvil ahora vive en el downbar (MobileBottomBar);
+  // el header queda solo para marca + notificaciones.
   return (
     <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-background border-b border-border">
       <div className="flex items-center gap-2">
-        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="-ml-2">
-              <Menu className="h-6 w-6" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-[85vw] sm:w-72 bg-[#1C1C28] border-none">
-            <DashboardSidebar 
-              mode="mobile" 
-              onLinkClick={() => setIsMobileMenuOpen(false)} 
-              user={user}
-              profile={profile}
-            />
-          </SheetContent>
-        </Sheet>
         <Image src="/ucobot-logo.png" alt="UcoBot" width={28} height={28} className="w-7 h-7" />
         <span className="text-sm font-bold">UcoBot</span>
       </div>
