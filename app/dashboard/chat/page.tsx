@@ -11,7 +11,7 @@ export default async function ChatPage() {
   }
 
   return (
-    <div className="-m-4 lg:m-0 h-[calc(100dvh-5rem)] lg:h-[calc(100vh-9rem)] overflow-hidden">
+    <div className="-m-4 lg:m-0 h-[calc(100dvh-5rem)] lg:h-[calc(100vh-2rem)] overflow-hidden">
       <ChatView userId={data.user.id} />
     </div>
   )

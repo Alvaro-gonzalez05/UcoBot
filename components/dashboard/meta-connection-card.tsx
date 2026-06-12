@@ -20,6 +20,7 @@ type Platform = "whatsapp" | "instagram" | "messenger"
 
 interface MetaConnectionCardProps {
   platform: Platform
+  onStatusChange?: (platform: Platform, connected: boolean) => void
 }
 
 interface IntegrationStatus {
@@ -273,7 +274,7 @@ function ManualWhatsAppDialog({
   )
 }
 
-export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
+export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionCardProps) {
   const [status, setStatus] = useState<IntegrationStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
@@ -293,6 +294,7 @@ export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
           connected_at: null,
         }
       )
+      onStatusChange?.(platform, found?.connected === true)
     } catch {
       setStatus({ connected: false, display_name: null, connection_method: "none", connected_at: null })
     } finally {

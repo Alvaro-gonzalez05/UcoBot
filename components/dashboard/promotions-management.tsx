@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { LoyaltySettingsCard } from "@/components/loyalty/loyalty-settings-card"
+import { LoyaltyConfigPanel, type LoyaltyCardType } from "@/components/loyalty/loyalty-config-panel"
 import { toast } from "sonner"
 import { Plus, Gift, Percent, Star, Users, MoreVertical, Trash2, Play, Pause, Award, Loader2, X, Tag, Megaphone, Ticket } from "lucide-react"
 
@@ -92,6 +92,7 @@ function getPromotionProgress(promotion: Promotion): number {
 export function PromotionsManagement({ initialPromotions, initialRewards, userId }: PromotionsManagementProps) {
   const [promotions, setPromotions] = useState<Promotion[]>(initialPromotions)
   const [rewards, setRewards] = useState<Reward[]>(initialRewards)
+  const [loyaltyCardType, setLoyaltyCardType] = useState<LoyaltyCardType>("points")
   const [isPromotionDialogOpen, setIsPromotionDialogOpen] = useState(false)
   const [isRewardDialogOpen, setIsRewardDialogOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("promotions")
@@ -269,13 +270,15 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
           <h2 className="text-2xl font-bold text-foreground">Gestión de Promociones</h2>
           <p className="text-sm text-muted-foreground">Crea y administra tus campañas de descuentos y recompensas.</p>
         </div>
-        <button
-          onClick={() => { if (activeTab === "rewards") { setIsRewardDialogOpen(true) } else { setIsPromotionDialogOpen(true) } }}
-          className="flex items-center gap-2 px-5 py-3 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold transition-all shadow-lg shadow-[#D1F366]/20 hover:bg-[#B3D93C]"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{activeTab === "rewards" ? "Nueva Recompensa" : "Nueva Promoción"}</span>
-        </button>
+        {(activeTab !== "fidelizacion" || loyaltyCardType === "points") && (
+          <button
+            onClick={() => { if (activeTab === "fidelizacion") { setIsRewardDialogOpen(true) } else { setIsPromotionDialogOpen(true) } }}
+            className="flex items-center gap-2 px-5 py-3 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold transition-all shadow-lg shadow-[#D1F366]/20 hover:bg-[#B3D93C]"
+          >
+            <Plus className="w-4 h-4" />
+            <span>{activeTab === "fidelizacion" ? "Nueva Recompensa" : "Nueva Promoción"}</span>
+          </button>
+        )}
       </header>
 
       {/* Stats */}
@@ -325,16 +328,10 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
             Promociones
           </TabsTrigger>
           <TabsTrigger
-            value="rewards"
+            value="fidelizacion"
             className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-muted-foreground"
           >
-            Recompensas
-          </TabsTrigger>
-          <TabsTrigger
-            value="settings"
-            className="rounded-xl px-6 py-2 text-sm font-semibold data-[state=active]:bg-[#D1F366] data-[state=active]:text-[#1C1C28] data-[state=active]:shadow-none text-muted-foreground"
-          >
-            Configuración
+            Fidelización de Clientes
           </TabsTrigger>
         </TabsList>
 
@@ -437,12 +434,15 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
           </div>
         </TabsContent>
 
-        {/* Rewards Tab */}
-        <TabsContent value="rewards" className="flex-1 overflow-hidden flex flex-col mt-0">
-          <h3 className="font-bold text-lg mb-4 flex-shrink-0">Catálogo de Recompensas</h3>
+        {/* Fidelización de Clientes Tab */}
+        <TabsContent value="fidelizacion" className="flex-1 overflow-hidden flex flex-col mt-0">
           <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
-            <LoyaltySettingsCard userId={userId} />
-            {rewards.length === 0 ? (
+            <LoyaltyConfigPanel userId={userId} onCardTypeChange={setLoyaltyCardType} />
+
+            {loyaltyCardType === "points" && (
+              <h3 className="font-bold text-lg mt-2">Catálogo de Recompensas</h3>
+            )}
+            {loyaltyCardType !== "points" ? null : rewards.length === 0 ? (
               <div className="bg-card rounded-3xl border border-border p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 bg-[#D1F366]/20 rounded-2xl flex items-center justify-center mb-4">
                   <Gift className="w-8 h-8 text-[#1C1C28]" />
@@ -520,31 +520,6 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
         </TabsContent>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="flex-1 overflow-y-auto hide-scrollbar mt-0">
-          <div className="bg-card rounded-3xl border border-border p-8">
-            <h3 className="font-bold text-lg text-foreground mb-6">Configuración del Sistema de Puntos</h3>
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="points-per-euro" className="text-sm font-semibold text-foreground">Puntos por Euro Gastado</Label>
-                <Input id="points-per-euro" type="number" min="1" defaultValue="1" className="rounded-xl border-border" />
-                <p className="text-xs text-muted-foreground">Cuántos puntos gana el cliente por cada euro gastado</p>
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="points-expiry" className="text-sm font-semibold text-foreground">Caducidad de Puntos (días)</Label>
-                <Input id="points-expiry" type="number" min="30" defaultValue="365" className="rounded-xl border-border" />
-                <p className="text-xs text-muted-foreground">Días hasta que los puntos caduquen</p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2 mt-4">
-              <Label htmlFor="welcome-points" className="text-sm font-semibold text-foreground">Puntos de Bienvenida</Label>
-              <Input id="welcome-points" type="number" min="0" defaultValue="100" className="rounded-xl border-border" />
-              <p className="text-xs text-muted-foreground">Puntos que recibe un cliente al registrarse</p>
-            </div>
-            <button className="mt-6 px-6 py-3 bg-[#D1F366] text-[#1C1C28] rounded-xl font-bold text-sm hover:bg-[#B3D93C] transition-colors">
-              Guardar Configuración
-            </button>
-          </div>
-        </TabsContent>
       </Tabs>
 
       {/* Create Promotion Dialog */}

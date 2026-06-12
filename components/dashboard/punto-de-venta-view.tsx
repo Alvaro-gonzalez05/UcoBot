@@ -29,6 +29,7 @@ interface Client {
   phone?: string | null
   instagram_username?: string | null
   points?: number | null
+  stamps?: number | null
   total_purchases?: number | null
 }
 
@@ -71,6 +72,9 @@ interface LoyaltySettings {
   points_per_unit: number
   unit_amount: number
   is_active: boolean
+  card_type: "points" | "stamps"
+  stamps_required: number
+  stamp_reward: string | null
 }
 
 interface PuntoDeVentaViewProps {
@@ -110,6 +114,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [rewards, setRewards] = useState<Reward[]>([])
   const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings | null>(null)
   const [redeemedReward, setRedeemedReward] = useState<Reward | null>(null)
+  const [redeemStampGift, setRedeemStampGift] = useState(false)
+
+  const isStampsMode = loyaltySettings?.card_type === "stamps"
 
   useEffect(() => {
     // Cargar premios activos y la regla de puntos del negocio
@@ -123,7 +130,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           .order("points_cost", { ascending: true }),
         supabase
           .from("loyalty_settings")
-          .select("points_per_unit, unit_amount, is_active")
+          .select("points_per_unit, unit_amount, is_active, card_type, stamps_required, stamp_reward")
           .eq("user_id", userId)
           .maybeSingle(),
       ])
@@ -137,7 +144,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     try {
       const { data: client, error } = await supabase
         .from("clients")
-        .select("id, name, phone, instagram_username, points, total_purchases")
+        .select("id, name, phone, instagram_username, points, stamps, total_purchases")
         .eq("user_id", userId)
         .eq("loyalty_code", loyaltyCode)
         .maybeSingle()
@@ -151,9 +158,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
       setSelectedClient(client)
       setRedeemedReward(null)
+      setRedeemStampGift(false)
       setIsCartOpen(true)
       toast.success(`${client.name} identificado`, {
-        description: `${client.points || 0} puntos disponibles`,
+        description: isStampsMode
+          ? `${client.stamps || 0}/${loyaltySettings?.stamps_required || 10} sellos`
+          : `${client.points || 0} puntos disponibles`,
       })
     } catch {
       toast.error("Error al buscar la tarjeta")
@@ -369,6 +379,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       toast.error("El cliente no tiene puntos suficientes para ese canje")
       return
     }
+    if (redeemStampGift && (!selectedClient || (selectedClient.stamps || 0) < (loyaltySettings?.stamps_required || 10))) {
+      toast.error("El cliente todavía no completó la tarjeta de sellos")
+      return
+    }
 
     setIsSubmitting(true)
 
@@ -393,6 +407,16 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         })
       }
 
+      if (redeemStampGift && loyaltySettings) {
+        orderItems.push({
+          product_id: null,
+          name: `🎁 Regalo por tarjeta completa: ${loyaltySettings.stamp_reward || "Regalo"}`,
+          quantity: 1,
+          price: 0,
+          subtotal: 0,
+        })
+      }
+
       const { error } = await supabase
         .from("orders")
         .insert({
@@ -410,8 +434,47 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         throw error
       }
 
-      // Procesar puntos de fidelidad (no bloquea la venta si falla)
-      if (selectedClient) {
+      // Procesar fidelización (no bloquea la venta si falla)
+      if (selectedClient && isStampsMode && loyaltySettings) {
+        try {
+          // Modo sellos: +1 sello por compra; el canje consume la tarjeta completa
+          let stampsDelta = loyaltySettings.is_active ? 1 : 0
+          if (redeemStampGift) {
+            stampsDelta -= loyaltySettings.stamps_required
+            await supabase.from("points_transactions").insert({
+              user_id: userId,
+              client_id: selectedClient.id,
+              transaction_type: "redeemed",
+              points_amount: 0,
+              description: `Tarjeta de sellos completa: canje de "${loyaltySettings.stamp_reward || "regalo"}" (Punto de venta)`,
+            })
+          }
+
+          const newStamps = Math.max(0, (selectedClient.stamps || 0) + stampsDelta)
+          await supabase
+            .from("clients")
+            .update({
+              stamps: newStamps,
+              total_purchases: (selectedClient.total_purchases || 0) + 1,
+              last_interaction_at: new Date().toISOString(),
+            })
+            .eq("id", selectedClient.id)
+
+          if (loyaltySettings.is_active) {
+            const required = loyaltySettings.stamps_required
+            toast.success(
+              redeemStampGift
+                ? `🎁 Regalo entregado. ${selectedClient.name} arranca de nuevo: ${newStamps}/${required} sellos`
+                : newStamps >= required
+                  ? `🎉 ¡${selectedClient.name} completó la tarjeta! Tiene un regalo pendiente`
+                  : `+1 sello para ${selectedClient.name} (${newStamps}/${required})`
+            )
+          }
+        } catch (loyaltyError) {
+          console.error("Error processing stamps:", loyaltyError)
+          toast.warning("La venta se registró, pero hubo un error actualizando los sellos")
+        }
+      } else if (selectedClient) {
         try {
           let pointsDelta = 0
           const txInserts: any[] = []
@@ -480,6 +543,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       setClientSearch("")
       setPaymentMethod("cash")
       setRedeemedReward(null)
+      setRedeemStampGift(false)
       setIsCartOpen(false)
     } catch (error) {
       console.error("Error creating POS order:", error)
@@ -664,7 +728,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{selectedClient.name}</p>
                         <p className="truncate text-xs text-white/55">
-                          {getClientHandle(selectedClient)} · ⭐ {selectedClient.points || 0} pts
+                          {getClientHandle(selectedClient)} ·{" "}
+                          {isStampsMode
+                            ? `🔘 ${selectedClient.stamps || 0}/${loyaltySettings?.stamps_required || 10} sellos`
+                            : `⭐ ${selectedClient.points || 0} pts`}
                         </p>
                       </div>
                       <button type="button" onClick={() => { setSelectedClient(null); setRedeemedReward(null) }}>
@@ -754,8 +821,63 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
                 </div>
 
-                {/* Canje de premios */}
-                {selectedClient && rewards.length > 0 && (
+                {/* Tarjeta de sellos */}
+                {selectedClient && isStampsMode && loyaltySettings && (
+                  <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Gift className="h-4 w-4 text-slate-400" />
+                        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Tarjeta de sellos</p>
+                      </div>
+                      <p className="text-xs font-bold text-slate-600 dark:text-foreground">
+                        {selectedClient.stamps || 0}/{loyaltySettings.stamps_required}
+                      </p>
+                    </div>
+                    <div className="mb-3 flex flex-wrap gap-1.5">
+                      {Array.from({ length: loyaltySettings.stamps_required }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={cn(
+                            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold",
+                            i < (selectedClient.stamps || 0)
+                              ? "bg-[#d8ff55] text-slate-900"
+                              : "bg-white dark:bg-card text-slate-300 border border-dashed border-slate-200 dark:border-border"
+                          )}
+                        >
+                          {i < (selectedClient.stamps || 0) ? "✓" : ""}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="mb-3 text-xs text-slate-500 dark:text-muted-foreground">
+                      Esta venta suma 1 sello automáticamente.
+                    </p>
+                    {(selectedClient.stamps || 0) >= loyaltySettings.stamps_required && (
+                      <button
+                        type="button"
+                        onClick={() => setRedeemStampGift(!redeemStampGift)}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-[1.25rem] border p-3 text-left transition-all",
+                          redeemStampGift
+                            ? "border-transparent bg-[#1f2030] text-[#d8ff55]"
+                            : "border-[#d8ff55] bg-[#d8ff55]/15 hover:bg-[#d8ff55]/25"
+                        )}
+                      >
+                        <span className="text-lg">{redeemStampGift ? "✅" : "🎁"}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className={cn("text-sm font-bold", !redeemStampGift && "text-slate-800 dark:text-foreground")}>
+                            ¡Tarjeta completa! Entregar: {loyaltySettings.stamp_reward || "regalo"}
+                          </p>
+                          <p className={cn("text-xs", redeemStampGift ? "text-[#d8ff55]/70" : "text-slate-500")}>
+                            {redeemStampGift ? "Se canjea al finalizar la venta" : "Tocá para canjear en esta venta"}
+                          </p>
+                        </div>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Canje de premios (modo puntos) */}
+                {selectedClient && !isStampsMode && rewards.length > 0 && (
                   <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <Gift className="h-4 w-4 text-slate-400" />

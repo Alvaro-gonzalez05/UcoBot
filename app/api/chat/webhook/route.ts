@@ -752,7 +752,7 @@ MANEJO DE CONTEXTO - MUY IMPORTANTE:
         if (conversation.client_id) {
           const { data } = await supabase
             .from('clients')
-            .select('id, points, loyalty_code')
+            .select('id, points, stamps, loyalty_code')
             .eq('id', conversation.client_id)
             .maybeSingle()
           loyaltyClient = data
@@ -764,37 +764,60 @@ MANEJO DE CONTEXTO - MUY IMPORTANTE:
           }
           const { data } = await supabase
             .from('clients')
-            .select('id, points, loyalty_code')
+            .select('id, points, stamps, loyalty_code')
             .eq('user_id', bot.user_id)
             .in('phone', variations)
             .maybeSingle()
           loyaltyClient = data
         }
 
-        const { data: activeRewards } = await supabase
-          .from('rewards')
-          .select('name, points_cost')
+        const { data: loyaltyConfig } = await supabase
+          .from('loyalty_settings')
+          .select('card_type, stamps_required, stamp_reward')
           .eq('user_id', bot.user_id)
-          .eq('is_active', true)
-          .order('points_cost', { ascending: true })
-          .limit(10)
+          .maybeSingle()
 
         const loyaltyBaseUrl = process.env.NEXTAUTH_URL ||
           (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-        const rewardsList = (activeRewards || [])
-          .map((r: any) => `  • ${r.name}: ${r.points_cost} puntos`)
-          .join('\n')
+        const cardLink = loyaltyClient
+          ? `${loyaltyBaseUrl}/tarjeta/${loyaltyClient.loyalty_code}`
+          : null
 
-        loyaltyInfo = `PROGRAMA DE FIDELIDAD:
+        if (loyaltyConfig?.card_type === 'stamps') {
+          const required = loyaltyConfig.stamps_required || 10
+          loyaltyInfo = `PROGRAMA DE FIDELIDAD (TARJETA DE SELLOS):
+- Funciona así: 1 sello por cada compra; al juntar ${required} sellos el cliente se lleva: ${loyaltyConfig.stamp_reward || 'un regalo'}.
+${loyaltyClient
+  ? `- Sellos actuales del cliente: ${loyaltyClient.stamps || 0} de ${required}${(loyaltyClient.stamps || 0) >= required ? ' — ¡TARJETA COMPLETA! Tiene su regalo pendiente para reclamar en el local.' : ` (le faltan ${required - (loyaltyClient.stamps || 0)})`}
+- Link de SU tarjeta digital personal: ${cardLink}`
+  : '- El cliente todavía no está registrado en el programa (se registra automáticamente al guardar sus datos).'}
+- Si pregunta por sus sellos: decile cuántos tiene, cuántos le faltan y compartile el link de su tarjeta.
+- Los sellos se suman en el local mostrando el QR de la tarjeta al pagar.
+- NUNCA inventes cantidades de sellos ni regalos distintos al indicado.`
+        } else {
+          const { data: activeRewards } = await supabase
+            .from('rewards')
+            .select('name, points_cost')
+            .eq('user_id', bot.user_id)
+            .eq('is_active', true)
+            .order('points_cost', { ascending: true })
+            .limit(10)
+
+          const rewardsList = (activeRewards || [])
+            .map((r: any) => `  • ${r.name}: ${r.points_cost} puntos`)
+            .join('\n')
+
+          loyaltyInfo = `PROGRAMA DE FIDELIDAD (TARJETA DE PUNTOS):
 ${loyaltyClient
   ? `- Puntos actuales del cliente: ${loyaltyClient.points || 0}
-- Link de SU tarjeta digital personal: ${loyaltyBaseUrl}/tarjeta/${loyaltyClient.loyalty_code}`
+- Link de SU tarjeta digital personal: ${cardLink}`
   : '- El cliente todavía no está registrado en el programa (se registra automáticamente al guardar sus datos).'}
 ${rewardsList ? `- Premios canjeables:\n${rewardsList}` : '- Todavía no hay premios cargados.'}
 - Si pregunta por sus puntos: decile el saldo exacto y compartile el link de su tarjeta.
 - Si quiere canjear un premio: explicale que el canje se hace en el local mostrando el QR de su tarjeta.
 - Si le faltan puntos para un premio, decile cuántos le faltan (motiva a volver a comprar).
 - NUNCA inventes saldos ni premios que no estén en esta lista.`
+        }
       } catch (loyaltyError) {
         console.error('Error building loyalty info:', loyaltyError)
       }

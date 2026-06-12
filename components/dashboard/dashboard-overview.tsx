@@ -12,7 +12,6 @@ import { MultiStepBotCreation } from "./multi-step-bot-creation"
 import { MultiStepAutomationCreation } from "./multi-step-automation-creation"
 import { ClientCreationDialog } from "./client-creation-dialog"
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis } from "recharts"
-import { toast } from "sonner"
 
 interface DashboardOverviewProps {
   user: User
@@ -31,8 +30,15 @@ const TRIGGER_LABELS: Record<string, string> = {
 const PLATFORM_ICONS: Record<string, string> = {
   whatsapp: "chat",
   instagram: "photo_camera",
+  messenger: "forum",
   web: "language",
 }
+
+const currencyFmt = new Intl.NumberFormat("es-AR", {
+  style: "currency",
+  currency: "ARS",
+  maximumFractionDigits: 0,
+})
 
 // Dynamic tip generators — all based on real stats
 function getLeadsTip(clientsGrowth: number, totalClients: number): string {
@@ -63,30 +69,10 @@ function getProgressQuote(messagesGrowth: number, businessName: string): string 
   return `Primer mes activo, ${name}. ¡Cada conversación cuenta para crecer!`
 }
 
-interface BusinessInfoData {
-  business_name: string
-  business_type: string
-  description: string
-  address: string
-  phone: string
-  email: string
-  website: string
-  menu_link: string
-  opening_hours: {
-    monday: { isOpen: boolean; open: string; close: string }
-    tuesday: { isOpen: boolean; open: string; close: string }
-    wednesday: { isOpen: boolean; open: string; close: string }
-    thursday: { isOpen: boolean; open: string; close: string }
-    friday: { isOpen: boolean; open: string; close: string }
-    saturday: { isOpen: boolean; open: string; close: string }
-    sunday: { isOpen: boolean; open: string; close: string }
-  }
-  social_media: {
-    facebook?: string
-    instagram?: string
-    twitter?: string
-    whatsapp?: string
-  }
+interface TopProduct {
+  name: string
+  quantity: number
+  revenue: number
 }
 
 export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
@@ -94,30 +80,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
   const [isBotDialogOpen, setIsBotDialogOpen] = useState(false)
   const [isClientDialogOpen, setIsClientDialogOpen] = useState(false)
   const [isAutomationDialogOpen, setIsAutomationDialogOpen] = useState(false)
-
-  // Business form state (Migrated from BusinessInfo)
-  const [activeTab, setActiveTab] = useState<"general" | "contacto" | "redes" | "horarios">("general")
-  const [isSavingBusiness, setIsSavingBusiness] = useState(false)
-  const [businessInfo, setBusinessInfo] = useState<BusinessInfoData>({
-    business_name: "",
-    business_type: "",
-    description: "",
-    address: "",
-    phone: "",
-    email: "",
-    website: "",
-    menu_link: "",
-    opening_hours: {
-      monday: { isOpen: false, open: "09:00", close: "18:00" },
-      tuesday: { isOpen: false, open: "09:00", close: "18:00" },
-      wednesday: { isOpen: false, open: "09:00", close: "18:00" },
-      thursday: { isOpen: false, open: "09:00", close: "18:00" },
-      friday: { isOpen: false, open: "09:00", close: "18:00" },
-      saturday: { isOpen: false, open: "09:00", close: "14:00" },
-      sunday: { isOpen: false, open: "10:00", close: "14:00" },
-    },
-    social_media: {},
-  })
+  const [search, setSearch] = useState("")
 
   const [stats, setStats] = useState({
     totalClients: 0,
@@ -128,26 +91,20 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     activeConversations: 0,
     totalConversations: 0,
     conversationsGrowth: 0,
+    botRevenue: 0,
+    botRevenueGrowth: 0,
+    conversionRate: 0,
+    salesFromBot: 0,
+    outOfHoursMessages: 0,
   })
   const [chartData, setChartData] = useState<{ name: string; value: number }[]>([])
   const [pendingLeads, setPendingLeads] = useState(0)
   const [peakDay, setPeakDay] = useState<string | null>(null)
   const [activeBotsList, setActiveBotsList] = useState<{ id: string; name: string; platform: string }[]>([])
   const [automationsList, setAutomationsList] = useState<{ id: string; name: string; is_active: boolean; trigger_type: string }[]>([])
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const supabase = createClient()
-
-  const dayLabels = {
-    monday: "Lunes", tuesday: "Martes", wednesday: "Miércoles",
-    thursday: "Jueves", friday: "Viernes", saturday: "Sábado", sunday: "Domingo"
-  }
-  const orderedDays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
-
-  const businessTypes = [
-    "Restaurante", "Tienda de Ropa", "Salón de Belleza", "Gimnasio",
-    "Consultorio Médico", "Agencia de Viajes", "Inmobiliaria", "Educación",
-    "Tecnología", "Servicios Financieros", "E-commerce", "Otro",
-  ]
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -172,9 +129,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-      // ── Round 1: all independent queries in parallel ──
+      // Todas las consultas filtran por user_id en el servidor (vía join cuando
+      // la tabla no tiene user_id) — nunca pasamos listas gigantes de IDs por URL.
       const [
-        profileRes,
         totalClientsRes,
         lastMonthClientsRes,
         activeBotsCountRes,
@@ -184,8 +141,13 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         pendingRes,
         botsListRes,
         automationsRes,
+        msgsMonthCountRes,
+        msgsLastMonthCountRes,
+        msgsMonthRowsRes,
+        msgsWeekRowsRes,
+        ordersMonthRes,
+        ordersLastMonthRes,
       ] = await Promise.allSettled([
-        supabase.from("user_profiles").select("business_info").eq("id", user.id).single(),
         supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
         supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id).lt('created_at', startOfCurrentMonth),
         supabase.from('bots').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_active', true),
@@ -195,19 +157,13 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('needs_attention', true),
         supabase.from('bots').select('id, name, platform').eq('user_id', user.id).eq('is_active', true).limit(3),
         supabase.from('automations').select('id, name, is_active, trigger_type').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
+        supabase.from('messages').select('id, conversations!inner(user_id)', { count: 'exact', head: true }).eq('conversations.user_id', user.id).gte('created_at', startOfCurrentMonth),
+        supabase.from('messages').select('id, conversations!inner(user_id)', { count: 'exact', head: true }).eq('conversations.user_id', user.id).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
+        supabase.from('messages').select('created_at, conversations!inner(user_id)').eq('conversations.user_id', user.id).gte('created_at', startOfCurrentMonth).limit(10000),
+        supabase.from('messages').select('created_at, conversations!inner(user_id)').eq('conversations.user_id', user.id).gte('created_at', sevenDaysAgo).limit(10000),
+        supabase.from('orders').select('total_amount, source, conversation_id, items, created_at').eq('user_id', user.id).neq('status', 'cancelled').gte('created_at', startOfCurrentMonth),
+        supabase.from('orders').select('total_amount, source').eq('user_id', user.id).neq('status', 'cancelled').gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
       ])
-
-      // Business info
-      const profileData = profileRes.status === 'fulfilled' ? profileRes.value.data : null
-      if (profileData?.business_info) {
-        setBusinessInfo(prev => ({
-          ...profileData.business_info,
-          social_media: profileData.business_info.social_media || {},
-          opening_hours: typeof profileData.business_info.opening_hours === "string"
-            ? prev.opening_hours
-            : profileData.business_info.opening_hours || prev.opening_hours,
-        }))
-      }
 
       // Extract values safely
       const totalClients = totalClientsRes.status === 'fulfilled' ? (totalClientsRes.value.count || 0) : 0
@@ -218,51 +174,84 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       const lastMonthConvCount = lastMonthConvRes.status === 'fulfilled' ? (lastMonthConvRes.value.count || 0) : 0
       const pendingCount = pendingRes.status === 'fulfilled' ? (pendingRes.value.count || 0) : 0
       const botsList = botsListRes.status === 'fulfilled' ? (botsListRes.value.data || []) : []
-      const automationsList = automationsRes.status === 'fulfilled' ? (automationsRes.value.data || []) : []
+      const autosList = automationsRes.status === 'fulfilled' ? (automationsRes.value.data || []) : []
+      const monthlyMessages = msgsMonthCountRes.status === 'fulfilled' ? (msgsMonthCountRes.value.count || 0) : 0
+      const lastMonthMessages = msgsLastMonthCountRes.status === 'fulfilled' ? (msgsLastMonthCountRes.value.count || 0) : 0
+      const monthMsgRows = msgsMonthRowsRes.status === 'fulfilled' ? (msgsMonthRowsRes.value.data || []) : []
+      const weekMsgRows = msgsWeekRowsRes.status === 'fulfilled' ? (msgsWeekRowsRes.value.data || []) : []
+      const ordersMonth = ordersMonthRes.status === 'fulfilled' ? (ordersMonthRes.value.data || []) : []
+      const ordersLastMonth = ordersLastMonthRes.status === 'fulfilled' ? (ordersLastMonthRes.value.data || []) : []
 
-      const conversationIds = userConversations.map((c: any) => c.id)
       const activeConversations = userConversations.filter((c: any) => c.last_message_at && c.last_message_at >= oneDayAgo).length
       const clientsGrowth = lastMonthClients > 0 ? (totalClients - lastMonthClients) / lastMonthClients * 100 : 0
       const conversationsGrowth = lastMonthConvCount > 0 ? (thisMonthConvCount - lastMonthConvCount) / lastMonthConvCount * 100 : 0
-
-      // ── Round 2: queries that depend on conversationIds ──
-      let monthlyMessages = 0, lastMonthMessages = 0
-      let weeklyChart: { name: string; value: number }[] = []
-
-      if (conversationIds.length > 0) {
-        const [currentMsgRes, lastMsgRes, recentMsgRes] = await Promise.allSettled([
-          supabase.from('messages').select('*', { count: 'exact', head: true }).in('conversation_id', conversationIds).gte('created_at', startOfCurrentMonth),
-          supabase.from('messages').select('*', { count: 'exact', head: true }).in('conversation_id', conversationIds).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
-          supabase.from('messages').select('created_at').in('conversation_id', conversationIds).gte('created_at', sevenDaysAgo),
-        ])
-        monthlyMessages = currentMsgRes.status === 'fulfilled' ? (currentMsgRes.value.count || 0) : 0
-        lastMonthMessages = lastMsgRes.status === 'fulfilled' ? (lastMsgRes.value.count || 0) : 0
-        const recentMsgs = recentMsgRes.status === 'fulfilled' ? (recentMsgRes.value.data || []) : []
-
-        weeklyChart = Array.from({ length: 7 }, (_, i) => {
-          const date = new Date(now)
-          date.setDate(date.getDate() - (6 - i))
-          const dateStr = date.toISOString().split('T')[0]
-          return { name: DAY_NAMES[date.getDay()], value: recentMsgs.filter((m: any) => m.created_at.startsWith(dateStr)).length }
-        })
-      } else {
-        weeklyChart = Array.from({ length: 7 }, (_, i) => {
-          const date = new Date(now)
-          date.setDate(date.getDate() - (6 - i))
-          return { name: DAY_NAMES[date.getDay()], value: 0 }
-        })
-      }
-
       const messagesGrowth = lastMonthMessages > 0 ? (monthlyMessages - lastMonthMessages) / lastMonthMessages * 100 : 0
+
+      // Gráfico semanal de mensajes
+      const weeklyChart = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date(now)
+        date.setDate(date.getDate() - (6 - i))
+        const dateStr = date.toISOString().split('T')[0]
+        return { name: DAY_NAMES[date.getDay()], value: weekMsgRows.filter((m: any) => m.created_at.startsWith(dateStr)).length }
+      })
       const peak = weeklyChart.reduce((a, b) => b.value > a.value ? b : a, weeklyChart[0])
 
+      // ── Métricas nuevas ──────────────────────────────────────────────────
+      // Ingresos generados por el bot
+      const botRevenue = ordersMonth
+        .filter((o: any) => o.source === 'bot')
+        .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
+      const botRevenueLast = ordersLastMonth
+        .filter((o: any) => o.source === 'bot')
+        .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
+      const botRevenueGrowth = botRevenueLast > 0 ? (botRevenue - botRevenueLast) / botRevenueLast * 100 : 0
+
+      // Conversión: conversaciones del mes que generaron al menos un pedido
+      const salesFromBot = new Set(
+        ordersMonth.map((o: any) => o.conversation_id).filter(Boolean)
+      ).size
+      const conversionRate = thisMonthConvCount > 0 ? (salesFromBot / thisMonthConvCount) * 100 : 0
+
+      // Mensajes atendidos fuera de horario (21:00 a 09:00, hora local)
+      const outOfHoursMessages = monthMsgRows.filter((m: any) => {
+        const h = new Date(m.created_at).getHours()
+        return h >= 21 || h < 9
+      }).length
+
+      // Top productos del mes (desde los items de los pedidos)
+      const productMap = new Map<string, TopProduct>()
+      for (const order of ordersMonth) {
+        const items = Array.isArray(order.items) ? order.items : []
+        for (const item of items) {
+          const name = String(item.name || '').trim()
+          if (!name || name.startsWith('🎁')) continue
+          const qty = Number(item.quantity || 1)
+          const revenue = Number(item.subtotal ?? (Number(item.price || 0) * qty))
+          const existing = productMap.get(name)
+          if (existing) {
+            existing.quantity += qty
+            existing.revenue += revenue
+          } else {
+            productMap.set(name, { name, quantity: qty, revenue })
+          }
+        }
+      }
+      const topProductsList = Array.from(productMap.values())
+        .sort((a, b) => b.quantity - a.quantity)
+        .slice(0, 5)
+
       // Commit all state at once
-      setStats({ totalClients, clientsGrowth, activeBots, monthlyMessages, messagesGrowth, activeConversations, totalConversations: conversationIds.length, conversationsGrowth })
+      setStats({
+        totalClients, clientsGrowth, activeBots, monthlyMessages, messagesGrowth,
+        activeConversations, totalConversations: userConversations.length, conversationsGrowth,
+        botRevenue, botRevenueGrowth, conversionRate, salesFromBot, outOfHoursMessages,
+      })
       setChartData(weeklyChart)
       setPeakDay(peak?.value > 0 ? peak.name : null)
       setPendingLeads(pendingCount)
       setActiveBotsList(botsList)
-      setAutomationsList(automationsList)
+      setAutomationsList(autosList)
+      setTopProducts(topProductsList)
 
     } catch (error) {
       console.error("Error fetching dashboard data:", error)
@@ -271,68 +260,17 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     }
   }
 
-  useEffect(() => { loadDashboardData() }, [user.id])
+  useEffect(() => {
+    loadDashboardData()
+    // Red de seguridad: nunca dejar el spinner colgado más de 12 segundos
+    const safety = setTimeout(() => setIsLoading(false), 12000)
+    return () => clearTimeout(safety)
+  }, [user.id])
 
-  const saveBusinessInfo = async () => {
-    try {
-      setIsSavingBusiness(true)
-      const { error } = await supabase
-        .from("user_profiles")
-        .upsert({ 
-          id: user.id,
-          business_name: businessInfo.business_name,
-          business_description: businessInfo.description,
-          business_hours: businessInfo.opening_hours,
-          social_links: businessInfo.social_media,
-          location: businessInfo.address,
-          menu_link: businessInfo.menu_link,
-          business_info: businessInfo 
-        })
-        .eq("id", user.id)
-
-      if (error) throw error
-
-      toast.success("Negocio actualizado", {
-        description: "Tu información se guardó correctamente para la IA.",
-        duration: 4000,
-      })
-    } catch (error) {
-      console.error("Error saving business info:", error)
-      toast.error("Error al guardar", {
-        description: "No se pudo actualizar la información.",
-        duration: 4000,
-      })
-    } finally {
-      setIsSavingBusiness(false)
-    }
-  }
-
-  const updateField = (field: keyof BusinessInfoData, value: any) => {
-    setBusinessInfo((prev) => ({ ...prev, [field]: value }))
-  }
-
-  const updateSocialMedia = (platform: string, value: string) => {
-    setBusinessInfo((prev) => ({
-      ...prev,
-      social_media: { ...prev.social_media, [platform]: value },
-    }))
-  }
-
-  const updateOpeningHours = (
-    day: keyof typeof businessInfo.opening_hours,
-    field: "isOpen" | "open" | "close",
-    value: boolean | string,
-  ) => {
-    setBusinessInfo((prev) => ({
-      ...prev,
-      opening_hours: {
-        ...prev.opening_hours,
-        [day]: {
-          ...prev.opening_hours[day],
-          [field]: value,
-        },
-      },
-    }))
+  // Buscador de métricas: cada bloque declara sus palabras clave
+  const matches = (keywords: string) => {
+    const q = search.trim().toLowerCase()
+    return !q || keywords.toLowerCase().includes(q)
   }
 
   if (isLoading) {
@@ -366,6 +304,8 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
               className="pl-11 pr-4 py-2.5 rounded-2xl border-none bg-white dark:bg-[#1E1E2E] shadow-sm focus:ring-2 focus:ring-[#D1F366] w-64 text-sm"
               placeholder="Buscar métrica..."
               type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
@@ -378,9 +318,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
           {/* ============== LEFT COLUMN ============== */}
           <div className="flex-1 space-y-6">
 
-            {/* KPI Cards */}
+            {/* KPI Cards — fila 1 */}
             <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* Leads Generados */}
+              {matches("leads generados clientes nuevos contactos") && (
               <div className="executive-card group hover:translate-y-[-2px] transition-transform">
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-12 h-12 bg-[#D1F366]/10 rounded-2xl flex items-center justify-center text-[#D1F366]">
@@ -399,8 +339,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                   <span className="text-[#D1F366] font-bold">Tip:</span> {getLeadsTip(stats.clientsGrowth, stats.totalClients)}
                 </p>
               </div>
+              )}
 
-              {/* Interacciones */}
+              {matches("interacciones mensajes actividad chat") && (
               <div className="executive-card group hover:translate-y-[-2px] transition-transform">
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-blue-500">
@@ -419,8 +360,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                   <span className="text-blue-500 font-bold">Info:</span> {getMessagesTip(peakDay, stats.monthlyMessages)}
                 </p>
               </div>
+              )}
 
-              {/* Cierres de Venta */}
+              {matches("cierres de venta conversaciones activas atencion") && (
               <div className="executive-card group hover:translate-y-[-2px] transition-transform">
                 <div className="flex items-start justify-between mb-4">
                   <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/20 rounded-2xl flex items-center justify-center text-orange-500">
@@ -439,10 +381,77 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                   <span className="text-orange-500 font-bold">Tip:</span> {getSalesTip(pendingLeads, stats.activeConversations)}
                 </p>
               </div>
+              )}
+            </section>
+
+            {/* KPI Cards — fila 2: métricas de impacto del bot */}
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-5">
+              {matches("ingresos del bot ventas dinero facturacion plata revenue") && (
+              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/20 rounded-2xl flex items-center justify-center text-emerald-500">
+                    <span className="material-symbols-outlined text-2xl">smart_toy</span>
+                  </div>
+                  {stats.botRevenueGrowth !== 0 && (
+                    <span className={cn(
+                      "text-[11px] font-bold px-2 py-1 rounded-lg",
+                      stats.botRevenueGrowth >= 0 ? "text-emerald-500 bg-emerald-500/10" : "text-red-500 bg-red-500/10"
+                    )}>
+                      {stats.botRevenueGrowth >= 0 ? "+" : ""}{stats.botRevenueGrowth.toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Ingresos del Bot</h3>
+                <p className="text-3xl font-black mt-1">{currencyFmt.format(stats.botRevenue)}</p>
+                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
+                  <span className="text-emerald-500 font-bold">Info:</span>{" "}
+                  {stats.botRevenue > 0
+                    ? "Ventas concretadas por tu asistente este mes, sin intervención humana."
+                    : "Cuando tu bot tome pedidos, acá vas a ver la plata que te genera."}
+                </p>
+              </div>
+              )}
+
+              {matches("conversion tasa ventas pedidos efectividad") && (
+              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-2xl flex items-center justify-center text-purple-500">
+                    <span className="material-symbols-outlined text-2xl">percent</span>
+                  </div>
+                </div>
+                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Conversión del Bot</h3>
+                <p className="text-3xl font-black mt-1">{stats.conversionRate.toFixed(1)}%</p>
+                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
+                  <span className="text-purple-500 font-bold">Info:</span>{" "}
+                  {stats.salesFromBot > 0
+                    ? `${stats.salesFromBot} de las conversaciones de este mes terminaron en pedido.`
+                    : "Porcentaje de conversaciones que terminan en un pedido."}
+                </p>
+              </div>
+              )}
+
+              {matches("fuera de horario nocturno mientras dormias 24 horas noche") && (
+              <div className="executive-card group hover:translate-y-[-2px] transition-transform">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="w-12 h-12 bg-indigo-100 dark:bg-indigo-900/20 rounded-2xl flex items-center justify-center text-indigo-500">
+                    <span className="material-symbols-outlined text-2xl">bedtime</span>
+                  </div>
+                </div>
+                <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Fuera de Horario</h3>
+                <p className="text-3xl font-black mt-1">{stats.outOfHoursMessages.toLocaleString()}</p>
+                <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
+                  <span className="text-indigo-500 font-bold">Info:</span>{" "}
+                  {stats.outOfHoursMessages > 0
+                    ? "Mensajes atendidos entre las 21 y las 9 hs este mes — tu bot trabaja mientras descansás."
+                    : "Mensajes que tu bot atiende entre las 21 y las 9 hs."}
+                </p>
+              </div>
+              )}
             </section>
 
             {/* Chart + Assistants */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {matches("rendimiento de ia grafico conversiones chatbot semana") && (
               <div className="executive-card">
                 <div className="flex justify-between items-start mb-6">
                   <div>
@@ -469,13 +478,15 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                         </linearGradient>
                       </defs>
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8' }} />
-                      <Tooltip contentStyle={{ backgroundColor: '#1C1C28', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px', fontWeight: 'bold', padding: '10px' }} itemStyle={{ color: '#D1F366' }} labelStyle={{ color: '#94A3B8', fontSize: '10px' }} />
+                      <Tooltip contentStyle={{ backgroundColor: '#1C1C28', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px', fontWeight: 'bold', padding: '10px', boxShadow: '0 12px 32px rgba(0,0,0,0.35)' }} itemStyle={{ color: '#D1F366' }} labelStyle={{ color: '#94A3B8', fontSize: '10px' }} />
                       <Area type="monotone" dataKey="value" stroke="#D1F366" strokeWidth={3} fill="url(#colorValue)" dot={false} activeDot={{ r: 6, fill: '#D1F366', stroke: '#fff', strokeWidth: 2 }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>
+              )}
 
+              {matches("asistentes activos bots operativos") && (
               <div className="executive-card">
                 <div className="flex justify-between items-center mb-6">
                   <div>
@@ -508,9 +519,11 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                   ))}
                 </div>
               </div>
+              )}
             </div>
 
             {/* Automatizaciones Críticas */}
+            {matches("automatizaciones criticas flujos") && (
             <section className="executive-card overflow-hidden">
               <div className="flex justify-between items-center mb-5">
                 <h3 className="text-lg font-bold">Automatizaciones Críticas</h3>
@@ -547,7 +560,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                         <td className="py-3.5">
                           <span className={cn(
                             "px-2 py-0.5 text-[9px] font-black rounded-md uppercase",
-                            auto.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400"
+                            auto.is_active ? "bg-green-100 text-green-700 dark:bg-green-500/15 dark:text-green-400" : "bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400"
                           )}>
                             {auto.is_active ? "Activo" : "Pausado"}
                           </span>
@@ -561,180 +574,53 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                 </table>
               </div>
             </section>
+            )}
           </div>
 
           {/* ============== RIGHT COLUMN ============== */}
           <div className="w-full xl:w-[350px] flex-shrink-0 space-y-6">
 
-            {/* Mi Negocio panel */}
-            <div className="bg-[#1C1C28] text-white rounded-[2.5rem] shadow-2xl flex flex-col h-[640px] border border-white/5 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-[#D1F366]/10 blur-3xl rounded-full -translate-y-1/2 translate-x-1/2"></div>
-
-              <div className="p-8 pb-4 relative z-10 shrink-0">
-                <div className="w-16 h-16 bg-white/5 border border-white/10 rounded-2xl flex items-center justify-center mb-5 group hover:border-[#D1F366]/50 transition-colors">
-                  <span className="material-symbols-outlined text-3xl text-[#D1F366]">domain</span>
+            {/* Top productos del mes */}
+            {matches("top productos vendidos catalogo mas vendido") && (
+            <div className="executive-card">
+              <div className="flex justify-between items-center mb-5">
+                <div>
+                  <h3 className="text-lg font-bold">Top Productos</h3>
+                  <p className="text-xs text-[#64748B] mt-1">Los más vendidos este mes</p>
                 </div>
-                <h3 className="font-bold text-xl mb-1">Mi Negocio</h3>
-                <p className="text-[11px] text-gray-400">Completa tu perfil para que la IA aprenda de ti.</p>
-
-                {/* Extended Tabs */}
-                <div className="flex gap-4 mt-8 border-b border-white/10 text-[10px] font-bold uppercase tracking-widest overflow-x-auto hide-scrollbar">
-                  <button className={cn("pb-3 px-1 whitespace-nowrap", activeTab === "general" ? "tab-active" : "text-gray-500 hover:text-[#D1F366] transition-colors")} onClick={() => setActiveTab("general")}>
-                    General
-                  </button>
-                  <button className={cn("pb-3 px-1 whitespace-nowrap", activeTab === "contacto" ? "tab-active" : "text-gray-500 hover:text-[#D1F366] transition-colors")} onClick={() => setActiveTab("contacto")}>
-                    Contacto
-                  </button>
-                  <button className={cn("pb-3 px-1 whitespace-nowrap", activeTab === "redes" ? "tab-active" : "text-gray-500 hover:text-[#D1F366] transition-colors")} onClick={() => setActiveTab("redes")}>
-                    Redes
-                  </button>
-                  <button className={cn("pb-3 px-1 whitespace-nowrap", activeTab === "horarios" ? "tab-active" : "text-gray-500 hover:text-[#D1F366] transition-colors")} onClick={() => setActiveTab("horarios")}>
-                    Horarios
-                  </button>
+                <div className="w-9 h-9 rounded-xl bg-[#D1F366]/10 flex items-center justify-center text-[#D1F366]">
+                  <span className="material-symbols-outlined text-lg">trophy</span>
                 </div>
               </div>
-
-              <div className="px-8 pt-4 pb-0 flex-1 overflow-y-auto hide-scrollbar relative z-10">
-                {/* General tab */}
-                {activeTab === "general" && (
-                  <form className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Nombre Comercial</label>
-                      <input className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white placeholder:text-white/20"
-                        placeholder="Ej: Café Central" type="text" value={businessInfo.business_name} onChange={(e) => updateField("business_name", e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Industria</label>
-                      <select className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white"
-                        value={businessInfo.business_type} onChange={(e) => updateField("business_type", e.target.value)}>
-                        <option className="bg-[#1C1C28]" value="">Selecciona el tipo</option>
-                        {businessTypes.map(t => <option key={t} value={t} className="bg-[#1C1C28]">{t}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Tu Propuesta de Valor</label>
-                      <textarea className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white placeholder:text-white/20 h-24 resize-none"
-                        placeholder="¿Qué hace único a tu negocio?" value={businessInfo.description} onChange={(e) => updateField("description", e.target.value)} />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Sitio Web</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 material-symbols-outlined text-sm">link</span>
-                        <input className="w-full pl-9 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 text-white placeholder:text-white/20"
-                          placeholder="www.tuweb.com" type="url" value={businessInfo.website} onChange={(e) => updateField("website", e.target.value)} />
+              {topProducts.length === 0 ? (
+                <div className="text-center py-6 text-[#64748B] text-xs">
+                  <span className="material-symbols-outlined text-2xl block mb-2 opacity-30">shopping_bag</span>
+                  Sin ventas registradas este mes
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {topProducts.map((product, idx) => (
+                    <div key={product.name} className="flex items-center gap-3">
+                      <span className={cn(
+                        "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black flex-shrink-0",
+                        idx === 0 ? "bg-[#D1F366] text-[#1C1C28]" : "bg-gray-100 dark:bg-white/5 text-[#64748B]"
+                      )}>
+                        {idx + 1}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold truncate">{product.name}</p>
+                        <p className="text-[10px] text-[#64748B]">{product.quantity} vendido{product.quantity === 1 ? "" : "s"}</p>
                       </div>
+                      <p className="text-xs font-bold flex-shrink-0">{currencyFmt.format(product.revenue)}</p>
                     </div>
-                  </form>
-                )}
-
-                {/* Contacto tab */}
-                {activeTab === "contacto" && (
-                  <form className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Email de Atención</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 material-symbols-outlined text-sm">mail</span>
-                        <input className="w-full pl-9 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 text-white"
-                          placeholder="hola@empresa.com" type="email" value={businessInfo.email} onChange={(e) => updateField("email", e.target.value)} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Teléfono / WhatsApp</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 material-symbols-outlined text-sm">call</span>
-                        <input className="w-full pl-9 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 text-white"
-                          placeholder="+34 000 000 000" type="tel" value={businessInfo.phone} onChange={(e) => updateField("phone", e.target.value)} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Dirección Principal</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 material-symbols-outlined text-sm">location_on</span>
-                        <input className="w-full pl-9 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 text-white"
-                          placeholder="Calle Innovación 42" type="text" value={businessInfo.address} onChange={(e) => updateField("address", e.target.value)} />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Catálogo / Menú Link</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 material-symbols-outlined text-sm">import_contacts</span>
-                        <input className="w-full pl-9 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 text-white"
-                          placeholder="menu.tuempresa.com" type="text" value={businessInfo.menu_link} onChange={(e) => updateField("menu_link", e.target.value)} />
-                      </div>
-                    </div>
-                  </form>
-                )}
-
-                {/* Redes tab */}
-                {activeTab === "redes" && (
-                  <form className="space-y-4">
-                    {["facebook", "instagram", "twitter", "whatsapp"].map((platform) => (
-                      <div key={platform}>
-                        <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">{platform}</label>
-                        <input className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white"
-                          placeholder={`https://${platform}.com/tuempresa`} type="text" 
-                          value={businessInfo.social_media[platform as keyof typeof businessInfo.social_media] || ""} 
-                          onChange={(e) => updateSocialMedia(platform, e.target.value)} />
-                      </div>
-                    ))}
-                  </form>
-                )}
-
-                {/* Horarios tab */}
-                {activeTab === "horarios" && (
-                  <div className="space-y-2.5">
-                    {orderedDays.map((day) => {
-                      const schedule = businessInfo.opening_hours[day]
-                      return (
-                        <div key={day} className={cn(
-                          "flex items-center justify-between p-3 rounded-xl border transition-all duration-200",
-                          schedule.isOpen 
-                            ? "bg-white/5 border-white/10" 
-                            : "bg-transparent border-transparent opacity-50 grayscale"
-                        )}>
-                          <label className="flex items-center gap-3 text-sm font-semibold cursor-pointer select-none min-w-[100px]">
-                            <div className="relative flex items-center justify-center">
-                              <input type="checkbox" checked={schedule.isOpen} onChange={(e) => updateOpeningHours(day, "isOpen", e.target.checked)}
-                                className="peer sr-only" />
-                              <div className="w-9 h-5 bg-white/10 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#D1F366] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#D1F366] peer-checked:after:bg-[#1C1C28]"></div>
-                            </div>
-                            <span className={cn("text-xs uppercase tracking-wider", schedule.isOpen ? "text-white" : "text-gray-500")}>
-                              {dayLabels[day].substring(0, 3)}
-                            </span>
-                          </label>
-
-                          <div className="flex-1 flex justify-end">
-                            {schedule.isOpen ? (
-                              <div className="flex items-center gap-1.5">
-                                <input type="time" value={schedule.open} onChange={(e) => updateOpeningHours(day, "open", e.target.value)}
-                                  className="w-[72px] bg-[#1C1C28] border border-white/10 hover:border-[#D1F366]/50 focus:border-[#D1F366] rounded-lg text-xs py-1.5 px-2 text-white font-mono text-center transition-colors outline-none" />
-                                <span className="text-gray-500 text-xs font-bold">-</span>
-                                <input type="time" value={schedule.close} onChange={(e) => updateOpeningHours(day, "close", e.target.value)}
-                                  className="w-[72px] bg-[#1C1C28] border border-white/10 hover:border-[#D1F366]/50 focus:border-[#D1F366] rounded-lg text-xs py-1.5 px-2 text-white font-mono text-center transition-colors outline-none" />
-                              </div>
-                            ) : (
-                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-4 py-1.5">Cerrado</span>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-8 pt-4 relative z-10 shrink-0">
-                <button 
-                  onClick={saveBusinessInfo}
-                  disabled={isSavingBusiness}
-                  className="w-full bg-[#D1F366] text-[#1C1C28] font-black text-xs uppercase tracking-widest py-4 rounded-2xl hover:bg-white transition-all shadow-xl shadow-[#D1F366]/5 active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isSavingBusiness ? <Loader2 className="w-4 h-4 animate-spin" /> : "Actualizar Entidad"}
-                </button>
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
+            )}
 
             {/* Progreso Mensual */}
+            {matches("progreso mensual actividad") && (
             <div className="bg-[#D1F366]/10 border border-[#D1F366]/20 p-5 rounded-3xl relative overflow-hidden group">
               <div className="relative z-10">
                 <div className="flex items-center justify-between mb-3">
@@ -749,6 +635,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                 </p>
               </div>
             </div>
+            )}
           </div>
 
         </div>

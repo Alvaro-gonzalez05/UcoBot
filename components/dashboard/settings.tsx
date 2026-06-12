@@ -18,6 +18,7 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { ScrollFadeIn, ScrollSlideUp } from "@/components/ui/scroll-animations"
 import { motion } from "framer-motion"
+import { BusinessInfoPanel } from "./business-info-panel"
 
 // ── Sidebar sections the user can configure ──────────────────────────────────
 const DEFAULT_SIDEBAR_SECTIONS = [
@@ -256,12 +257,18 @@ export function Settings() {
       </ScrollSlideUp>
 
       <Tabs defaultValue="perfil" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="perfil">Perfil</TabsTrigger>
+          <TabsTrigger value="negocio">Mi negocio</TabsTrigger>
           <TabsTrigger value="panel">Panel lateral</TabsTrigger>
           <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
           <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
         </TabsList>
+
+        {/* ── MI NEGOCIO ─────────────────────────────────────────────────── */}
+        <TabsContent value="negocio" className="space-y-4">
+          {userId && <BusinessInfoPanel userId={userId} />}
+        </TabsContent>
 
         {/* ── PERFIL ──────────────────────────────────────────────────────── */}
         <TabsContent value="perfil" className="space-y-4">

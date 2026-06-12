@@ -85,9 +85,6 @@ const platformLabels = {
   email: "Email", // solo para mostrar bots legacy; no es seleccionable
 }
 
-// Canales que se pueden conectar hoy (email todavía no tiene integración)
-const selectableChannels = ["whatsapp", "instagram", "messenger"] as const
-
 const availableFeatures = [
   { id: "take_orders", label: "Tomar pedidos", description: "El bot puede registrar pedidos del catálogo de productos." },
   { id: "take_reservations", label: "Tomar reservas", description: "El bot gestiona reservas de mesas o turnos." },
@@ -172,15 +169,23 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
     })
   }
 
-  const handlePlatformToggle = (platformId: string, checked: boolean) => {
-    const next = checked
-      ? [...formData.platforms, platformId]
-      : formData.platforms.filter((p) => p !== platformId)
-    setFormData({
-      ...formData,
-      platforms: next,
-      // `platform` (legacy) siempre refleja el primer canal para compatibilidad
-      platform: (next[0] || "") as typeof formData.platform,
+  // Un canal queda activo para el bot cuando su integración con Meta está conectada.
+  // Se persiste de inmediato para que los webhooks enruten sin esperar al botón Guardar.
+  const handleConnectionStatus = (platformId: string, connected: boolean) => {
+    if (!connected) return
+    setFormData((prev) => {
+      if (prev.platforms.includes(platformId)) return prev
+      const next = [...prev.platforms, platformId]
+      if (selectedBot) {
+        supabase
+          .from("bots")
+          .update({ platforms: next, platform: next[0] })
+          .eq("id", selectedBot.id)
+          .then(({ error }) => {
+            if (error) console.error("Error syncing bot platforms:", error)
+          })
+      }
+      return { ...prev, platforms: next, platform: (next[0] || "") as typeof prev.platform }
     })
   }
 
@@ -432,8 +437,10 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
         {/* Grid plano — cada card va directo al grid para alineación real entre columnas */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5 items-start">
 
-          {/* Fila 1: Información General + Estado */}
-          <div className="lg:col-span-2 executive-card space-y-4">
+          {/* Columna izquierda: Información General + Personalidad + IA */}
+          <div className="lg:col-span-2 space-y-3 sm:space-y-5">
+
+          <div className="executive-card space-y-4">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Información General</p>
             <div className="grid gap-4">
               <div className="grid gap-2">
@@ -446,84 +453,10 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                   required
                 />
               </div>
-              <div className="grid gap-2">
-                <Label className="input-label font-medium">Canales *</Label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {selectableChannels.map((platformId) => {
-                    const Icon = platformIcons[platformId]
-                    const checked = formData.platforms.includes(platformId)
-                    return (
-                      <label
-                        key={platformId}
-                        className={cn(
-                          "flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors text-sm font-medium",
-                          checked
-                            ? "border-[#D1F366] bg-[#D1F366]/10"
-                            : "border-border/60 hover:border-border bg-muted/20"
-                        )}
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(c) => handlePlatformToggle(platformId, c === true)}
-                          className="flex-shrink-0"
-                        />
-                        <Icon className={cn("w-4 h-4 flex-shrink-0", checked ? "text-[#D1F366]" : "text-muted-foreground")} />
-                        <span className="truncate">{platformLabels[platformId]}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  El mismo bot atiende todos los canales que selecciones, con la misma personalidad.
-                </p>
-              </div>
             </div>
           </div>
 
-          <div className="space-y-3 sm:space-y-5">
-            <div className="executive-card space-y-4">
-              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Estado</p>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="edit-page-is_active" className="font-medium cursor-pointer">Bot activo</Label>
-                <Switch
-                  id="edit-page-is_active"
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-                />
-              </div>
-              <div className="pt-2 border-t border-border/50 space-y-3">
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <span className="text-muted-foreground">Canales</span>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    {(formData.platforms.length > 0 ? formData.platforms : [formData.platform]).filter(Boolean).map((p) => (
-                      <Badge key={p} variant="outline" className="text-[10px]">
-                        {platformLabels[p as keyof typeof platformLabels] || p}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Funcionalidades</span>
-                  <span className="text-xs font-medium">{formData.features.length} activas</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Creado</span>
-                  <span className="text-xs">{formatDate(editingBot.created_at)}</span>
-                </div>
-              </div>
-            </div>
-
-            {formData.platforms
-              .filter((p): p is "whatsapp" | "instagram" | "messenger" =>
-                p === "whatsapp" || p === "instagram" || p === "messenger"
-              )
-              .map((p) => (
-                <MetaConnectionCard key={p} platform={p} />
-              ))}
-          </div>
-
-          {/* Fila 2: Personalidad (col 3 vacía) */}
-          <div className="lg:col-span-2 executive-card space-y-4">
+          <div className="executive-card space-y-4">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Personalidad del Bot</p>
             {/* Overlay editor: div de resaltado + textarea transparente encima */}
             <div
@@ -560,7 +493,94 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             </p>
           </div>
 
-          {/* Fila 3: Funcionalidades — col-span-3, tag input en col 3 de cada fila */}
+          <div className="executive-card space-y-4">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Configuración de IA</p>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-page-gemini-key" className="input-label font-medium">API Key de Gemini</Label>
+              <div className="relative">
+                <Input
+                  id="edit-page-gemini-key"
+                  type={showApiKey ? "text" : "password"}
+                  value={formData.gemini_api_key}
+                  onChange={(e) => setFormData({ ...formData, gemini_api_key: e.target.value })}
+                  className="input-field pr-12"
+                  placeholder="AIza..."
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                >
+                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Obtén tu clave en <span className="text-[#D1F366]/80">aistudio.google.com</span></p>
+            </div>
+          </div>
+
+          </div>
+
+          {/* Columna derecha: Estado + conexiones con Meta + guardar */}
+          <div className="space-y-3 sm:space-y-5">
+            <div className="executive-card space-y-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Estado</p>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-page-is_active" className="font-medium cursor-pointer">Bot activo</Label>
+                <Switch
+                  id="edit-page-is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                />
+              </div>
+              <div className="pt-2 border-t border-border/50 space-y-3">
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="text-muted-foreground">Canales</span>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    {formData.platforms.length > 0 ? (
+                      formData.platforms.filter(Boolean).map((p) => (
+                        <Badge key={p} variant="outline" className="text-[10px]">
+                          {platformLabels[p as keyof typeof platformLabels] || p}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sin conectar</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Funcionalidades</span>
+                  <span className="text-xs font-medium">{formData.features.length} activas</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Creado</span>
+                  <span className="text-xs">{formatDate(editingBot.created_at)}</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pt-1">
+                Los canales se activan automáticamente al conectar cada plataforma acá abajo.
+              </p>
+            </div>
+
+            {(["whatsapp", "instagram", "messenger"] as const).map((p) => (
+              <MetaConnectionCard key={p} platform={p} onStatusChange={handleConnectionStatus} />
+            ))}
+
+            <div className="executive-card">
+              <Button
+                onClick={() => handleEditBot()}
+                disabled={isLoading || !formData.name.trim()}
+                className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2 py-5"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Guardar Cambios
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-3">Los cambios se aplican inmediatamente</p>
+            </div>
+          </div>
+
+          {/* Funcionalidades — col-span-3, tag input en col 3 de cada fila */}
           <div className="lg:col-span-3 executive-card space-y-2">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">Funcionalidades</p>
             {availableFeatures.map((feature) => {
@@ -701,47 +721,7 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             </AnimatePresence>
           </div>
 
-          {/* Fila 4: Config IA + Guardar */}
-          <div className="lg:col-span-2 executive-card space-y-4">
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Configuración de IA</p>
-            <div className="grid gap-2">
-              <Label htmlFor="edit-page-gemini-key" className="input-label font-medium">API Key de Gemini</Label>
-              <div className="relative">
-                <Input
-                  id="edit-page-gemini-key"
-                  type={showApiKey ? "text" : "password"}
-                  value={formData.gemini_api_key}
-                  onChange={(e) => setFormData({ ...formData, gemini_api_key: e.target.value })}
-                  className="input-field pr-12"
-                  placeholder="AIza..."
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                >
-                  {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">Obtén tu clave en <span className="text-[#D1F366]/80">aistudio.google.com</span></p>
-            </div>
-          </div>
-
-          <div className="executive-card">
-            <Button
-              onClick={() => handleEditBot()}
-              disabled={isLoading || !formData.name.trim()}
-              className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2 py-5"
-            >
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              Guardar Cambios
-            </Button>
-            <p className="text-xs text-muted-foreground text-center mt-3">Los cambios se aplican inmediatamente</p>
-          </div>
-
-          {/* Fila 5: Plantillas de WhatsApp — bento grid full width */}
+          {/* Plantillas de WhatsApp — bento grid full width */}
           {formData.platforms.includes("whatsapp") && (
             <div className="lg:col-span-3">
               <WhatsAppTemplatesManager />

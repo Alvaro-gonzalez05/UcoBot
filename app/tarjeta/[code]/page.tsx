@@ -17,7 +17,7 @@ export default async function TarjetaPage({ params }: { params: Promise<{ code: 
   const { data: client } = isUuid
     ? await supabase
         .from("clients")
-        .select("id, name, points, total_purchases, user_id, loyalty_code")
+        .select("id, name, points, stamps, total_purchases, user_id, loyalty_code")
         .eq("loyalty_code", code)
         .maybeSingle()
     : { data: null }
@@ -36,7 +36,7 @@ export default async function TarjetaPage({ params }: { params: Promise<{ code: 
     )
   }
 
-  const [{ data: profile }, { data: rewards }] = await Promise.all([
+  const [{ data: profile }, { data: rewards }, { data: settings }] = await Promise.all([
     supabase
       .from("user_profiles")
       .select("business_name, avatar_url")
@@ -48,6 +48,11 @@ export default async function TarjetaPage({ params }: { params: Promise<{ code: 
       .eq("user_id", client.user_id)
       .eq("is_active", true)
       .order("points_cost", { ascending: true }),
+    supabase
+      .from("loyalty_settings")
+      .select("card_type, stamps_required, stamp_reward, card_color, logo_url, cover_image_url")
+      .eq("user_id", client.user_id)
+      .maybeSingle(),
   ])
 
   return (
@@ -55,9 +60,18 @@ export default async function TarjetaPage({ params }: { params: Promise<{ code: 
       businessName={profile?.business_name || "Tu negocio"}
       clientName={client.name || "Cliente"}
       points={client.points || 0}
+      stamps={client.stamps || 0}
       totalPurchases={client.total_purchases || 0}
       loyaltyCode={client.loyalty_code}
       rewards={(rewards || []).filter((r) => r.current_stock === null || r.current_stock > 0)}
+      settings={{
+        card_type: settings?.card_type === "stamps" ? "stamps" : "points",
+        stamps_required: settings?.stamps_required || 10,
+        stamp_reward: settings?.stamp_reward || null,
+        card_color: settings?.card_color || "#D1F366",
+        logo_url: settings?.logo_url || null,
+        cover_image_url: settings?.cover_image_url || null,
+      }}
     />
   )
 }

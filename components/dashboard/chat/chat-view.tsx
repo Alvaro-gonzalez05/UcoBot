@@ -73,6 +73,8 @@ interface ClientProfile {
   phone?: string | null
   instagram_username?: string | null
   points?: number | null
+  stamps?: number | null
+  loyalty_code?: string | null
   total_purchases?: number | null
   last_purchase_date?: string | null
 }
@@ -238,6 +240,19 @@ export function ChatView({ userId }: ChatViewProps) {
   const [isClientDetailsOpen, setIsClientDetailsOpen] = useState(false)
   const [isLoadingClientDetails, setIsLoadingClientDetails] = useState(false)
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null)
+  const [loyaltyCardType, setLoyaltyCardType] = useState<"points" | "stamps">("points")
+
+  // Tipo de tarjeta de fidelización del negocio (para mostrar puntos o visitas)
+  useEffect(() => {
+    supabase
+      .from("loyalty_settings")
+      .select("card_type")
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.card_type === "stamps") setLoyaltyCardType("stamps")
+      })
+  }, [userId])
   const [clientOrders, setClientOrders] = useState<ClientOrder[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -639,7 +654,7 @@ export function ChatView({ userId }: ChatViewProps) {
         if (selectedConversation.client_id) {
           const { data } = await supabase
             .from("clients")
-            .select("id, name, phone, instagram_username, points, total_purchases, last_purchase_date")
+            .select("id, name, phone, instagram_username, points, stamps, loyalty_code, total_purchases, last_purchase_date")
             .eq("id", selectedConversation.client_id)
             .maybeSingle()
 
@@ -649,7 +664,7 @@ export function ChatView({ userId }: ChatViewProps) {
         if (!foundClient && selectedConversation.platform === "whatsapp" && selectedConversation.client_phone) {
           const { data } = await supabase
             .from("clients")
-            .select("id, name, phone, instagram_username, points, total_purchases, last_purchase_date")
+            .select("id, name, phone, instagram_username, points, stamps, loyalty_code, total_purchases, last_purchase_date")
             .eq("phone", selectedConversation.client_phone)
             .maybeSingle()
 
@@ -659,7 +674,7 @@ export function ChatView({ userId }: ChatViewProps) {
         if (!foundClient && selectedConversation.platform === "instagram" && selectedConversation.client_instagram_id) {
           const { data } = await supabase
             .from("clients")
-            .select("id, name, phone, instagram_username, points, total_purchases, last_purchase_date")
+            .select("id, name, phone, instagram_username, points, stamps, loyalty_code, total_purchases, last_purchase_date")
             .eq("instagram", selectedConversation.client_instagram_id)
             .maybeSingle()
 
@@ -1486,11 +1501,11 @@ export function ChatView({ userId }: ChatViewProps) {
       </Card>
 
       {selectedConversation && isClientDetailsOpen && (
-        <Card className="absolute inset-y-0 right-0 z-30 w-full max-w-[340px] rounded-none border-l bg-[#f5f5f3] md:static md:w-[320px] md:max-w-none md:rounded-lg md:border">
+        <Card className="absolute inset-y-0 right-0 z-30 w-full max-w-[340px] rounded-none border-l bg-[#f5f5f3] dark:bg-card md:static md:w-[320px] md:max-w-none md:rounded-lg md:border">
           <ScrollArea className="h-full">
             <div className="p-4 sm:p-5">
               <div className="mb-6 flex items-center justify-between">
-                <h3 className="text-xl font-semibold text-slate-800">Informacion del Cliente</h3>
+                <h3 className="text-xl font-semibold text-slate-800 dark:text-foreground">Informacion del Cliente</h3>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -1502,7 +1517,7 @@ export function ChatView({ userId }: ChatViewProps) {
               </div>
 
               <div className="mb-6 flex flex-col items-center text-center">
-                <Avatar className="h-20 w-20 border-4 border-white shadow-sm">
+                <Avatar className="h-20 w-20 border-4 border-white dark:border-border shadow-sm">
                   <AvatarFallback className={cn(
                     "text-xl text-white",
                     selectedConversation.platform === 'whatsapp' ? "bg-green-500" : "bg-pink-500"
@@ -1510,22 +1525,46 @@ export function ChatView({ userId }: ChatViewProps) {
                     {getInitials(clientDisplayName)}
                   </AvatarFallback>
                 </Avatar>
-                <h4 className="mt-3 text-2xl font-semibold text-slate-800">{clientDisplayName}</h4>
-                <p className="text-sm text-slate-500">{clientContactDisplay}</p>
+                <h4 className="mt-3 text-2xl font-semibold text-slate-800 dark:text-foreground">{clientDisplayName}</h4>
+                <p className="text-sm text-slate-500 dark:text-muted-foreground">{clientContactDisplay}</p>
               </div>
 
               <div className="mb-5 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border bg-white p-4">
-                  <p className="text-xs text-slate-400">PUNTOS</p>
-                  <p className="mt-1 text-xl font-semibold text-slate-800 flex items-center gap-1">
-                    <Star className="h-4 w-4 text-lime-500" />
-                    {clientPoints.toLocaleString("es-AR")}
-                  </p>
-                </div>
-                <div className="rounded-2xl border bg-white p-4">
-                  <p className="text-xs text-slate-400">Total Pedidos</p>
-                  <p className="mt-1 text-xl font-semibold text-slate-800 flex items-center gap-1">
-                    <ShoppingBag className="h-4 w-4 text-slate-500" />
+                {clientProfile?.loyalty_code ? (
+                  <a
+                    href={`/tarjeta/${clientProfile.loyalty_code}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Ver tarjeta de fidelización"
+                    className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4 transition-colors hover:border-[#D1F366] hover:bg-[#D1F366]/10"
+                  >
+                    <p className="text-xs text-slate-400 dark:text-muted-foreground uppercase">
+                      {loyaltyCardType === "stamps" ? "Visitas" : "Puntos"}
+                    </p>
+                    <p className="mt-1 text-xl font-semibold text-slate-800 dark:text-foreground flex items-center gap-1">
+                      <Star className="h-4 w-4 text-lime-500" />
+                      {loyaltyCardType === "stamps"
+                        ? (clientProfile?.stamps || 0).toLocaleString("es-AR")
+                        : clientPoints.toLocaleString("es-AR")}
+                    </p>
+                  </a>
+                ) : (
+                  <div className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4">
+                    <p className="text-xs text-slate-400 dark:text-muted-foreground uppercase">
+                      {loyaltyCardType === "stamps" ? "Visitas" : "Puntos"}
+                    </p>
+                    <p className="mt-1 text-xl font-semibold text-slate-800 dark:text-foreground flex items-center gap-1">
+                      <Star className="h-4 w-4 text-lime-500" />
+                      {loyaltyCardType === "stamps"
+                        ? (clientProfile?.stamps || 0).toLocaleString("es-AR")
+                        : clientPoints.toLocaleString("es-AR")}
+                    </p>
+                  </div>
+                )}
+                <div className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4">
+                  <p className="text-xs text-slate-400 dark:text-muted-foreground uppercase">Total Pedidos</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-800 dark:text-foreground flex items-center gap-1">
+                    <ShoppingBag className="h-4 w-4 text-slate-500 dark:text-muted-foreground" />
                     {recurringOrderCount}
                   </p>
                 </div>
@@ -1533,38 +1572,38 @@ export function ChatView({ userId }: ChatViewProps) {
 
               <div className="mb-5">
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-semibold tracking-widest text-slate-400">ULTIMOS PEDIDOS</p>
-                  <span className="text-xs font-medium text-lime-600">Ver todos</span>
+                  <p className="text-xs font-semibold tracking-widest text-slate-400 dark:text-muted-foreground">ULTIMOS PEDIDOS</p>
+                  <span className="text-xs font-medium text-lime-600 dark:text-[#D1F366]">Ver todos</span>
                 </div>
                 {isLoadingClientDetails ? (
-                  <div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">Cargando pedidos...</div>
+                  <div className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4 text-sm text-slate-500 dark:text-muted-foreground">Cargando pedidos...</div>
                 ) : recentOrdersSlice.length > 0 ? (
                   <div className="space-y-3">
                     {recentOrdersSlice.map((order) => (
-                      <div key={order.id} className="flex items-center justify-between rounded-2xl border bg-white p-3">
+                      <div key={order.id} className="flex items-center justify-between rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-3">
                         <div>
-                          <p className="font-semibold text-slate-800">#{order.id.slice(0, 8)}</p>
-                          <p className="text-xs text-emerald-600">{orderStatusLabel[order.status] || "Pedido"}</p>
+                          <p className="font-semibold text-slate-800 dark:text-foreground">#{order.id.slice(0, 8)}</p>
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400">{orderStatusLabel[order.status] || "Pedido"}</p>
                         </div>
-                        <p className="font-semibold text-slate-700">{formatCurrency(order.total_amount)}</p>
+                        <p className="font-semibold text-slate-700 dark:text-foreground">{formatCurrency(order.total_amount)}</p>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border bg-white p-4 text-sm text-slate-500">
+                  <div className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4 text-sm text-slate-500 dark:text-muted-foreground">
                     Este cliente aun no tiene pedidos registrados.
                   </div>
                 )}
               </div>
 
-              <div className="rounded-2xl border border-lime-200/70 bg-white/80 p-4">
-                <p className="text-xs font-semibold tracking-widest text-slate-400 flex items-center gap-1">
+              <div className="rounded-2xl border border-lime-200/70 dark:border-[#D1F366]/30 bg-white/80 dark:bg-muted/20 p-4">
+                <p className="text-xs font-semibold tracking-widest text-slate-400 dark:text-muted-foreground flex items-center gap-1">
                   <StickyNote className="h-4 w-4 text-lime-500" />
                   NOTA INTERNA
                 </p>
-                <p className="mt-2 text-sm italic text-slate-600">{internalNote}</p>
+                <p className="mt-2 text-sm italic text-slate-600 dark:text-muted-foreground">{internalNote}</p>
                 {totalPurchases > 0 && (
-                  <p className="mt-3 text-xs font-medium text-slate-500">Facturacion historica: {formatCurrency(totalPurchases)}</p>
+                  <p className="mt-3 text-xs font-medium text-slate-500 dark:text-muted-foreground">Facturacion historica: {formatCurrency(totalPurchases)}</p>
                 )}
               </div>
             </div>

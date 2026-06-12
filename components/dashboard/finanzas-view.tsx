@@ -41,7 +41,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts"
-import { Loader2, Plus, Pencil, Trash2 } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Bot, Store, PenLine } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -444,16 +444,25 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                 Origen de ventas
               </h3>
               <div className="mt-2 space-y-1.5">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">🤖 Bot</span>
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Bot className="w-3.5 h-3.5" />
+                    Bot
+                  </span>
                   <span className="font-bold">{formatMoney(stats.ventasBot)}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">🏪 Punto de venta</span>
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <Store className="w-3.5 h-3.5" />
+                    Punto de venta
+                  </span>
                   <span className="font-bold">{formatMoney(stats.ventasPos)}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">✍️ Manuales</span>
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                    <PenLine className="w-3.5 h-3.5" />
+                    Manuales
+                  </span>
                   <span className="font-bold">{formatMoney(stats.ingresosManuales)}</span>
                 </div>
               </div>
@@ -482,12 +491,17 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                   />
                   <Tooltip
                     formatter={(value: number) => formatMoney(value)}
+                    cursor={{ fill: "hsl(var(--muted))", opacity: 0.35 }}
                     contentStyle={{
-                      backgroundColor: "var(--background, #1C1C28)",
-                      border: "1px solid rgba(148,163,184,0.2)",
+                      backgroundColor: "hsl(var(--card))",
+                      color: "hsl(var(--foreground))",
+                      border: "1px solid hsl(var(--border))",
                       borderRadius: "12px",
                       fontSize: "12px",
+                      boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
                     }}
+                    labelStyle={{ color: "hsl(var(--foreground))", fontWeight: 700 }}
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
                   />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="Ingresos" fill="#D1F366" radius={[6, 6, 0, 0]} />

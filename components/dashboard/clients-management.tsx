@@ -42,6 +42,8 @@ interface Client {
   instagram_username?: string
   birthday?: string
   points: number
+  stamps?: number
+  loyalty_code?: string
   total_purchases: number
   last_purchase_date?: string
   created_at: string
@@ -130,11 +132,24 @@ export function ClientsManagement({
   const [isLoading, setIsLoading] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+  const [loyaltyCardType, setLoyaltyCardType] = useState<"points" | "stamps">("points")
 
   // Update clients when initialClients change (when navigating pages)
   useEffect(() => {
     setClients(initialClients)
   }, [initialClients])
+
+  // Tipo de tarjeta de fidelización del negocio (puntos o sellos/visitas)
+  useEffect(() => {
+    supabase
+      .from("loyalty_settings")
+      .select("card_type")
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.card_type === "stamps") setLoyaltyCardType("stamps")
+      })
+  }, [userId])
 
   // Form state
   const [formData, setFormData] = useState({
@@ -483,14 +498,18 @@ export function ClientsManagement({
             <ScrollStaggerChild>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Puntos Totales</CardTitle>
+                  <CardTitle className="text-sm font-medium">{loyaltyCardType === "stamps" ? "Visitas Totales" : "Puntos Totales"}</CardTitle>
                   <Gift className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
                   <ScrollScaleIn delay={0.4}>
-                    <div className="text-2xl font-bold">{clients.reduce((sum, client) => sum + client.points, 0)}</div>
+                    <div className="text-2xl font-bold">
+                      {loyaltyCardType === "stamps"
+                        ? clients.reduce((sum, client) => sum + (client.stamps || 0), 0)
+                        : clients.reduce((sum, client) => sum + client.points, 0)}
+                    </div>
                   </ScrollScaleIn>
-                  <p className="text-xs text-muted-foreground">Puntos acumulados</p>
+                  <p className="text-xs text-muted-foreground">{loyaltyCardType === "stamps" ? "Sellos acumulados" : "Puntos acumulados"}</p>
                 </CardContent>
               </Card>
             </ScrollStaggerChild>
@@ -530,7 +549,7 @@ export function ClientsManagement({
                       <TableRow>
                         <TableHead>Cliente</TableHead>
                         <TableHead>Contacto</TableHead>
-                        <TableHead>Puntos</TableHead>
+                        <TableHead>{loyaltyCardType === "stamps" ? "Visitas" : "Puntos"}</TableHead>
                         <TableHead>Compras</TableHead>
                         <TableHead>Última Compra</TableHead>
                         <TableHead>Cumpleaños</TableHead>
@@ -616,7 +635,29 @@ export function ClientsManagement({
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="secondary">{client.points} pts</Badge>
+                              {client.loyalty_code ? (
+                                <a
+                                  href={`/tarjeta/${client.loyalty_code}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="Ver tarjeta de fidelización"
+                                >
+                                  <Badge
+                                    variant="secondary"
+                                    className="cursor-pointer hover:bg-[#D1F366] hover:text-[#1C1C28] transition-colors"
+                                  >
+                                    {loyaltyCardType === "stamps"
+                                      ? `${client.stamps || 0} visitas`
+                                      : `${client.points} pts`}
+                                  </Badge>
+                                </a>
+                              ) : (
+                                <Badge variant="secondary">
+                                  {loyaltyCardType === "stamps"
+                                    ? `${client.stamps || 0} visitas`
+                                    : `${client.points} pts`}
+                                </Badge>
+                              )}
                             </TableCell>
                             <TableCell>{formatCurrency(client.total_purchases)}</TableCell>
                             <TableCell>{formatDate(client.last_purchase_date)}</TableCell>

@@ -360,10 +360,10 @@ export function PedidosClient({
 
   const getCardStyle = (status: string) => {
     switch (status) {
-      case 'pending':    return 'bg-[#fcffeb] border-[#D1F366] order-card-pending'
-      case 'completed':  return 'bg-slate-50 opacity-70 grayscale-[30%] border-slate-200'
-      case 'cancelled':  return 'bg-slate-50 opacity-60 grayscale-[50%] border-slate-200 text-slate-400 line-through'
-      case 'ready':      return 'bg-[#f4fcf6] border-[#1aa34a]/30'
+      case 'pending':    return 'bg-[#fcffeb] dark:bg-[#D1F366]/10 border-[#D1F366] dark:border-[#D1F366]/40 order-card-pending'
+      case 'completed':  return 'bg-slate-50 dark:bg-muted/30 opacity-70 grayscale-[30%] border-slate-200 dark:border-border'
+      case 'cancelled':  return 'bg-slate-50 dark:bg-muted/20 opacity-60 grayscale-[50%] border-slate-200 dark:border-border text-slate-400 dark:text-muted-foreground line-through'
+      case 'ready':      return 'bg-[#f4fcf6] dark:bg-[#1DB954]/10 border-[#1aa34a]/30 dark:border-[#1DB954]/40'
       default:           return 'bg-card border-border'
     }
   }
@@ -371,13 +371,13 @@ export function PedidosClient({
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
       case 'pending':    return 'bg-[#D1F366] text-[#1C1C28] border border-[#B3D93C]'
-      case 'confirmed':  return 'bg-blue-100 text-blue-700 border border-blue-200'
-      case 'preparing':  return 'bg-yellow-100 text-yellow-700 border border-yellow-200'
+      case 'confirmed':  return 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30'
+      case 'preparing':  return 'bg-yellow-100 text-yellow-700 border border-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-300 dark:border-yellow-500/30'
       case 'ready':      return 'bg-[#1DB954] text-white border border-[#1aa34a]'
-      case 'completed':  return 'bg-slate-200 text-slate-500 border border-slate-300'
-      case 'delivered':  return 'bg-gray-100 text-gray-600 border border-gray-200'
-      case 'cancelled':  return 'bg-slate-100 text-slate-400 border border-slate-200 line-through'
-      default:           return 'bg-gray-100 text-gray-600 border border-gray-200'
+      case 'completed':  return 'bg-slate-200 text-slate-500 border border-slate-300 dark:bg-muted dark:text-muted-foreground dark:border-border'
+      case 'delivered':  return 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-muted dark:text-muted-foreground dark:border-border'
+      case 'cancelled':  return 'bg-slate-100 text-slate-400 border border-slate-200 line-through dark:bg-muted/50 dark:text-muted-foreground dark:border-border'
+      default:           return 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-muted dark:text-muted-foreground dark:border-border'
     }
   }
 
