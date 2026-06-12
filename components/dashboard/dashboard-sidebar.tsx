@@ -30,6 +30,7 @@ const baseNavigation: NavigationItem[] = [
   { name: "Mensajes", href: "/dashboard/chat", icon: "chat_bubble" },
   { name: "Clientes", href: "/dashboard/clientes", icon: "group" },
   { name: "Punto de venta", href: "/dashboard/punto-de-venta", icon: "point_of_sale" },
+  { name: "Finanzas", href: "/dashboard/finanzas", icon: "account_balance_wallet" },
   { name: "Pedidos", href: "/dashboard/pedidos", icon: "shopping_cart" },
   { name: "Reservas", href: "/dashboard/reservas", icon: "calendar_month" },
   { name: "Formularios", href: "/dashboard/formularios", icon: "description" },

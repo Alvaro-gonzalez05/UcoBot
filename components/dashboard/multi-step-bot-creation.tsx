@@ -32,11 +32,12 @@ import {
   Plus,
   X,
 } from "lucide-react"
-import { FaWhatsapp } from "react-icons/fa"
+import { FaWhatsapp, FaFacebookMessenger } from "react-icons/fa"
 
 interface BotFormData {
   name: string
-  platform: "whatsapp" | "instagram" | "email" | ""
+  platform: "whatsapp" | "instagram" | "messenger" | "email" | ""
+  platforms: string[]
   personality_prompt: string
   features: string[]
   allowed_tags: string[]
@@ -69,13 +70,13 @@ interface MultiStepBotCreationProps {
 const platformIcons = {
   whatsapp: FaWhatsapp,
   instagram: Instagram,
-  email: Mail,
+  messenger: FaFacebookMessenger,
 }
 
 const platformLabels = {
   whatsapp: "WhatsApp",
   instagram: "Instagram",
-  email: "Email",
+  messenger: "Messenger",
 }
 
 const availableFeatures = [
@@ -115,6 +116,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   const [formData, setFormData] = useState<BotFormData>({
     name: "",
     platform: "",
+    platforms: [],
     personality_prompt: "",
     features: [],
     allowed_tags: [],
@@ -175,7 +177,21 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   }
 
   const shouldShowPlatformSteps = () => {
-    return hasPaidSubscription() && (formData.platform === "whatsapp" || formData.platform === "instagram")
+    return hasPaidSubscription() && formData.platforms.some((p) => p === "whatsapp" || p === "instagram")
+  }
+
+  const togglePlatform = (platformId: string) => {
+    setFormData((prev) => {
+      const next = prev.platforms.includes(platformId)
+        ? prev.platforms.filter((p) => p !== platformId)
+        : [...prev.platforms, platformId]
+      return {
+        ...prev,
+        platforms: next,
+        // `platform` (legacy) refleja el primer canal para compatibilidad
+        platform: (next[0] || "") as BotFormData["platform"],
+      }
+    })
   }
 
   const getTotalSteps = () => {
@@ -186,6 +202,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     setFormData({
       name: "",
       platform: "",
+      platforms: [],
       personality_prompt: "",
       features: [],
       gemini_api_key: "",
@@ -236,7 +253,8 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
       // Solo enviar campos que existen en la tabla bots
       const botData = {
         name: formData.name,
-        platform: formData.platform,
+        platform: formData.platforms[0] || formData.platform,
+        platforms: formData.platforms,
         personality_prompt: formData.personality_prompt,
         features: formData.features,
         gemini_api_key: formData.gemini_api_key,
@@ -253,8 +271,8 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
 
       if (error) throw error
 
-      // Si es WhatsApp, crear integración con token por defecto (para configurar luego)
-      if (formData.platform === "whatsapp") {
+      // Si incluye WhatsApp, crear integración con token por defecto (para configurar luego)
+      if (formData.platforms.includes("whatsapp")) {
         const defaultVerifyToken = `verify_${bot.id}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
         
         const whatsappData = {
@@ -293,7 +311,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
         window.dispatchEvent(new CustomEvent('botCreated', { detail: bot }))
         
         toast.success(`Bot "${bot.name}" creado exitosamente`, {
-          description: formData.platform === "whatsapp"
+          description: formData.platforms.includes("whatsapp")
             ? "Tu bot está listo. Para usarlo con WhatsApp, configura la integración con Meta Business Suite desde las opciones del bot."
             : "Tu bot está listo. Puedes probarlo en la sección de pruebas.",
           duration: 4000,
@@ -313,7 +331,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
   const isStepValid = () => {
     switch (currentStep) {
       case 1:
-        return formData.platform !== ""
+        return formData.platforms.length > 0
       case 2:
         return formData.name.trim() !== "" && formData.personality_prompt.trim() !== ""
       case 3:
@@ -323,7 +341,7 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
     }
   }
 
-  const canProceedStep1 = formData.platform !== ""
+  const canProceedStep1 = formData.platforms.length > 0
   const canProceedStep2 = formData.name.trim() !== "" && formData.personality_prompt.trim() !== ""
   const canProceedStep3 = formData.gemini_api_key.trim() !== ""
 
@@ -468,20 +486,17 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                       </CardHeader>
                       <CardContent className="space-y-3 sm:space-y-4 px-4 sm:px-6 pb-4 sm:pb-6">
                         <motion.div variants={fadeInUp} className="space-y-3 sm:space-y-4">
-                          <Label className="text-sm sm:text-base font-medium">Selecciona una plataforma</Label>
-                          <RadioGroup
-                            value={formData.platform}
-                            onValueChange={(value) => setFormData({ ...formData, platform: value as any })}
-                            className="space-y-2 sm:space-y-3"
-                          >
+                          <Label className="text-sm sm:text-base font-medium">Seleccioná los canales (uno o varios)</Label>
+                          <div className="space-y-2 sm:space-y-3">
                             {Object.entries(platformLabels).map(([key, label], index) => {
                               const Icon = platformIcons[key as keyof typeof platformIcons]
+                              const selected = formData.platforms.includes(key)
                               return (
                                 <motion.div
                                   key={key}
                                   className={cn(
                                     "flex items-center space-x-2 sm:space-x-3 rounded-md border p-3 sm:p-4 cursor-pointer transition-colors group",
-                                    formData.platform === key ? "bg-accent" : "hover:bg-accent"
+                                    selected ? "bg-accent" : "hover:bg-accent"
                                   )}
                                   whileHover={{ scale: 1.02 }}
                                   whileTap={{ scale: 0.98 }}
@@ -501,23 +516,27 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                                   onMouseLeave={e => {
                                     e.currentTarget.classList.remove('hovered')
                                   }}
-                                  onClick={() => setFormData({ ...formData, platform: key as any })}
+                                  onClick={() => togglePlatform(key)}
                                 >
-                                  <RadioGroupItem value={key} id={`platform-${key}`} className="flex-shrink-0" />
+                                  <Checkbox
+                                    checked={selected}
+                                    id={`platform-${key}`}
+                                    className="flex-shrink-0 pointer-events-none"
+                                  />
                                   <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                                    <Icon className={cn("h-5 w-5 sm:h-6 sm:w-6 transition-colors flex-shrink-0", formData.platform === key ? "text-white" : "text-primary group-hover:text-white")} />
-                                    <div className={cn("flex-1 min-w-0", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
-                                      <Label htmlFor={`platform-${key}`} className={cn("cursor-pointer text-sm sm:text-base font-medium transition-colors", formData.platform === key ? "text-white" : "group-hover:text-white")}> 
+                                    <Icon className={cn("h-5 w-5 sm:h-6 sm:w-6 transition-colors flex-shrink-0", selected ? "text-white" : "text-primary group-hover:text-white")} />
+                                    <div className={cn("flex-1 min-w-0", selected ? "text-white" : "group-hover:text-white")}>
+                                      <Label htmlFor={`platform-${key}`} className={cn("cursor-pointer text-sm sm:text-base font-medium transition-colors pointer-events-none", selected ? "text-white" : "group-hover:text-white")}>
                                         {label}
                                       </Label>
-                                      <p className={cn("text-xs sm:text-sm mt-1 transition-colors", formData.platform === key ? "text-white" : "text-muted-foreground group-hover:text-white")}> 
+                                      <p className={cn("text-xs sm:text-sm mt-1 transition-colors", selected ? "text-white" : "text-muted-foreground group-hover:text-white")}>
                                         {key === "whatsapp" && "Ideal para atención al cliente directa"}
                                         {key === "instagram" && "Perfecto para engagement en redes sociales"}
-                                        {key === "email" && "Excelente para respuestas automáticas"}
+                                        {key === "messenger" && "Atendé los mensajes de tu página de Facebook"}
                                       </p>
                                     </div>
                                     {!hasPaidSubscription() && (
-                                      <Badge variant="outline" className={cn("text-xs transition-colors flex-shrink-0", formData.platform === key ? "text-white border-white" : "group-hover:text-white group-hover:border-white")}> 
+                                      <Badge variant="outline" className={cn("text-xs transition-colors flex-shrink-0", selected ? "text-white border-white" : "group-hover:text-white group-hover:border-white")}>
                                         <span className="hidden sm:inline">Solo prueba</span>
                                         <span className="sm:hidden">Prueba</span>
                                       </Badge>
@@ -526,7 +545,10 @@ export function MultiStepBotCreation({ isOpen, onClose, onBotCreated, userId }: 
                                 </motion.div>
                               )
                             })}
-                          </RadioGroup>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            El mismo bot atiende todos los canales que elijas, con una sola configuración.
+                          </p>
                         </motion.div>
 
                         {!hasPaidSubscription() && (

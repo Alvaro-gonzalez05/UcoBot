@@ -54,6 +54,7 @@ const DEFAULT_SECTIONS = [
   { id: "chat",             icon: "chat_bubble",     label: "Mensajes",        visible: true  },
   { id: "clientes",         icon: "group",           label: "Clientes",        visible: true  },
   { id: "punto-de-venta",   icon: "point_of_sale",   label: "Punto de venta",  visible: false },
+  { id: "finanzas",         icon: "account_balance_wallet", label: "Finanzas",  visible: true  },
   { id: "pedidos",          icon: "shopping_cart",   label: "Pedidos",         visible: true  },
   { id: "reservas",         icon: "calendar_month",  label: "Reservas",        visible: true  },
   { id: "formularios",      icon: "description",     label: "Formularios",     visible: true  },

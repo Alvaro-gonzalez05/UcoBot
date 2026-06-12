@@ -69,6 +69,7 @@ interface MessageTemplate {
   id: string
   name: string
   platform: string
+  platforms?: string[]
   body_content: string
   subject?: string
   html_content?: string
@@ -121,21 +122,21 @@ const triggerTypes = {
     label: "Cumpleaños de Clientes",
     description: "Envía felicitaciones automáticas",
     color: "bg-pink-500",
-    platforms: ["whatsapp", "gmail"] // Instagram no permite mensajes proactivos
+    platforms: ["whatsapp"] // Instagram/Messenger no permiten mensajes proactivos
   },
   inactive_client: {
     icon: UserX,
     label: "Cliente Inactivo",
     description: "Reactiva clientes que no compran",
     color: "bg-orange-500",
-    platforms: ["whatsapp", "gmail"] // Instagram no permite mensajes proactivos
+    platforms: ["whatsapp"] // Instagram/Messenger no permiten mensajes proactivos
   },
   new_promotion: {
     icon: Gift,
     label: "Nueva Promoción",
     description: "Notifica sobre ofertas especiales",
     color: "bg-purple-500",
-    platforms: ["whatsapp", "gmail"] // Instagram no permite broadcast masivo
+    platforms: ["whatsapp"] // Instagram/Messenger no permiten broadcast masivo
   },
   comment_reply: {
     icon: MessageSquare,
@@ -174,6 +175,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
   const [selectedBotPlatform, setSelectedBotPlatform] = useState<string>("")
+  const [selectedChannel, setSelectedChannel] = useState<string>("")
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [loadingPromotions, setLoadingPromotions] = useState(false)
   const [canCreateCustomTemplate, setCanCreateCustomTemplate] = useState(false)
@@ -247,12 +249,31 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     }
   }, [userSubscription, userId])
 
-  // Cargar plantillas cuando cambia el bot seleccionado
+  // Canales que atiende un bot (multicanal con fallback al campo legacy)
+  const getBotChannels = (bot?: Bot): string[] => {
+    if (!bot) return []
+    return bot.platforms?.length ? bot.platforms : bot.platform ? [bot.platform] : []
+  }
+
+  // Cargar plantillas cuando cambia el bot o el canal seleccionado
   useEffect(() => {
-    if (formData.bot_id && bots.length > 0) {
-      fetchTemplatesForBot(formData.bot_id)
+    if (!formData.bot_id || bots.length === 0) return
+    const bot = bots.find((b) => b.id === formData.bot_id)
+    const channels = getBotChannels(bot)
+
+    if (channels.length === 1) {
+      // Bot de un solo canal: comportamiento clásico
+      if (selectedChannel !== channels[0]) setSelectedChannel(channels[0])
+      fetchTemplatesForBot(formData.bot_id, channels[0])
+    } else if (selectedChannel && channels.includes(selectedChannel)) {
+      // Bot multicanal con canal ya elegido
+      fetchTemplatesForBot(formData.bot_id, selectedChannel)
+    } else {
+      // Bot multicanal: esperar a que el usuario elija el canal
+      setSelectedBotPlatform("")
+      setTemplates([])
     }
-  }, [formData.bot_id, bots])
+  }, [formData.bot_id, bots, selectedChannel])
 
   // Actualizar el mensaje inicial cuando se selecciona una plantilla
   useEffect(() => {
@@ -351,7 +372,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     try {
       const { data, error } = await supabase
         .from("bots")
-        .select("id, name, platform, is_active")
+        .select("id, name, platform, platforms, is_active")
         .eq("user_id", userId)
         .eq("is_active", true)
         .order("name")
@@ -449,22 +470,28 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
    * }
    */
   
-  const fetchTemplatesForBot = async (botId: string) => {
+  const fetchTemplatesForBot = async (botId: string, channel?: string) => {
     if (!botId) return
 
     setLoadingTemplates(true)
     setNeedsBusinessAccountId(false)
     setAccessToken("") // Limpiar token temporal
-    
+
     try {
       const selectedBot = bots.find(b => b.id === botId)
       if (!selectedBot) return
 
-      setSelectedBotPlatform(selectedBot.platform)
-      setCanCreateCustomTemplate(selectedBot.platform === 'email' || selectedBot.platform === 'instagram')
+      // Canal elegido (bot multicanal) o el único canal del bot
+      const effectiveChannel = channel || getBotChannels(selectedBot)[0] || selectedBot.platform
+
+      setSelectedBotPlatform(effectiveChannel)
+      setCanCreateCustomTemplate(effectiveChannel === 'email' || effectiveChannel === 'instagram')
+
+      // La API de templates usa 'gmail' para el canal de email
+      const apiPlatform = effectiveChannel === 'email' ? 'gmail' : effectiveChannel
 
       // La API ya maneja plantillas de Meta para Instagram y WhatsApp
-      const response = await fetch(`/api/templates?bot_id=${botId}&platform=${selectedBot.platform}`)
+      const response = await fetch(`/api/templates?bot_id=${botId}&platform=${apiPlatform}`)
       if (!response.ok) throw new Error('Failed to fetch templates')
 
       const data = await response.json()
@@ -474,7 +501,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
         setTemplates(templates)
 
         // Si es Instagram y no hay plantillas, mostrar input para business_account_id
-        if (selectedBot.platform === 'instagram' && templates.length === 0) {
+        if (effectiveChannel === 'instagram' && templates.length === 0) {
           setNeedsBusinessAccountId(true)
         }
       }
@@ -810,8 +837,13 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
 
   const isStepValid = () => {
     switch (currentStep) {
-      case 1:
-        return formData.name.trim() !== "" && formData.bot_id !== ""
+      case 1: {
+        if (formData.name.trim() === "" || formData.bot_id === "") return false
+        // Bot multicanal: exigir que se haya elegido el canal de envío
+        const selBot = bots.find((b) => b.id === formData.bot_id)
+        const channels = getBotChannels(selBot)
+        return channels.length <= 1 || selectedChannel !== ""
+      }
       case 2:
         return formData.trigger_type !== ""
       case 3:
@@ -1294,7 +1326,8 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                           onValueChange={(value) => {
                             // Solo actualizar si el valor no es el placeholder
                             if (value && value !== "no-bots-available") {
-                              setFormData({ ...formData, bot_id: value })
+                              setFormData({ ...formData, bot_id: value, trigger_type: "" })
+                              setSelectedChannel("") // reset: el canal depende del bot
                             }
                           }}
                         >
@@ -1309,7 +1342,7 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                             ) : (
                               bots.map((bot) => (
                                 <SelectItem key={bot.id} value={bot.id}>
-                                  {bot.name} ({bot.platform})
+                                  {bot.name} ({getBotChannels(bot).join(" + ")})
                                 </SelectItem>
                               ))
                             )}
@@ -1321,6 +1354,39 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                           </p>
                         )}
                       </div>
+
+                      {/* Bot multicanal: elegir por qué canal sale la automatización */}
+                      {(() => {
+                        const selBot = bots.find((b) => b.id === formData.bot_id)
+                        const channels = getBotChannels(selBot)
+                        if (channels.length <= 1) return null
+                        return (
+                          <div className="space-y-2">
+                            <Label className="text-sm sm:text-base font-medium">Canal de envío *</Label>
+                            <Select
+                              value={selectedChannel || undefined}
+                              onValueChange={(v) => {
+                                setSelectedChannel(v)
+                                setFormData({ ...formData, trigger_type: "" })
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="¿Por qué canal sale esta automatización?" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {channels.map((ch) => (
+                                  <SelectItem key={ch} value={ch}>
+                                    {ch === "whatsapp" ? "WhatsApp" : ch === "instagram" ? "Instagram" : ch === "messenger" ? "Messenger" : "Email"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <p className="text-xs text-muted-foreground">
+                              Este bot atiende varios canales. Cada automatización se envía por uno solo.
+                            </p>
+                          </div>
+                        )
+                      })()}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -1358,6 +1424,23 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                           </div>
                         </div>
                       )}
+                      {selectedBotPlatform === 'messenger' && (
+                        <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                          <div className="flex gap-2">
+                            <Info className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <h4 className="font-medium text-sm text-blue-800 mb-1">
+                                Limitaciones de Messenger
+                              </h4>
+                              <p className="text-xs text-blue-700">
+                                Messenger no permite mensajes masivos proactivos (cumpleaños, promociones).
+                                El bot responde mensajes entrantes dentro de la ventana de 24 hs.
+                                Para automatizaciones proactivas, usá el canal de WhatsApp.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       {selectedBotPlatform === 'whatsapp' && (
                         <div className="p-3 bg-green-50 rounded-lg border border-green-200">
                           <div className="flex gap-2">
@@ -1377,8 +1460,9 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
                           .filter(([key, config]) => {
                             // Si no hay bot seleccionado, mostrar todos
                             if (!selectedBotPlatform) return true
-                            // Filtrar por plataforma del bot seleccionado
-                            return config.platforms.includes(selectedBotPlatform)
+                            // Filtrar por el canal elegido ('email' se mapea a 'gmail' en triggers)
+                            const channelKey = selectedBotPlatform === 'email' ? 'gmail' : selectedBotPlatform
+                            return config.platforms.includes(channelKey)
                           })
                           .map(([key, config]) => {
                           const Icon = config.icon

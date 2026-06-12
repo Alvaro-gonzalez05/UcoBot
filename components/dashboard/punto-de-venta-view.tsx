@@ -7,9 +7,10 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2 } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2, QrCode, Gift } from "lucide-react"
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
+import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialog"
 
 interface Product {
   id: string
@@ -37,6 +38,39 @@ interface CartItem {
   price: number
   imageUrl?: string | null
   quantity: number
+}
+
+interface Reward {
+  id: string
+  name: string
+  description?: string | null
+  points_cost: number
+  reward_type: string
+  reward_value: string | null
+  current_stock: number | null
+}
+
+/**
+ * Interpreta reward_value como descuento monetario:
+ * "10%" → 10% del subtotal · "500" o "$500" → monto fijo · texto sin número → 0
+ * (los premios tipo producto/servicio/regalo se entregan en mano; el ticket
+ * registra el canje pero sin descuento automático salvo que tengan valor numérico)
+ */
+function parseRewardDiscount(reward: Reward, subtotal: number): number {
+  const raw = (reward.reward_value || "").trim()
+  if (!raw) return 0
+  const numMatch = raw.replace(",", ".").match(/\d+(\.\d+)?/)
+  if (!numMatch) return 0
+  const value = parseFloat(numMatch[0])
+  if (!value || value <= 0) return 0
+  const discount = raw.includes("%") ? subtotal * (value / 100) : value
+  return Math.min(discount, subtotal)
+}
+
+interface LoyaltySettings {
+  points_per_unit: number
+  unit_amount: number
+  is_active: boolean
 }
 
 interface PuntoDeVentaViewProps {
@@ -71,6 +105,61 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [paymentMethod, setPaymentMethod] = useState("cash")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Fidelización
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [rewards, setRewards] = useState<Reward[]>([])
+  const [loyaltySettings, setLoyaltySettings] = useState<LoyaltySettings | null>(null)
+  const [redeemedReward, setRedeemedReward] = useState<Reward | null>(null)
+
+  useEffect(() => {
+    // Cargar premios activos y la regla de puntos del negocio
+    const loadLoyalty = async () => {
+      const [{ data: rewardRows }, { data: settings }] = await Promise.all([
+        supabase
+          .from("rewards")
+          .select("id, name, description, points_cost, reward_type, reward_value, current_stock")
+          .eq("user_id", userId)
+          .eq("is_active", true)
+          .order("points_cost", { ascending: true }),
+        supabase
+          .from("loyalty_settings")
+          .select("points_per_unit, unit_amount, is_active")
+          .eq("user_id", userId)
+          .maybeSingle(),
+      ])
+      setRewards((rewardRows as Reward[]) || [])
+      setLoyaltySettings(settings as LoyaltySettings | null)
+    }
+    loadLoyalty().catch((err) => console.error("Error loading loyalty data:", err))
+  }, [userId])
+
+  const handleCardScan = async (loyaltyCode: string) => {
+    try {
+      const { data: client, error } = await supabase
+        .from("clients")
+        .select("id, name, phone, instagram_username, points, total_purchases")
+        .eq("user_id", userId)
+        .eq("loyalty_code", loyaltyCode)
+        .maybeSingle()
+
+      if (error || !client) {
+        toast.error("Tarjeta no reconocida", {
+          description: "El QR no corresponde a un cliente de este negocio.",
+        })
+        return
+      }
+
+      setSelectedClient(client)
+      setRedeemedReward(null)
+      setIsCartOpen(true)
+      toast.success(`${client.name} identificado`, {
+        description: `${client.points || 0} puntos disponibles`,
+      })
+    } catch {
+      toast.error("Error al buscar la tarjeta")
+    }
+  }
+
   const { ref: loadMoreRef, isIntersecting } = useIntersectionObserver({
     threshold: 0.1,
     rootMargin: "200px",
@@ -95,8 +184,16 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   }, [clientSearch, clients])
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
-  const taxAmount = subtotal * 0.15
-  const total = subtotal + taxAmount
+
+  // Descuento por canje de premio (porcentaje o monto fijo, capado al subtotal)
+  const rewardDiscount = useMemo(() => {
+    if (!redeemedReward) return 0
+    return parseRewardDiscount(redeemedReward, subtotal)
+  }, [redeemedReward, subtotal])
+
+  const discountedSubtotal = subtotal - rewardDiscount
+  const taxAmount = discountedSubtotal * 0.15
+  const total = discountedSubtotal + taxAmount
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   const fetchProductsPage = async ({
@@ -268,30 +365,113 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       return
     }
 
+    if (redeemedReward && (!selectedClient || (selectedClient.points || 0) < redeemedReward.points_cost)) {
+      toast.error("El cliente no tiene puntos suficientes para ese canje")
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
       const paymentLabel = paymentOptions.find((option) => option.id === paymentMethod)?.label || "Efectivo"
+
+      const orderItems = cartItems.map((item) => ({
+        product_id: item.productId,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: item.price * item.quantity,
+      })) as any[]
+
+      if (redeemedReward && rewardDiscount > 0) {
+        orderItems.push({
+          product_id: null,
+          name: `🎁 Canje: ${redeemedReward.name} (${redeemedReward.points_cost} pts)`,
+          quantity: 1,
+          price: -Number(rewardDiscount.toFixed(2)),
+          subtotal: -Number(rewardDiscount.toFixed(2)),
+        })
+      }
+
       const { error } = await supabase
         .from("orders")
         .insert({
           user_id: userId,
           client_id: selectedClient?.id || null,
           status: status,
-          items: cartItems.map((item) => ({
-            product_id: item.productId,
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-            subtotal: item.price * item.quantity,
-          })),
+          items: orderItems,
           total_amount: Number(total.toFixed(2)),
           delivery_phone: selectedClient?.phone || selectedClient?.instagram_username || "venta-local",
-          customer_notes: `Venta generada desde Punto de venta. Metodo de pago: ${paymentLabel}`,
+          customer_notes: `Venta generada desde Punto de venta. Metodo de pago: ${paymentLabel}${redeemedReward ? `. Canje: ${redeemedReward.name}` : ""}`,
+          source: "pos",
         })
 
       if (error) {
         throw error
+      }
+
+      // Procesar puntos de fidelidad (no bloquea la venta si falla)
+      if (selectedClient) {
+        try {
+          let pointsDelta = 0
+          const txInserts: any[] = []
+
+          if (redeemedReward) {
+            pointsDelta -= redeemedReward.points_cost
+            txInserts.push({
+              user_id: userId,
+              client_id: selectedClient.id,
+              transaction_type: "redeemed",
+              points_amount: -redeemedReward.points_cost,
+              description: `Canje: ${redeemedReward.name} (Punto de venta)`,
+            })
+            // Descontar stock del premio si está limitado
+            if (redeemedReward.current_stock !== null) {
+              await supabase
+                .from("rewards")
+                .update({ current_stock: Math.max(0, redeemedReward.current_stock - 1) })
+                .eq("id", redeemedReward.id)
+            }
+          }
+
+          if (loyaltySettings?.is_active && loyaltySettings.points_per_unit > 0 && discountedSubtotal > 0) {
+            const earned = Math.floor(discountedSubtotal / Number(loyaltySettings.unit_amount)) * loyaltySettings.points_per_unit
+            if (earned > 0) {
+              pointsDelta += earned
+              txInserts.push({
+                user_id: userId,
+                client_id: selectedClient.id,
+                transaction_type: "earned",
+                points_amount: earned,
+                description: `Compra en Punto de venta (${formatCurrency(discountedSubtotal)})`,
+              })
+            }
+          }
+
+          if (txInserts.length > 0) {
+            await supabase.from("points_transactions").insert(txInserts)
+            const newPoints = Math.max(0, (selectedClient.points || 0) + pointsDelta)
+            await supabase
+              .from("clients")
+              .update({
+                points: newPoints,
+                total_purchases: (selectedClient.total_purchases || 0) + 1,
+                last_interaction_at: new Date().toISOString(),
+              })
+              .eq("id", selectedClient.id)
+
+            if (pointsDelta !== 0) {
+              toast.success(
+                pointsDelta > 0
+                  ? `+${pointsDelta} puntos para ${selectedClient.name} (total: ${newPoints})`
+                  : `Canje aplicado. Saldo de ${selectedClient.name}: ${newPoints} puntos`
+              )
+            }
+          }
+        } catch (loyaltyError) {
+          console.error("Error processing loyalty points:", loyaltyError)
+          toast.warning("La venta se registró, pero hubo un error actualizando los puntos")
+        }
       }
 
       toast.success(status === "completed" ? "Venta registrada como finalizada" : "Pedido pasado correctamente")
@@ -299,6 +479,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       setSelectedClient(null)
       setClientSearch("")
       setPaymentMethod("cash")
+      setRedeemedReward(null)
       setIsCartOpen(false)
     } catch (error) {
       console.error("Error creating POS order:", error)
@@ -442,6 +623,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#d8ff55]">Cliente</p>
                     </div>
                     <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setScannerOpen(true)}
+                        className="flex items-center gap-1.5 rounded-full bg-[#d8ff55]/15 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#d8ff55] transition-colors hover:bg-[#d8ff55]/25"
+                      >
+                        <QrCode className="h-3.5 w-3.5" />
+                        Escanear
+                      </button>
                       <Link href="/dashboard/clientes" className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60 hover:text-white transition-colors">
                         Crear nuevo
                       </Link>
@@ -474,9 +663,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       </Avatar>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold">{selectedClient.name}</p>
-                        <p className="truncate text-xs text-white/55">{getClientHandle(selectedClient)}</p>
+                        <p className="truncate text-xs text-white/55">
+                          {getClientHandle(selectedClient)} · ⭐ {selectedClient.points || 0} pts
+                        </p>
                       </div>
-                      <button type="button" onClick={() => setSelectedClient(null)}>
+                      <button type="button" onClick={() => { setSelectedClient(null); setRedeemedReward(null) }}>
                         <X className="h-4 w-4 text-white/45" />
                       </button>
                     </div>
@@ -563,6 +754,49 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
                 </div>
 
+                {/* Canje de premios */}
+                {selectedClient && rewards.length > 0 && (
+                  <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
+                    <div className="mb-3 flex items-center gap-2">
+                      <Gift className="h-4 w-4 text-slate-400" />
+                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Canjear premio</p>
+                    </div>
+                    <div className="space-y-2">
+                      {rewards.map((reward) => {
+                        const affordable = (selectedClient.points || 0) >= reward.points_cost
+                        const isRedeeming = redeemedReward?.id === reward.id
+                        return (
+                          <button
+                            key={reward.id}
+                            type="button"
+                            disabled={!affordable}
+                            onClick={() => setRedeemedReward(isRedeeming ? null : reward)}
+                            className={cn(
+                              "flex w-full items-center gap-3 rounded-[1.25rem] border p-3 text-left transition-all",
+                              isRedeeming
+                                ? "border-transparent bg-[#1f2030] text-[#d8ff55]"
+                                : affordable
+                                  ? "border-slate-200 dark:border-border bg-white dark:bg-card hover:border-slate-300"
+                                  : "border-slate-100 dark:border-border/50 bg-white/60 dark:bg-card/50 opacity-50 cursor-not-allowed"
+                            )}
+                          >
+                            <span className="text-lg flex-shrink-0">{isRedeeming ? "✅" : affordable ? "🎁" : "🔒"}</span>
+                            <div className="min-w-0 flex-1">
+                              <p className={cn("truncate text-sm font-semibold", !isRedeeming && "text-slate-800 dark:text-foreground")}>
+                                {reward.name}
+                              </p>
+                              <p className={cn("text-xs", isRedeeming ? "text-[#d8ff55]/70" : "text-slate-400")}>
+                                {reward.points_cost.toLocaleString("es-AR")} puntos
+                                {reward.reward_value ? ` · ${reward.reward_value}` : ""}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
                   <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
                   <div className="grid grid-cols-2 gap-3">
@@ -595,6 +829,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       <span>Subtotal</span>
                       <span className="font-semibold text-slate-700 dark:text-foreground">{formatCurrency(subtotal)}</span>
                     </div>
+                    {rewardDiscount > 0 && redeemedReward && (
+                      <div className="flex items-center justify-between text-emerald-600">
+                        <span className="truncate pr-2">🎁 {redeemedReward.name}</span>
+                        <span className="font-semibold">-{formatCurrency(rewardDiscount)}</span>
+                      </div>
+                    )}
                     <div className="flex items-center justify-between">
                       <span>Impuestos (15%)</span>
                       <span className="font-semibold text-slate-700 dark:text-foreground">{formatCurrency(taxAmount)}</span>
@@ -632,6 +872,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           </div>
         </aside>
       </div>
+
+      <LoyaltyScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onScan={handleCardScan} />
 
       {!isCartOpen && cartItems.length > 0 && (
         <button

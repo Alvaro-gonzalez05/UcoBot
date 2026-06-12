@@ -26,6 +26,7 @@ const DEFAULT_SIDEBAR_SECTIONS = [
   { id: "chat",            label: "Mensajes",         icon: "chat_bubble" },
   { id: "clientes",        label: "Clientes",         icon: "group" },
   { id: "punto-de-venta",  label: "Punto de venta",   icon: "point_of_sale" },
+  { id: "finanzas",        label: "Finanzas",          icon: "account_balance_wallet" },
   { id: "pedidos",         label: "Pedidos",           icon: "shopping_cart" },
   { id: "reservas",        label: "Reservas",          icon: "calendar_month" },
   { id: "formularios",     label: "Formularios",       icon: "description" },

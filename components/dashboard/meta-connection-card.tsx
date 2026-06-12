@@ -13,10 +13,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { CheckCircle2, Loader2, Link2, AlertCircle, RefreshCw, Instagram, Settings2, Copy } from "lucide-react"
-import { FaWhatsapp } from "react-icons/fa"
+import { FaWhatsapp, FaFacebookMessenger } from "react-icons/fa"
 import { toast } from "sonner"
 
-type Platform = "whatsapp" | "instagram"
+type Platform = "whatsapp" | "instagram" | "messenger"
 
 interface MetaConnectionCardProps {
   platform: Platform
@@ -304,7 +304,7 @@ export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
     fetchStatus()
   }, [platform])
 
-  // Mostrar feedback si el callback de Instagram volvió con error o éxito
+  // Mostrar feedback si el callback de Instagram/Messenger volvió con error o éxito
   useEffect(() => {
     if (typeof window === "undefined") return
     const params = new URLSearchParams(window.location.search)
@@ -314,6 +314,13 @@ export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
       fetchStatus()
     } else if (params.get("ig_error")) {
       toast.error(`No se pudo conectar Instagram: ${params.get("ig_error")}`)
+      window.history.replaceState({}, "", window.location.pathname)
+    } else if (params.get("msgr_connected") === "1") {
+      toast.success("Messenger conectado correctamente")
+      window.history.replaceState({}, "", window.location.pathname)
+      fetchStatus()
+    } else if (params.get("msgr_error")) {
+      toast.error(`No se pudo conectar Messenger: ${params.get("msgr_error")}`)
       window.history.replaceState({}, "", window.location.pathname)
     }
   }, [])
@@ -427,18 +434,54 @@ export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
     window.location.href = url
   }
 
+  const connectMessenger = () => {
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID
+    if (!appId) {
+      toast.error("Falta NEXT_PUBLIC_META_APP_ID en la configuración del servidor")
+      return
+    }
+    const redirectUri = `${window.location.origin}/api/auth/meta/messenger/callback`
+    const scope = [
+      "pages_show_list",
+      "pages_manage_metadata",
+      "pages_messaging",
+      "business_management",
+    ].join(",")
+
+    const url =
+      `https://www.facebook.com/${FB_SDK_VERSION}/dialog/oauth?` +
+      new URLSearchParams({
+        client_id: appId,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope,
+      }).toString()
+
+    window.location.href = url
+  }
+
   const handleConnect = () => {
     if (platform === "whatsapp") return connectWhatsApp()
+    if (platform === "messenger") return connectMessenger()
     return connectInstagram()
   }
 
-  const PlatformIcon = platform === "whatsapp" ? FaWhatsapp : Instagram
-  const platformColor = platform === "whatsapp" ? "text-emerald-500" : "text-pink-500"
+  const PlatformIcon =
+    platform === "whatsapp" ? FaWhatsapp : platform === "messenger" ? FaFacebookMessenger : Instagram
+  const platformColor =
+    platform === "whatsapp"
+      ? "text-emerald-500"
+      : platform === "messenger"
+        ? "text-blue-500"
+        : "text-pink-500"
   const platformBgGradient =
     platform === "whatsapp"
       ? "from-emerald-500/10 to-emerald-500/5"
-      : "from-pink-500/10 to-purple-500/5"
-  const platformLabel = platform === "whatsapp" ? "WhatsApp Business" : "Instagram"
+      : platform === "messenger"
+        ? "from-blue-500/10 to-blue-500/5"
+        : "from-pink-500/10 to-purple-500/5"
+  const platformLabel =
+    platform === "whatsapp" ? "WhatsApp Business" : platform === "messenger" ? "Messenger" : "Instagram"
 
   const isConnected = status?.connected === true
 
@@ -547,7 +590,9 @@ export function MetaConnectionCard({ platform }: MetaConnectionCardProps) {
           <span>
             {platform === "whatsapp"
               ? "Se abrirá el flujo oficial de Meta para conectar tu número de WhatsApp Business."
-              : "Se abrirá Facebook Login para autorizar el acceso a tu cuenta de Instagram Business."}
+              : platform === "messenger"
+                ? "Se abrirá Facebook Login para autorizar el acceso a tu página de Facebook."
+                : "Se abrirá Facebook Login para autorizar el acceso a tu cuenta de Instagram Business."}
           </span>
         </p>
       )}

@@ -744,6 +744,62 @@ MANEJO DE CONTEXTO - MUY IMPORTANTE:
     // Define features for use in template
     const features = bot.features || []
 
+    // Programa de fidelidad: saldo del cliente, premios y link de su tarjeta digital
+    let loyaltyInfo = ''
+    if (features.includes('loyalty_points')) {
+      try {
+        let loyaltyClient: any = null
+        if (conversation.client_id) {
+          const { data } = await supabase
+            .from('clients')
+            .select('id, points, loyalty_code')
+            .eq('id', conversation.client_id)
+            .maybeSingle()
+          loyaltyClient = data
+        } else if (senderPhone) {
+          const variations = [senderPhone]
+          if (senderPhone.startsWith('549')) {
+            variations.push(senderPhone.substring(3))
+            variations.push('54' + senderPhone.substring(3))
+          }
+          const { data } = await supabase
+            .from('clients')
+            .select('id, points, loyalty_code')
+            .eq('user_id', bot.user_id)
+            .in('phone', variations)
+            .maybeSingle()
+          loyaltyClient = data
+        }
+
+        const { data: activeRewards } = await supabase
+          .from('rewards')
+          .select('name, points_cost')
+          .eq('user_id', bot.user_id)
+          .eq('is_active', true)
+          .order('points_cost', { ascending: true })
+          .limit(10)
+
+        const loyaltyBaseUrl = process.env.NEXTAUTH_URL ||
+          (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+        const rewardsList = (activeRewards || [])
+          .map((r: any) => `  • ${r.name}: ${r.points_cost} puntos`)
+          .join('\n')
+
+        loyaltyInfo = `PROGRAMA DE FIDELIDAD:
+${loyaltyClient
+  ? `- Puntos actuales del cliente: ${loyaltyClient.points || 0}
+- Link de SU tarjeta digital personal: ${loyaltyBaseUrl}/tarjeta/${loyaltyClient.loyalty_code}`
+  : '- El cliente todavía no está registrado en el programa (se registra automáticamente al guardar sus datos).'}
+${rewardsList ? `- Premios canjeables:\n${rewardsList}` : '- Todavía no hay premios cargados.'}
+- Si pregunta por sus puntos: decile el saldo exacto y compartile el link de su tarjeta.
+- Si quiere canjear un premio: explicale que el canje se hace en el local mostrando el QR de su tarjeta.
+- Si le faltan puntos para un premio, decile cuántos le faltan (motiva a volver a comprar).
+- NUNCA inventes saldos ni premios que no estén en esta lista.`
+      } catch (loyaltyError) {
+        console.error('Error building loyalty info:', loyaltyError)
+      }
+    }
+
     const systemPrompt = `Eres ${bot.name}, un asistente virtual amigable y profesional que representa a un negocio.
 
 FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
@@ -770,6 +826,7 @@ ${productsInfo}
 ${deliveryModesInfo}
 
 ${formsInfo ? formsInfo + '\n' : ''}
+${loyaltyInfo ? loyaltyInfo + '\n' : ''}
 INFORMACIÓN DEL CLIENTE ACTUAL:
 ${(() => {
   const currentPlatform = platform || conversation.platform
@@ -1214,7 +1271,8 @@ async function saveOrderFromAI(
         delivery_phone: senderPhone || conversation.client_phone,
         status: 'pending',
         order_type: orderData.orderType || 'pickup',
-        tags: tags
+        tags: tags,
+        source: 'bot'
       });
 
     if (!error) {
@@ -1468,7 +1526,8 @@ Si no hay pedido completo, responde: NO_ORDER
                 customer_notes: orderData.notes,
                 delivery_address: orderData.deliveryAddress,
                 delivery_phone: senderPhone || orderData.customerPhone || conversation.client_phone,
-                status: 'pending'
+                status: 'pending',
+                source: 'bot'
               })
 
             if (!error) {

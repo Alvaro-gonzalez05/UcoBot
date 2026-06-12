@@ -76,6 +76,7 @@ UCOBOT — LO QUE TIENE HOY:
 - CRM interno con historial, etiquetas y datos de contacto
 - Agenda de citas/reservas, pedidos y solicitudes estructuradas
 - Catálogo de productos/servicios, punto de venta, formularios conversacionales
+- Finanzas: ingresos, gastos y ganancia neta integrada con las ventas del bot y del punto de venta
 - Puntos de fidelización, promociones, automatizaciones post-conversación
 - Calificación de leads, alertas y derivación a humano
 

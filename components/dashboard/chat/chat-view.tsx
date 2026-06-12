@@ -45,6 +45,7 @@ interface Conversation {
   client_name: string
   client_phone: string
   client_instagram_id?: string
+  client_messenger_id?: string
   platform: string
   last_message_at: string
   status: string
@@ -861,9 +862,11 @@ export function ChatView({ userId }: ChatViewProps) {
     setReplyingTo(null)
 
     // Determine recipient ID based on platform
-    const recipientId = selectedConversation.platform === 'instagram' 
-      ? selectedConversation.client_instagram_id 
-      : selectedConversation.client_phone
+    const recipientId = selectedConversation.platform === 'instagram'
+      ? selectedConversation.client_instagram_id
+      : selectedConversation.platform === 'messenger'
+        ? selectedConversation.client_messenger_id
+        : selectedConversation.client_phone
 
     if (!recipientId) {
       toast.error("Error", {

@@ -295,9 +295,10 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
       const { data: bot, error: botError } = await supabase
         .from('bots')
         .select('*')
-        .eq('platform', 'instagram')
+        .contains('platforms', ['instagram'])
         .eq('user_id', integration.user_id)
-        .single()
+        .limit(1)
+        .maybeSingle()
 
       if (botError || !bot) {
         console.error('Error fetching bot for integration:', botError)
@@ -626,7 +627,7 @@ async function processInstagramComment(commentData: any, request: NextRequest) {
     `)
     .eq('trigger_type', 'comment_reply')
     .eq('is_active', true)
-    .eq('bots.platform', 'instagram')
+    .contains('bots.platforms', ['instagram'])
 
   if (!automations || automations.length === 0) {
     console.log('📸 No comment reply automations found')

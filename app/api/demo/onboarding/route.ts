@@ -24,6 +24,7 @@ UCOBOT — QUÉ ES Y QUÉ PUEDE HACER (lista completa de funcionalidades):
 - Toma de pedidos y solicitudes estructuradas (consultas, cotizaciones, presupuestos)
 - Catálogo de productos/servicios con precios que el bot usa para responder y vender
 - Punto de venta para registrar ventas directas de mostrador o para llevar
+- Finanzas: registro de ingresos y gastos del negocio, con ganancia neta calculada automáticamente sobre las ventas del bot y del punto de venta
 - Formularios conversacionales: el bot RECOPILA DATOS específicos del cliente mediante chat natural (registros, fichas, preferencias, encuestas, calificaciones)
 - Puntos de fidelización por compras (ideal para consumo frecuente)
 - Calificación automática de leads con tags (Lead Caliente/Frío, Inversor, Comprador Final, etc.)

@@ -31,6 +31,7 @@ LO QUE UCOBOT TIENE HOY:
 - Bandeja de pedidos y solicitudes estructuradas
 - Catálogo de productos/servicios interno (accesible desde Pedidos)
 - Punto de venta para negocios de venta directa
+- Finanzas: registro de ingresos y gastos, ganancia neta calculada con las ventas del bot y del punto de venta
 - Formularios conversacionales (el bot completa formularios mediante chat)
 - Sistema de promociones para campañas activas
 - Automatizaciones internas post-conversación
@@ -112,6 +113,13 @@ Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código)
       "justification": "1 oración concreta de si este negocio hace ventas directas de mostrador o punto de venta"
     },
     {
+      "id": "finanzas",
+      "label": "Finanzas",
+      "visible": true si el negocio registra ventas o quiere controlar gastos y ganancias (la mayoría de los negocios con facturación frecuente: comercios, restaurantes, e-commerce, servicios con muchos clientes). false solo para casos donde el dinero no pasa por la operación diaria del bot (ej: instituciones sin fines de lucro, áreas internas de empresas).,
+      "icon": "Wallet",
+      "justification": "1 oración concreta de qué controlaría este negocio en finanzas (gastos fijos, ganancia por canal de venta, etc.)"
+    },
+    {
       "id": "forms",
       "label": "Formularios",
       "visible": true si el negocio necesita recopilar datos estructurados de sus clientes mediante conversación (calificaciones de lead, registros de interés, encuestas, fichas de paciente, etc.),
@@ -129,7 +137,7 @@ Respondé ÚNICAMENTE con un JSON válido (sin markdown, sin bloques de código)
 }
 
 REGLAS CRÍTICAS PARA sidebar_config:
-- Los labels de "clients", "punto_de_venta", "forms" y "promotions" son FIJOS — no los cambies, respetá exactamente los valores del template.
+- Los labels de "clients", "punto_de_venta", "finanzas", "forms" y "promotions" son FIJOS — no los cambies, respetá exactamente los valores del template.
 - Solo "reservations" y "orders" tienen labels variables — elegí UNA palabra o término corto apropiado al rubro.
 - "visible": true SOLO si la funcionalidad es CENTRAL al negocio y se usaría a diario.
 - Ante la duda sobre visible, preferí false.

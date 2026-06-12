@@ -70,10 +70,11 @@ export async function POST(request: NextRequest) {
 
     const integration = integrations[0]
 
-    // WhatsApp: prefer app-level System Token (Embedded Signup). Fallback to per-client token (legacy).
-    // Instagram: per-client Page Access Token (Facebook Login flow gives this per user).
+    // WhatsApp: token propio del cliente primero (configuración manual / legacy);
+    // el System Token solo sirve para WABAs conectados vía Embedded Signup.
+    // Instagram/Messenger: Page Access Token por cliente (Facebook Login).
     const accessToken = platform === 'whatsapp'
-      ? (process.env.WHATSAPP_SYSTEM_TOKEN || integration.config?.access_token)
+      ? (integration.config?.access_token || process.env.WHATSAPP_SYSTEM_TOKEN)
       : integration.config?.access_token
 
     if (!accessToken) {
@@ -119,6 +120,12 @@ export async function POST(request: NextRequest) {
         sendPromise = sendWhatsAppMessage(accessToken, phoneNumberId, to, message, replyToId)
     } else if (platform === 'instagram') {
         sendPromise = sendInstagramMessage(accessToken, to, message)
+    } else if (platform === 'messenger') {
+        const pageId = integration.config?.page_id
+        if (!pageId) {
+             return NextResponse.json({ error: 'Invalid Messenger configuration' }, { status: 500 })
+        }
+        sendPromise = sendMessengerMessage(accessToken, pageId, to, message)
     } else {
         console.error('Unsupported platform:', platform)
         return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 })
@@ -241,6 +248,39 @@ async function sendWhatsAppMessage(
     console.error('Error sending WhatsApp message:', error)
     return { success: false, error: 'Network error' }
   }
+}
+
+async function sendMessengerMessage(accessToken: string, pageId: string, recipientId: string, message: string) {
+    try {
+        const version = getGraphVersion();
+
+        console.log(`Sending Messenger message to ${recipientId} via page ${pageId}`);
+
+        const response = await fetch(`https://graph.facebook.com/${version}/${pageId}/messages`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                recipient: { id: recipientId },
+                messaging_type: 'RESPONSE',
+                message: { text: message }
+            })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+            console.error('Messenger API Error:', JSON.stringify(data, null, 2))
+            return { success: false, error: data.error?.message || 'Unknown error' }
+        }
+
+        return { success: true, messageId: data.message_id }
+    } catch (error) {
+        console.error('Error sending Messenger message:', error)
+        return { success: false, error: 'Network error' }
+    }
 }
 
 async function sendInstagramMessage(accessToken: string, recipientId: string, message: string) {

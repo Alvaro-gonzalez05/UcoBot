@@ -95,9 +95,9 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
     // 1. Obtener los bots de WhatsApp
     let query = supabase
       .from('bots')
-      .select('id, name, platform, user_id')
+      .select('id, name, platform, platforms, user_id')
       .eq('user_id', userId)
-      .eq('platform', 'whatsapp')
+      .contains('platforms', ['whatsapp'])
       .eq('is_active', true)
 
     if (botId) {
@@ -121,7 +121,11 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
     const integrationConfig = integration?.config
     const whatsappToken = getWhatsAppToken(integration)
 
-    if (!integrationConfig?.business_account_id || !whatsappToken) {
+    // Integraciones nuevas (Embedded Signup / manual) guardan waba_id;
+    // las legacy guardaban business_account_id.
+    const wabaId = integrationConfig?.waba_id || integrationConfig?.business_account_id
+
+    if (!wabaId || !whatsappToken) {
       console.log('Missing WhatsApp integration configuration')
       return []
     }
@@ -135,7 +139,7 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
     try {
       // Llamar a Meta Graph API para obtener message templates
       const response = await fetch(
-        `https://graph.facebook.com/${getGraphVersion()}/${integrationConfig.business_account_id}/message_templates?fields=name,status,language,category,components,quality_score`,
+        `https://graph.facebook.com/${getGraphVersion()}/${wabaId}/message_templates?fields=name,status,language,category,components,quality_score`,
         {
           headers: {
             'Authorization': `Bearer ${whatsappToken}`,
@@ -282,9 +286,9 @@ async function fetchInstagramTemplates(supabase: any, userId: string, botId?: st
     // Obtener configuraciones de Instagram del usuario desde la tabla bots
     let query = supabase
       .from('bots')
-      .select('id, name, platform, integrations')
+      .select('id, name, platform, platforms, integrations')
       .eq('user_id', userId)
-      .eq('platform', 'instagram')
+      .contains('platforms', ['instagram'])
       .eq('is_active', true)
 
     if (botId) {

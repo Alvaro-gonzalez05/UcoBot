@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { MultiStepBotCreation } from "./multi-step-bot-creation"
 import { MetaConnectionCard } from "./meta-connection-card"
+import { WhatsAppTemplatesManager } from "./whatsapp-templates-manager"
 import {
   Plus,
   Bot,
@@ -46,12 +47,14 @@ import {
 } from "lucide-react"
 import { ScrollFadeIn, ScrollSlideUp, ScrollStaggeredChildren, ScrollStaggerChild, ScrollScaleIn } from "@/components/ui/scroll-animations"
 import { motion, AnimatePresence } from "framer-motion"
-import { FaWhatsapp } from "react-icons/fa"
+import { FaWhatsapp, FaFacebookMessenger } from "react-icons/fa"
+import { cn } from "@/lib/utils"
 
 interface BotData {
   id: string
   name: string
-  platform: "whatsapp" | "instagram" | "email"
+  platform: "whatsapp" | "instagram" | "messenger" | "email"
+  platforms?: string[]
   personality_prompt?: string
   features: string[]
   allowed_tags?: string[]
@@ -71,14 +74,19 @@ interface BotsManagementProps {
 const platformIcons = {
   whatsapp: FaWhatsapp,
   instagram: Instagram,
+  messenger: FaFacebookMessenger,
   email: Mail,
 }
 
 const platformLabels = {
   whatsapp: "WhatsApp",
   instagram: "Instagram",
-  email: "Email",
+  messenger: "Messenger",
+  email: "Email", // solo para mostrar bots legacy; no es seleccionable
 }
+
+// Canales que se pueden conectar hoy (email todavía no tiene integración)
+const selectableChannels = ["whatsapp", "instagram", "messenger"] as const
 
 const availableFeatures = [
   { id: "take_orders", label: "Tomar pedidos", description: "El bot puede registrar pedidos del catálogo de productos." },
@@ -140,7 +148,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   // Form state
   const [formData, setFormData] = useState({
     name: "",
-    platform: "" as "whatsapp" | "instagram" | "email" | "",
+    platform: "" as "whatsapp" | "instagram" | "messenger" | "email" | "",
+    platforms: [] as string[],
     personality_prompt: "",
     features: [] as string[],
     allowed_tags: [] as string[],
@@ -153,12 +162,25 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
     setFormData({
       name: "",
       platform: "",
+      platforms: [],
       personality_prompt: "",
       features: [],
       allowed_tags: [],
       automations: [],
       gemini_api_key: "",
       is_active: false,
+    })
+  }
+
+  const handlePlatformToggle = (platformId: string, checked: boolean) => {
+    const next = checked
+      ? [...formData.platforms, platformId]
+      : formData.platforms.filter((p) => p !== platformId)
+    setFormData({
+      ...formData,
+      platforms: next,
+      // `platform` (legacy) siempre refleja el primer canal para compatibilidad
+      platform: (next[0] || "") as typeof formData.platform,
     })
   }
 
@@ -208,7 +230,12 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
     setIsLoading(true)
 
     try {
-      const { data, error } = await supabase.from("bots").update(formData).eq("id", selectedBot.id).select().single()
+      const payload = {
+        ...formData,
+        platforms: formData.platforms,
+        platform: formData.platforms[0] || formData.platform,
+      }
+      const { data, error } = await supabase.from("bots").update(payload).eq("id", selectedBot.id).select().single()
 
       if (error) throw error
 
@@ -287,6 +314,7 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
     setFormData({
       name: bot.name,
       platform: bot.platform,
+      platforms: bot.platforms?.length ? bot.platforms : bot.platform ? [bot.platform] : [],
       personality_prompt: bot.personality_prompt || "",
       features: bot.features || [],
       allowed_tags: bot.allowed_tags || [],
@@ -384,7 +412,10 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                   ? <span className="text-green-500 font-semibold">● Activo</span>
                   : <span className="text-muted-foreground">● Inactivo</span>
                 }
-                {" · "}{platformLabels[formData.platform as keyof typeof platformLabels] || formData.platform}
+                {" · "}
+                {formData.platforms.length > 0
+                  ? formData.platforms.map((p) => platformLabels[p as keyof typeof platformLabels] || p).join(" + ")
+                  : platformLabels[formData.platform as keyof typeof platformLabels] || formData.platform}
               </p>
             </div>
           </div>
@@ -416,22 +447,35 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="edit-page-platform" className="input-label font-medium">Plataforma *</Label>
-                <Select
-                  value={formData.platform}
-                  onValueChange={(value: "whatsapp" | "instagram" | "email") =>
-                    setFormData({ ...formData, platform: value })
-                  }
-                >
-                  <SelectTrigger id="edit-page-platform" className="input-field">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                    <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="email">Email</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="input-label font-medium">Canales *</Label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {selectableChannels.map((platformId) => {
+                    const Icon = platformIcons[platformId]
+                    const checked = formData.platforms.includes(platformId)
+                    return (
+                      <label
+                        key={platformId}
+                        className={cn(
+                          "flex items-center gap-2 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors text-sm font-medium",
+                          checked
+                            ? "border-[#D1F366] bg-[#D1F366]/10"
+                            : "border-border/60 hover:border-border bg-muted/20"
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(c) => handlePlatformToggle(platformId, c === true)}
+                          className="flex-shrink-0"
+                        />
+                        <Icon className={cn("w-4 h-4 flex-shrink-0", checked ? "text-[#D1F366]" : "text-muted-foreground")} />
+                        <span className="truncate">{platformLabels[platformId]}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  El mismo bot atiende todos los canales que selecciones, con la misma personalidad.
+                </p>
               </div>
             </div>
           </div>
@@ -448,9 +492,15 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                 />
               </div>
               <div className="pt-2 border-t border-border/50 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Plataforma</span>
-                  <Badge variant="outline">{platformLabels[formData.platform as keyof typeof platformLabels] || formData.platform}</Badge>
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="text-muted-foreground">Canales</span>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    {(formData.platforms.length > 0 ? formData.platforms : [formData.platform]).filter(Boolean).map((p) => (
+                      <Badge key={p} variant="outline" className="text-[10px]">
+                        {platformLabels[p as keyof typeof platformLabels] || p}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Funcionalidades</span>
@@ -463,9 +513,13 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
               </div>
             </div>
 
-            {(formData.platform === "whatsapp" || formData.platform === "instagram") && (
-              <MetaConnectionCard platform={formData.platform as "whatsapp" | "instagram"} />
-            )}
+            {formData.platforms
+              .filter((p): p is "whatsapp" | "instagram" | "messenger" =>
+                p === "whatsapp" || p === "instagram" || p === "messenger"
+              )
+              .map((p) => (
+                <MetaConnectionCard key={p} platform={p} />
+              ))}
           </div>
 
           {/* Fila 2: Personalidad (col 3 vacía) */}
@@ -687,6 +741,13 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             <p className="text-xs text-muted-foreground text-center mt-3">Los cambios se aplican inmediatamente</p>
           </div>
 
+          {/* Fila 5: Plantillas de WhatsApp — bento grid full width */}
+          {formData.platforms.includes("whatsapp") && (
+            <div className="lg:col-span-3">
+              <WhatsAppTemplatesManager />
+            </div>
+          )}
+
         </div>
       </div>
     )
@@ -876,7 +937,11 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                     <Badge variant={bot.is_active ? "default" : "secondary"} className="text-xs">
                       {bot.is_active ? "Activo" : "Inactivo"}
                     </Badge>
-                    <Badge variant="outline" className="text-xs">{platformLabels[bot.platform]}</Badge>
+                    {(bot.platforms?.length ? bot.platforms : [bot.platform]).map((p) => (
+                      <Badge key={p} variant="outline" className="text-xs">
+                        {platformLabels[p as keyof typeof platformLabels] || p}
+                      </Badge>
+                    ))}
                   </div>
 
                   <div className="space-y-2">

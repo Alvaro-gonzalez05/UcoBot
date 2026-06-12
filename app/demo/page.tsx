@@ -44,6 +44,7 @@ const MATERIAL_ICON_MAP: Record<string, string> = {
   promotions:     "local_offer",
   forms:          "description",
   punto_de_venta: "point_of_sale",
+  finanzas:       "account_balance_wallet",
 }
 
 // Lucide icon names — must match SIDEBAR_ICONS in [sessionId]/page.tsx
@@ -54,6 +55,7 @@ const LUCIDE_ICON_MAP: Record<string, string> = {
   promotions:     "Tag",
   forms:          "FileText",
   punto_de_venta: "Package",
+  finanzas:       "Wallet",
 }
 
 const WELCOME_CHIPS = [

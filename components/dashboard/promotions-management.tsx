@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { LoyaltySettingsCard } from "@/components/loyalty/loyalty-settings-card"
 import { toast } from "sonner"
 import { Plus, Gift, Percent, Star, Users, MoreVertical, Trash2, Play, Pause, Award, Loader2, X, Tag, Megaphone, Ticket } from "lucide-react"
 
@@ -440,6 +441,7 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
         <TabsContent value="rewards" className="flex-1 overflow-hidden flex flex-col mt-0">
           <h3 className="font-bold text-lg mb-4 flex-shrink-0">Catálogo de Recompensas</h3>
           <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col gap-4 pb-4">
+            <LoyaltySettingsCard userId={userId} />
             {rewards.length === 0 ? (
               <div className="bg-card rounded-3xl border border-border p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 bg-[#D1F366]/20 rounded-2xl flex items-center justify-center mb-4">

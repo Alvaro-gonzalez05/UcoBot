@@ -126,6 +126,7 @@ export async function POST(request: Request) {
       name: demo.bot_name || `${businessName} Bot`,
       is_active: false,
       platform: "whatsapp",
+      platforms: ["whatsapp"],
       features: features,
       personality_prompt: demo.personality_prompt || `Eres el asistente virtual de ${businessName}.`,
       feature_config: demo.feature_config || {},

@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const { data: bot } = await supabase
       .from('bots')
       .select('id')
-      .eq('platform', 'whatsapp')
+      .contains('platforms', ['whatsapp'])
       .eq('id', token)
       .single()
 
@@ -152,9 +152,10 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         .from('bots')
         .select('*')
         .eq('user_id', integration.user_id)
-        .eq('platform', 'whatsapp')
+        .contains('platforms', ['whatsapp'])
         .eq('is_active', true)
-        .single()
+        .limit(1)
+        .maybeSingle()
 
       // Check user subscription status
       const userProfilePromise = supabase
