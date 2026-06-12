@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import ProfileDropdown from "./ProfileDropdown"
 
 interface MobileBottomBarProps {
   user?: User
@@ -32,7 +33,7 @@ const MORE_ITEMS = [
 ]
 
 // Rutas donde el downbar molesta (pantallas de altura completa con input abajo)
-const HIDDEN_ROUTES = ["/dashboard/chat", "/dashboard/punto-de-venta"]
+const HIDDEN_ROUTES = ["/dashboard/punto-de-venta"]
 
 const glassPanel =
   "bg-white/70 dark:bg-[#1C1C28]/70 backdrop-blur-2xl backdrop-saturate-150 border border-white/40 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.18)]"
@@ -41,7 +42,16 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
   const pathname = usePathname()
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const [isShrunk, setIsShrunk] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const lastScrollRef = useRef(0)
+
+  // El chat avisa cuando hay una conversación abierta (ahí sí se oculta la barra)
+  useEffect(() => {
+    const sync = () => setIsChatOpen(document.body.dataset.chatOpen === "true")
+    sync()
+    window.addEventListener("ucobot:chat-state", sync)
+    return () => window.removeEventListener("ucobot:chat-state", sync)
+  }, [])
 
   // Animación de scroll: bajar achica la barra, subir la agranda
   useEffect(() => {
@@ -66,6 +76,8 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
   }, [pathname])
 
   if (HIDDEN_ROUTES.some((r) => pathname?.startsWith(r))) return null
+  // En Mensajes la barra vive en la lista de conversaciones, pero no dentro de un chat
+  if (pathname?.startsWith("/dashboard/chat") && isChatOpen) return null
 
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname?.startsWith(href)
@@ -189,40 +201,41 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
             </span>
           </button>
 
-          {/* Perfil */}
-          <Link
-            href="/dashboard/configuracion"
-            className="flex flex-col items-center justify-center w-14 py-1 active:scale-90 transition-transform"
-          >
-            {profile?.avatar_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profile.avatar_url}
-                alt="Perfil"
-                className={cn(
-                  "w-7 h-7 rounded-full object-cover border-2",
-                  isActive("/dashboard/configuracion") ? "border-[#D1F366]" : "border-transparent"
-                )}
-              />
-            ) : (
-              <span
-                className={cn(
-                  "w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black border-2",
-                  isActive("/dashboard/configuracion")
-                    ? "bg-[#D1F366] text-[#1C1C28] border-[#D1F366]"
-                    : "bg-black/10 dark:bg-white/15 text-foreground border-transparent"
-                )}
-              >
+          {/* Perfil — abre el mismo dropdown que el header, en versión glass hacia arriba */}
+          {user && profile ? (
+            <ProfileDropdown
+              user={user}
+              profile={profile}
+              position="downbar"
+              trigger={
+                <span className="flex flex-col items-center justify-center w-14 py-1 active:scale-90 transition-transform">
+                  {profile?.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={profile.avatar_url}
+                      alt="Perfil"
+                      className="w-7 h-7 rounded-full object-cover border-2 border-[#D1F366]"
+                    />
+                  ) : (
+                    <span className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black bg-[#D1F366] text-[#1C1C28]">
+                      {initials}
+                    </span>
+                  )}
+                  <span className="text-[9px] font-semibold mt-0.5 text-[#D1F366]">Perfil</span>
+                </span>
+              }
+            />
+          ) : (
+            <Link
+              href="/dashboard/configuracion"
+              className="flex flex-col items-center justify-center w-14 py-1 active:scale-90 transition-transform"
+            >
+              <span className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-black bg-[#D1F366] text-[#1C1C28]">
                 {initials}
               </span>
-            )}
-            <span className={cn(
-              "text-[9px] font-semibold mt-0.5",
-              isActive("/dashboard/configuracion") ? "text-[#D1F366]" : "text-foreground/50"
-            )}>
-              Perfil
-            </span>
-          </Link>
+              <span className="text-[9px] font-semibold mt-0.5 text-[#D1F366]">Perfil</span>
+            </Link>
+          )}
         </motion.nav>
       </div>
     </div>

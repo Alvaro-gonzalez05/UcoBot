@@ -22,9 +22,13 @@ import { useLogoutAnimation } from "@/hooks/use-logout-animation";
 interface ProfileDropdownProps {
   user: User;
   profile: any;
+  /** Dónde vive el trigger: define hacia dónde se abre el panel */
+  position?: "sidebar" | "header" | "downbar";
+  /** Trigger personalizado (ej: el avatar del downbar) */
+  trigger?: React.ReactNode;
 }
 
-export default function ProfileDropdown({ user, profile }: ProfileDropdownProps) {
+export default function ProfileDropdown({ user, profile, position = "sidebar", trigger }: ProfileDropdownProps) {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -81,31 +85,47 @@ export default function ProfileDropdown({ user, profile }: ProfileDropdownProps)
     },
   ];
 
+  const panelPosition =
+    position === "header"
+      ? "right-0 top-full mt-3"
+      : position === "downbar"
+        ? "right-0 bottom-full mb-3"
+        : "left-full bottom-0 ml-3";
+
+  const panelMotionOffset =
+    position === "header" ? { y: -10 } : position === "downbar" ? { y: 10 } : { x: -10 };
+
   return (
     <div className="relative">
-      {/* Trigger Button - Avatar only */}
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold hover:opacity-90 transition-opacity"
-      >
-        {getInitials(profile?.business_name || user.email || "U")}
-      </button>
+      {/* Trigger: avatar por defecto o trigger custom (downbar) */}
+      {trigger ? (
+        <button onClick={() => setIsOpen(!isOpen)} className="block">
+          {trigger}
+        </button>
+      ) : (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold hover:opacity-90 transition-opacity"
+        >
+          {getInitials(profile?.business_name || user.email || "U")}
+        </button>
+      )}
 
       <AnimatePresence>
         {isOpen && (
           <>
             {/* Overlay */}
-            <div 
-              className="fixed inset-0 z-40" 
+            <div
+              className="fixed inset-0 z-40"
               onClick={() => setIsOpen(false)}
             />
-            
+
             <motion.div
-              initial={{ opacity: 0, x: -10, scale: 0.95 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: -10, scale: 0.95 }}
+              initial={{ opacity: 0, scale: 0.95, ...panelMotionOffset }}
+              animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95, ...panelMotionOffset }}
               transition={{ duration: 0.2 }}
-              className="absolute left-full bottom-0 ml-3 z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-white shadow-2xl dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden"
+              className={`absolute ${panelPosition} z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-white/75 dark:bg-[#1C1C28]/80 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.25)] border border-white/40 dark:border-white/10 [&::-webkit-scrollbar]:hidden`}
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
               {/* Profile Header */}

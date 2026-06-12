@@ -298,7 +298,7 @@ export default function NotificationsDropdown({ position = 'sidebar' }: Notifica
               exit={{ opacity: 0, scale: 0.95, ...(position === 'sidebar' ? { x: -10 } : { y: -10 }) }}
               transition={{ duration: 0.2 }}
               className={cn(
-                "absolute z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-xl sm:rounded-2xl bg-white shadow-2xl dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 [&::-webkit-scrollbar]:hidden",
+                "absolute z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-xl sm:rounded-2xl bg-white/75 dark:bg-[#1C1C28]/75 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.25)] border border-white/40 dark:border-white/10 [&::-webkit-scrollbar]:hidden",
                 position === 'sidebar'
                   ? "left-full bottom-0 ml-3"
                   : "right-0 top-full mt-2"

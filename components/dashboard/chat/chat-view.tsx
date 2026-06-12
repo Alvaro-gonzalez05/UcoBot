@@ -242,6 +242,16 @@ export function ChatView({ userId }: ChatViewProps) {
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null)
   const [loyaltyCardType, setLoyaltyCardType] = useState<"points" | "stamps">("points")
 
+  // Avisar al downbar móvil si hay un chat abierto (se oculta solo adentro del chat)
+  useEffect(() => {
+    document.body.dataset.chatOpen = selectedConversation ? "true" : "false"
+    window.dispatchEvent(new Event("ucobot:chat-state"))
+    return () => {
+      document.body.dataset.chatOpen = "false"
+      window.dispatchEvent(new Event("ucobot:chat-state"))
+    }
+  }, [selectedConversation])
+
   // Tipo de tarjeta de fidelización del negocio (para mostrar puntos o visitas)
   useEffect(() => {
     supabase
@@ -1117,7 +1127,7 @@ export function ChatView({ userId }: ChatViewProps) {
           </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
+        <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 md:pb-0">
           <div className="flex flex-col">
             {isLoading ? (
               <div className="p-4 text-center text-muted-foreground">Cargando conversaciones...</div>

@@ -288,7 +288,7 @@ export function MobileHeader({ user, profile }: MobileHeaderProps) {
         <span className="text-sm font-bold">UcoBot</span>
       </div>
       <div className="flex items-center gap-2">
-        {user && profile && <ProfileDropdown user={user} profile={profile} />}
+        {user && profile && <ProfileDropdown user={user} profile={profile} position="header" />}
         <PushNotificationToggle />
         <NotificationsDropdown position="header" />
       </div>
