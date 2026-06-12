@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload } from "lucide-react"
+import { ChatImportWizard } from "./chat-import-wizard"
 import { cn } from "@/lib/utils"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -241,6 +242,7 @@ export function ChatView({ userId }: ChatViewProps) {
   const [isLoadingClientDetails, setIsLoadingClientDetails] = useState(false)
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null)
   const [loyaltyCardType, setLoyaltyCardType] = useState<"points" | "stamps">("points")
+  const [isImportOpen, setIsImportOpen] = useState(false)
 
   // Avisar al downbar móvil si hay un chat abierto (se oculta solo adentro del chat)
   useEffect(() => {
@@ -1116,14 +1118,25 @@ export function ChatView({ userId }: ChatViewProps) {
       {/* Sidebar - Conversation List */}
       <Card className="w-full md:w-1/3 flex flex-col overflow-hidden absolute inset-0 md:static z-10 bg-background rounded-none md:rounded-lg border-0 md:border">
         <div className="p-4 border-b bg-muted/30">
-          <div className="relative">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar conversación..." 
-              className="pl-8" 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar conversación..."
+                className="pl-8"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="icon"
+              className="flex-shrink-0"
+              title="Importar chats de WhatsApp (.txt)"
+              onClick={() => setIsImportOpen(true)}
+            >
+              <Upload className="h-4 w-4" />
+            </Button>
           </div>
         </div>
         
@@ -1620,6 +1633,12 @@ export function ChatView({ userId }: ChatViewProps) {
           </ScrollArea>
         </Card>
       )}
+
+      <ChatImportWizard
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        onImported={() => fetchConversations(0)}
+      />
 
       <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
         <DialogContent>

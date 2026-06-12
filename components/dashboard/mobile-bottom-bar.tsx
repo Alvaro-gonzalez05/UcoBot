@@ -43,7 +43,6 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const [isShrunk, setIsShrunk] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
-  const lastScrollRef = useRef(0)
 
   // El chat avisa cuando hay una conversación abierta (ahí sí se oculta la barra)
   useEffect(() => {
@@ -53,21 +52,28 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
     return () => window.removeEventListener("ucobot:chat-state", sync)
   }, [])
 
-  // Animación de scroll: bajar achica la barra, subir la agranda
+  // Animación de scroll: bajar achica la barra, subir la agranda.
+  // Se escucha en fase de captura para agarrar el scroll de CUALQUIER contenedor
+  // (el main del dashboard, la lista de conversaciones del chat, etc.)
   useEffect(() => {
-    const main = document.getElementById("dashboard-main")
-    if (!main) return
+    const lastPositions = new WeakMap<EventTarget, number>()
 
-    const onScroll = () => {
-      const current = main.scrollTop
-      const delta = current - lastScrollRef.current
+    const onScroll = (e: Event) => {
+      const raw = e.target as HTMLElement | Document
+      const el = raw instanceof Document ? (raw.scrollingElement as HTMLElement | null) : raw
+      if (!el || typeof el.scrollTop !== "number") return
+
+      const current = el.scrollTop
+      const last = lastPositions.get(el) ?? current
+      lastPositions.set(el, current)
+
+      const delta = current - last
       if (Math.abs(delta) < 8) return
       setIsShrunk(delta > 0 && current > 40)
-      lastScrollRef.current = current
     }
 
-    main.addEventListener("scroll", onScroll, { passive: true })
-    return () => main.removeEventListener("scroll", onScroll)
+    document.addEventListener("scroll", onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener("scroll", onScroll, { capture: true })
   }, [])
 
   // Cerrar el panel "Más" al navegar

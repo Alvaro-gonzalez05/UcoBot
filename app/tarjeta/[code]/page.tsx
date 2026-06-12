@@ -1,6 +1,10 @@
 import { createAdminClient } from "@/lib/supabase/server"
 import { LoyaltyCardView } from "@/components/loyalty/loyalty-card-view"
 
+// Sin caché: la tarjeta siempre muestra el saldo y el diseño actuales.
+// (Esta página no usa cookies, así que Next intentaría cachearla como estática.)
+export const dynamic = "force-dynamic"
+
 /**
  * Tarjeta de fidelización pública del cliente final.
  * URL: /tarjeta/[loyalty_code] — sin login (ruta pública en el middleware).

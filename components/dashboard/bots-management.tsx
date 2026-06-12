@@ -96,21 +96,21 @@ const availableFeatures = [
 function highlightPrompt(text: string): string {
   if (!text) return ''
   const inline = (s: string) => s
-    .replace(/\*\*(.+?)\*\*/g, '<span style="color:#4d5c40">**</span><span style="color:#ffffff;font-weight:700">$1</span><span style="color:#4d5c40">**</span>')
-    .replace(/\*([^*\n]+?)\*/g, '<span style="color:#4d5c40">*</span><span style="color:#c2c9b5;font-style:italic">$1</span><span style="color:#4d5c40">*</span>')
-    .replace(/`([^`\n]+?)`/g, '<span style="color:#4d5c40">`</span><span style="color:#D1F366;background:rgba(209,243,102,0.08);border-radius:2px;padding:0 2px">$1</span><span style="color:#4d5c40">`</span>')
+    .replace(/\*\*(.+?)\*\*/g, '<span class="pm-mark">**</span><span class="pm-bold">$1</span><span class="pm-mark">**</span>')
+    .replace(/\*([^*\n]+?)\*/g, '<span class="pm-mark">*</span><span class="pm-italic">$1</span><span class="pm-mark">*</span>')
+    .replace(/`([^`\n]+?)`/g, '<span class="pm-mark">`</span><span class="pm-code">$1</span><span class="pm-mark">`</span>')
   return text.split('\n').map(raw => {
     const e = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     if (e.startsWith('### '))
-      return `<span style="color:#4d5c40">### </span><span style="color:#D1F366;font-weight:700">${inline(e.slice(4))}</span>`
+      return `<span class="pm-mark">### </span><span class="pm-h1">${inline(e.slice(4))}</span>`
     if (e.startsWith('## '))
-      return `<span style="color:#4d5c40">## </span><span style="color:#b4d96b;font-weight:600">${inline(e.slice(3))}</span>`
+      return `<span class="pm-mark">## </span><span class="pm-h2">${inline(e.slice(3))}</span>`
     if (/^\s{2,}- /.test(e))
-      return `<span style="color:#4d5c40">${e.match(/^\s+/)![0]}- </span>${inline(e.replace(/^\s*- /, ''))}`
+      return `<span class="pm-mark">${e.match(/^\s+/)![0]}- </span>${inline(e.replace(/^\s*- /, ''))}`
     if (e.startsWith('- '))
-      return `<span style="color:#D1F366">- </span>${inline(e.slice(2))}`
+      return `<span class="pm-accent">- </span>${inline(e.slice(2))}`
     const nm = e.match(/^(\d+\.) (.+)$/)
-    if (nm) return `<span style="color:#D1F366">${nm[1]} </span>${inline(nm[2])}`
+    if (nm) return `<span class="pm-accent">${nm[1]} </span>${inline(nm[2])}`
     if (e.trim() === '') return ''
     return inline(e)
   }).join('\n')
@@ -460,18 +460,18 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Personalidad del Bot</p>
             {/* Overlay editor: div de resaltado + textarea transparente encima */}
             <div
-              className="relative rounded-xl overflow-hidden"
-              style={{ background: "#0c0e17", border: "1px solid #424939", height: "520px" }}
+              className="prompt-surface relative rounded-xl overflow-hidden"
+              style={{ height: "520px" }}
             >
               <div
                 ref={promptOverlayRef}
                 aria-hidden="true"
-                className="absolute inset-0 p-3 font-mono text-sm pointer-events-none overflow-hidden select-none"
-                style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", color: "#c2c9b5", lineHeight: "1.65", tabSize: 2 }}
+                className="prompt-text absolute inset-0 p-3 font-mono text-sm pointer-events-none overflow-hidden select-none"
+                style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: "1.65", tabSize: 2 }}
                 dangerouslySetInnerHTML={{
                   __html: formData.personality_prompt
                     ? highlightPrompt(formData.personality_prompt)
-                    : '<span style="color:#2e3520">### ROL Y PERSONALIDAD\nActúas como el asistente de [Negocio].\n- **Tono:** Natural y conciso.\n\n### INSTRUCCIONES\n1. Saludá al cliente.\n2. Identificá qué necesita.</span>'
+                    : '<span class="pm-placeholder">### ROL Y PERSONALIDAD\nActúas como el asistente de [Negocio].\n- **Tono:** Natural y conciso.\n\n### INSTRUCCIONES\n1. Saludá al cliente.\n2. Identificá qué necesita.</span>'
                 }}
               />
               <textarea
@@ -484,12 +484,12 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                 }}
                 spellCheck={false}
                 autoComplete="off"
-                className="prompt-editor absolute inset-0 w-full h-full bg-transparent font-mono text-sm p-3 resize-none outline-none overflow-y-auto"
-                style={{ color: "transparent", caretColor: "#D1F366", lineHeight: "1.65", tabSize: 2 }}
+                className="prompt-editor prompt-caret absolute inset-0 w-full h-full bg-transparent font-mono text-sm p-3 resize-none outline-none overflow-y-auto"
+                style={{ color: "transparent", lineHeight: "1.65", tabSize: 2 }}
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              Formato: <code className="text-[#D1F366]/70 text-xs">### Sección</code> · <code className="text-[#D1F366]/70 text-xs">**negrita**</code> · <code className="text-[#D1F366]/70 text-xs">- ítem</code> · <code className="text-[#D1F366]/70 text-xs">1. paso</code> · <code className="text-[#D1F366]/70 text-xs">`código`</code>
+              Formato: <code className="pm-code text-xs">### Sección</code> · <code className="pm-code text-xs">**negrita**</code> · <code className="pm-code text-xs">- ítem</code> · <code className="pm-code text-xs">1. paso</code> · <code className="pm-code text-xs">`código`</code>
             </p>
           </div>
 
@@ -516,7 +516,7 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                   {showApiKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Obtén tu clave en <span className="text-[#D1F366]/80">aistudio.google.com</span></p>
+              <p className="text-xs text-muted-foreground">Obtén tu clave en <span className="underline underline-offset-2">aistudio.google.com</span></p>
             </div>
           </div>
 
