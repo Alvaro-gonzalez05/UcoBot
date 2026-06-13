@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import { Loader2, Upload, FileText, CheckCircle2, AlertCircle, ChevronRight, ChevronLeft, X } from "lucide-react"
 import { toast } from "sonner"
+import JSZip from "jszip"
 import { cn } from "@/lib/utils"
 import {
   parseWhatsAppExport,
@@ -70,45 +71,72 @@ export function ChatImportWizard({ open, onOpenChange, onImported }: ChatImportW
     onOpenChange(value)
   }
 
-  // ── Paso 1: leer y parsear archivos ──────────────────────────────────────
+  // ── Paso 1: leer y parsear archivos (.txt directo o .zip de la exportación) ──
+  const buildDraft = (content: string, fileName: string): ChatDraft | null => {
+    const parsed = parseWhatsAppExport(content, fileName)
+    if (parsed.messages.length === 0) return null
+
+    // Adivinar quién es el cliente: el participante que coincide con el nombre
+    // del archivo, el que parece un teléfono, o el primer remitente del export
+    // (en iOS la línea de cifrado viene atribuida al interlocutor)
+    const byChatName = parsed.chatName
+      ? parsed.participants.find((p) => p.name === parsed.chatName || `~${p.name}` === parsed.chatName)
+      : undefined
+    const byPhone = parsed.participants.find((p) => looksLikePhone(p.name))
+    const byFirstSender = parsed.firstSender
+      ? parsed.participants.find((p) => p.name === parsed.firstSender)
+      : undefined
+    const phoneInChatName = parsed.chatName && looksLikePhone(parsed.chatName) ? parsed.chatName : null
+    const clientGuess = byChatName || byPhone || byFirstSender || parsed.participants[0]
+
+    const guessedName = clientGuess ? clientGuess.name : parsed.chatName || "Cliente"
+    const isPhoneName = looksLikePhone(guessedName)
+
+    return {
+      parsed,
+      clientParticipant: clientGuess?.name || "",
+      clientName: isPhoneName ? (phoneInChatName ? "Cliente" : parsed.chatName || "Cliente") : guessedName,
+      clientPhone: isPhoneName
+        ? normalizePhone(guessedName)
+        : phoneInChatName
+          ? normalizePhone(phoneInChatName)
+          : "",
+    }
+  }
+
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setIsParsing(true)
 
     const newDrafts: ChatDraft[] = []
     for (const file of Array.from(files)) {
-      if (!file.name.toLowerCase().endsWith(".txt")) {
-        toast.error(`"${file.name}" no es un .txt`, {
-          description: "Exportá el chat desde WhatsApp con la opción \"Sin archivos\".",
-        })
-        continue
-      }
+      const lowerName = file.name.toLowerCase()
       try {
-        const content = await file.text()
-        const parsed = parseWhatsAppExport(content, file.name)
-
-        if (parsed.messages.length === 0) {
-          toast.error(`"${file.name}" no tiene mensajes reconocibles`)
-          continue
+        if (lowerName.endsWith(".zip")) {
+          // Export "con archivos": el texto viene como _chat.txt adentro del zip
+          const zip = await JSZip.loadAsync(file)
+          const txtEntries = Object.values(zip.files).filter(
+            (entry) => !entry.dir && entry.name.toLowerCase().endsWith(".txt")
+          )
+          if (txtEntries.length === 0) {
+            toast.error(`"${file.name}" no contiene ningún chat (.txt)`)
+            continue
+          }
+          for (const entry of txtEntries) {
+            const content = await entry.async("string")
+            // El nombre del contacto viene en el nombre del zip, no del _chat.txt
+            const draft = buildDraft(content, file.name)
+            if (draft) newDrafts.push(draft)
+            else toast.error(`"${entry.name}" no tiene mensajes reconocibles`)
+          }
+        } else if (lowerName.endsWith(".txt")) {
+          const content = await file.text()
+          const draft = buildDraft(content, file.name)
+          if (draft) newDrafts.push(draft)
+          else toast.error(`"${file.name}" no tiene mensajes reconocibles`)
+        } else {
+          toast.error(`"${file.name}" no es un .txt ni un .zip de WhatsApp`)
         }
-
-        // Adivinar quién es el cliente: el participante que coincide con el
-        // nombre del archivo, o el que parece un teléfono
-        const byChatName = parsed.chatName
-          ? parsed.participants.find((p) => p.name === parsed.chatName)
-          : undefined
-        const byPhone = parsed.participants.find((p) => looksLikePhone(p.name))
-        const clientGuess = byChatName || byPhone || parsed.participants[0]
-
-        const guessedName = clientGuess ? clientGuess.name : parsed.chatName || "Cliente"
-        const isPhoneName = looksLikePhone(guessedName)
-
-        newDrafts.push({
-          parsed,
-          clientParticipant: clientGuess?.name || "",
-          clientName: isPhoneName ? parsed.chatName || "Cliente" : guessedName,
-          clientPhone: isPhoneName ? normalizePhone(guessedName) : "",
-        })
       } catch {
         toast.error(`No se pudo leer "${file.name}"`)
       }
@@ -217,8 +245,9 @@ export function ChatImportWizard({ open, onOpenChange, onImported }: ChatImportW
             <div className="rounded-xl bg-muted/40 border border-border/50 p-3 text-xs text-muted-foreground space-y-1">
               <p className="font-semibold text-foreground">Cómo exportar desde WhatsApp:</p>
               <p>1. Abrí el chat en el celular → ⋮ (menú) → <b>Más</b> → <b>Exportar chat</b>.</p>
-              <p>2. Elegí <b>"Sin archivos"</b> — genera un .txt liviano.</p>
+              <p>2. Elegí <b>"Sin archivos"</b> (recomendado, .txt liviano). Si elegís "Incluir archivos" llega un <b>.zip</b> — también lo podés subir tal cual.</p>
               <p>3. Guardalo (o mandátelo por mail) y subilo acá. Podés subir varios a la vez.</p>
+              <p className="text-[10px]">Nota: las fotos y audios del .zip no se importan — quedan como [Imagen] / [Audio] en el historial.</p>
             </div>
 
             <button
@@ -231,13 +260,13 @@ export function ChatImportWizard({ open, onOpenChange, onImported }: ChatImportW
               ) : (
                 <Upload className="w-8 h-8 text-[#D1F366]" />
               )}
-              <p className="text-sm font-bold">Tocá para elegir los archivos .txt</p>
-              <p className="text-xs text-muted-foreground">Ej: "Chat de WhatsApp con Juan Pérez.txt"</p>
+              <p className="text-sm font-bold">Tocá para elegir los archivos (.txt o .zip)</p>
+              <p className="text-xs text-muted-foreground">Ej: "Chat de WhatsApp con Juan Pérez.txt" o "WhatsApp Chat - Juan.zip"</p>
             </button>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".txt,text/plain"
+              accept=".txt,.zip,text/plain,application/zip,application/x-zip-compressed"
               multiple
               className="hidden"
               onChange={(e) => handleFiles(e.target.files)}

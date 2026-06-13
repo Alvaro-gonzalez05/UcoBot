@@ -21,6 +21,9 @@ export interface ParsedChat {
   messages: ParsedMessage[]
   firstDate: string | null
   lastDate: string | null
+  /** En exports de iOS la línea de cifrado viene atribuida al interlocutor:
+   *  buen indicio de quién es el cliente cuando el contacto no está agendado. */
+  firstSender: string | null
 }
 
 // Inicio de mensaje: fecha + hora + (guion) + resto
@@ -57,14 +60,30 @@ function buildDate(d: number, m: number, y: number, h: number, min: number, s: n
 }
 
 export function extractChatNameFromFile(fileName: string): string | null {
-  const match = fileName.match(/(?:Chat de WhatsApp con|WhatsApp Chat with)\s+(.+?)\.txt$/i)
+  // Android: "Chat de WhatsApp con Juan.txt" · iOS zip: "WhatsApp Chat - Juan.zip"
+  const match =
+    fileName.match(/(?:Chat de WhatsApp con|WhatsApp Chat with)\s+(.+?)\.(?:txt|zip)$/i) ||
+    fileName.match(/WhatsApp Chat\s*-\s*(.+?)\.(?:txt|zip)$/i)
   return match ? match[1].trim() : null
+}
+
+// Adjuntos del export de iOS: "<adjunto: 00000003-AUDIO-....opus>" / "<attached: ...>"
+const ATTACHMENT_RX = /^<(?:adjunto|attached):\s*(.+?)>$/i
+
+function attachmentPlaceholder(fileRef: string): string {
+  const upper = fileRef.toUpperCase()
+  if (upper.includes("AUDIO") || /\.(OPUS|OGG|MP3|M4A)$/.test(upper)) return "[Audio]"
+  if (upper.includes("PHOTO") || /\.(JPE?G|PNG|WEBP)$/.test(upper)) return "[Imagen]"
+  if (upper.includes("VIDEO") || /\.(MP4|MOV)$/.test(upper)) return "[Video]"
+  if (upper.includes("STICKER")) return "[Sticker]"
+  return "[Archivo adjunto]"
 }
 
 export function parseWhatsAppExport(content: string, fileName: string): ParsedChat {
   const lines = content.split(/\r?\n/)
   const messages: ParsedMessage[] = []
   let current: { sender: string; text: string; date: Date } | null = null
+  let firstSender: string | null = null
 
   for (const rawLine of lines) {
     const line = cleanLine(rawLine)
@@ -90,12 +109,18 @@ export function parseWhatsAppExport(content: string, fileName: string): ParsedCh
         continue
       }
 
-      const sender = rest.slice(0, sepIdx).trim()
+      // "~" prefijo de push-name (contacto no agendado) en exports de iOS
+      const sender = rest.slice(0, sepIdx).replace(/^~\s*/, "").trim()
       let text = rest.slice(sepIdx + 2).trim()
+
+      if (!firstSender) firstSender = sender
 
       if (SYSTEM_HINTS.some((hint) => text.includes(hint))) continue
       if (text === "<Multimedia omitido>" || text === "<Media omitted>") text = "[Archivo multimedia]"
       if (text === "Se eliminó este mensaje." || text === "This message was deleted") text = "[Mensaje eliminado]"
+      const attachment = text.match(ATTACHMENT_RX)
+      if (attachment) text = attachmentPlaceholder(attachment[1])
+      if (!text) continue // mensajes vacíos (líneas fantasma del export de iOS)
 
       if (current) {
         messages.push({ sender: current.sender, text: current.text, timestamp: current.date.toISOString() })
@@ -127,6 +152,7 @@ export function parseWhatsAppExport(content: string, fileName: string): ParsedCh
     messages,
     firstDate: messages.length > 0 ? messages[0].timestamp : null,
     lastDate: messages.length > 0 ? messages[messages.length - 1].timestamp : null,
+    firstSender,
   }
 }
 

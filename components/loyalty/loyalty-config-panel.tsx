@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +22,8 @@ interface LoyaltyConfig {
   card_color: string
   logo_url: string
   cover_image_url: string
+  cover_position: number // 0 = arriba, 100 = abajo (object-position vertical)
+  logo_fit: "cover" | "contain"
 }
 
 const DEFAULT_CONFIG: LoyaltyConfig = {
@@ -34,6 +36,8 @@ const DEFAULT_CONFIG: LoyaltyConfig = {
   card_color: "#D1F366",
   logo_url: "",
   cover_image_url: "",
+  cover_position: 50,
+  logo_fit: "cover",
 }
 
 function ImageField({
@@ -100,16 +104,63 @@ function ImageField({
   )
 }
 
-/** Vista previa compacta de la tarjeta tal como la ve el cliente final */
-function CardPreview({ config, businessLabel }: { config: LoyaltyConfig; businessLabel: string }) {
+/** Vista previa compacta de la tarjeta tal como la ve el cliente final.
+ *  La portada se puede arrastrar verticalmente para encuadrarla. */
+function CardPreview({
+  config,
+  businessLabel,
+  onCoverPositionChange,
+}: {
+  config: LoyaltyConfig
+  businessLabel: string
+  onCoverPositionChange?: (position: number) => void
+}) {
   const accent = config.card_color || "#D1F366"
   const demoStamps = Math.min(4, config.stamps_required - 1)
+  const dragRef = useRef<{ startY: number; startPos: number } | null>(null)
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!config.cover_image_url || !onCoverPositionChange) return
+    dragRef.current = { startY: e.clientY, startPos: config.cover_position }
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!dragRef.current || !onCoverPositionChange) return
+    // Arrastrar hacia abajo revela la parte superior de la imagen
+    const delta = e.clientY - dragRef.current.startY
+    const next = Math.max(0, Math.min(100, dragRef.current.startPos - delta * 0.8))
+    onCoverPositionChange(Math.round(next))
+  }
+
+  const handlePointerUp = () => {
+    dragRef.current = null
+  }
 
   return (
     <div className="rounded-3xl overflow-hidden border border-border bg-[#14151f] text-white shadow-xl max-w-[340px] mx-auto">
       {config.cover_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={config.cover_image_url} alt="Portada" className="h-28 w-full object-cover" />
+        <div
+          className="relative h-28 w-full overflow-hidden cursor-grab active:cursor-grabbing select-none touch-none group/cover"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={config.cover_image_url}
+            alt="Portada"
+            draggable={false}
+            className="h-full w-full object-cover pointer-events-none"
+            style={{ objectPosition: `center ${config.cover_position}%` }}
+          />
+          {onCoverPositionChange && (
+            <span className="absolute top-2 right-2 rounded-full bg-black/60 backdrop-blur px-2.5 py-1 text-[9px] font-bold text-white/90 opacity-0 group-hover/cover:opacity-100 transition-opacity pointer-events-none">
+              ↕ Arrastrá para encuadrar
+            </span>
+          )}
+        </div>
       ) : (
         <div
           className="h-20 w-full"
@@ -124,7 +175,10 @@ function CardPreview({ config, businessLabel }: { config: LoyaltyConfig; busines
             <img
               src={config.logo_url}
               alt="Logo"
-              className="w-14 h-14 rounded-2xl object-cover border-2 border-[#14151f] bg-white"
+              className={cn(
+                "w-14 h-14 rounded-2xl border-2 border-[#14151f] bg-white",
+                config.logo_fit === "contain" ? "object-contain p-1" : "object-cover"
+              )}
             />
           ) : (
             <div
@@ -239,6 +293,8 @@ export function LoyaltyConfigPanel({
             card_color: data.card_color || "#D1F366",
             logo_url: data.logo_url || "",
             cover_image_url: data.cover_image_url || "",
+            cover_position: data.cover_position ?? 50,
+            logo_fit: data.logo_fit === "contain" ? "contain" : "cover",
           }
           setConfig(loaded)
           onCardTypeChange?.(loaded.card_type)
@@ -272,6 +328,8 @@ export function LoyaltyConfigPanel({
         card_color: config.card_color,
         logo_url: config.logo_url.trim() || null,
         cover_image_url: config.cover_image_url.trim() || null,
+        cover_position: config.cover_position,
+        logo_fit: config.logo_fit,
         updated_at: new Date().toISOString(),
       })
       if (error) throw error
@@ -417,17 +475,44 @@ export function LoyaltyConfigPanel({
               />
               <code className="text-xs text-muted-foreground">{config.card_color}</code>
             </div>
-            <ImageField
-              label="Logo del negocio"
-              value={config.logo_url}
-              onChange={(url) => update({ logo_url: url })}
-              hint="Cuadrado, ideal 256×256. Aparece arriba a la izquierda de la tarjeta."
-            />
+            <div className="space-y-2">
+              <ImageField
+                label="Logo del negocio"
+                value={config.logo_url}
+                onChange={(url) => update({ logo_url: url })}
+                hint="Cuadrado, ideal 256×256. Aparece arriba a la izquierda de la tarjeta."
+              />
+              {config.logo_url && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Encaje:</span>
+                  <button
+                    type="button"
+                    onClick={() => update({ logo_fit: "cover" })}
+                    className={cn(
+                      "px-3 py-1 rounded-lg text-xs font-semibold transition-colors",
+                      config.logo_fit === "cover" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                    )}
+                  >
+                    Recortar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => update({ logo_fit: "contain" })}
+                    className={cn(
+                      "px-3 py-1 rounded-lg text-xs font-semibold transition-colors",
+                      config.logo_fit === "contain" ? "bg-[#D1F366] text-[#1C1C28]" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                    )}
+                  >
+                    Completo
+                  </button>
+                </div>
+              )}
+            </div>
             <ImageField
               label="Imagen de portada"
               value={config.cover_image_url}
               onChange={(url) => update({ cover_image_url: url })}
-              hint="Horizontal, ideal 800×300. Es la franja superior de la tarjeta."
+              hint="Horizontal, ideal 800×300. Arrastrala en la vista previa para encuadrarla. ↕"
             />
           </div>
 
@@ -450,7 +535,11 @@ export function LoyaltyConfigPanel({
         {/* Vista previa */}
         <div>
           <Label className="text-sm font-semibold block mb-3">Vista previa</Label>
-          <CardPreview config={config} businessLabel={businessLabel} />
+          <CardPreview
+            config={config}
+            businessLabel={businessLabel}
+            onCoverPositionChange={(position) => update({ cover_position: position })}
+          />
           <p className="text-[11px] text-muted-foreground text-center mt-3">
             Así la ve tu cliente en su celular, con su QR y saldo reales.
           </p>

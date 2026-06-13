@@ -54,7 +54,7 @@ export default async function TarjetaPage({ params }: { params: Promise<{ code: 
       .order("points_cost", { ascending: true }),
     supabase
       .from("loyalty_settings")
-      .select("card_type, stamps_required, stamp_reward, card_color, logo_url, cover_image_url")
+      .select("card_type, stamps_required, stamp_reward, card_color, logo_url, cover_image_url, cover_position, logo_fit")
       .eq("user_id", client.user_id)
       .maybeSingle(),
   ])
@@ -75,6 +75,8 @@ export default async function TarjetaPage({ params }: { params: Promise<{ code: 
         card_color: settings?.card_color || "#D1F366",
         logo_url: settings?.logo_url || null,
         cover_image_url: settings?.cover_image_url || null,
+        cover_position: settings?.cover_position ?? 50,
+        logo_fit: settings?.logo_fit === "contain" ? "contain" : "cover",
       }}
     />
   )

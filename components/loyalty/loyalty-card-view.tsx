@@ -20,6 +20,8 @@ interface CardSettings {
   card_color: string
   logo_url: string | null
   cover_image_url: string | null
+  cover_position: number
+  logo_fit: "cover" | "contain"
 }
 
 interface LoyaltyCardViewProps {
@@ -76,6 +78,7 @@ export function LoyaltyCardView({
               src={settings.cover_image_url}
               alt={businessName}
               className="h-36 w-full object-cover"
+              style={{ objectPosition: `center ${settings.cover_position ?? 50}%` }}
             />
           ) : (
             <div
@@ -95,7 +98,11 @@ export function LoyaltyCardView({
                   <img
                     src={settings.logo_url}
                     alt={businessName}
-                    className="w-16 h-16 rounded-2xl object-cover border-4 border-[#1C1C28] bg-white shadow-lg"
+                    className={
+                      settings.logo_fit === "contain"
+                        ? "w-16 h-16 rounded-2xl object-contain p-1 border-4 border-[#1C1C28] bg-white shadow-lg"
+                        : "w-16 h-16 rounded-2xl object-cover border-4 border-[#1C1C28] bg-white shadow-lg"
+                    }
                   />
                 ) : (
                   <div
