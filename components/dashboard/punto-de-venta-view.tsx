@@ -11,6 +11,7 @@ import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Li
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialog"
+import { broadcastLoyaltyUpdate } from "@/lib/loyalty-realtime"
 
 interface Product {
   id: string
@@ -31,6 +32,7 @@ interface Client {
   points?: number | null
   stamps?: number | null
   total_purchases?: number | null
+  loyalty_code?: string | null
 }
 
 interface CartItem {
@@ -144,7 +146,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     try {
       const { data: client, error } = await supabase
         .from("clients")
-        .select("id, name, phone, instagram_username, points, stamps, total_purchases")
+        .select("id, name, phone, instagram_username, points, stamps, total_purchases, loyalty_code")
         .eq("user_id", userId)
         .eq("loyalty_code", loyaltyCode)
         .maybeSingle()
@@ -451,14 +453,23 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           }
 
           const newStamps = Math.max(0, (selectedClient.stamps || 0) + stampsDelta)
+          const newPurchases = (selectedClient.total_purchases || 0) + 1
           await supabase
             .from("clients")
             .update({
               stamps: newStamps,
-              total_purchases: (selectedClient.total_purchases || 0) + 1,
+              total_purchases: newPurchases,
               last_interaction_at: new Date().toISOString(),
             })
             .eq("id", selectedClient.id)
+
+          // Realtime: la tarjeta del cliente se actualiza sola, con animación
+          if (selectedClient.loyalty_code) {
+            broadcastLoyaltyUpdate(supabase, selectedClient.loyalty_code, {
+              stamps: newStamps,
+              total_purchases: newPurchases,
+            })
+          }
 
           if (loyaltySettings.is_active) {
             const required = loyaltySettings.stamps_required
@@ -514,14 +525,23 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           if (txInserts.length > 0) {
             await supabase.from("points_transactions").insert(txInserts)
             const newPoints = Math.max(0, (selectedClient.points || 0) + pointsDelta)
+            const newPurchases = (selectedClient.total_purchases || 0) + 1
             await supabase
               .from("clients")
               .update({
                 points: newPoints,
-                total_purchases: (selectedClient.total_purchases || 0) + 1,
+                total_purchases: newPurchases,
                 last_interaction_at: new Date().toISOString(),
               })
               .eq("id", selectedClient.id)
+
+            // Realtime: la tarjeta del cliente se actualiza sola, con animación
+            if (selectedClient.loyalty_code) {
+              broadcastLoyaltyUpdate(supabase, selectedClient.loyalty_code, {
+                points: newPoints,
+                total_purchases: newPurchases,
+              })
+            }
 
             if (pointsDelta !== 0) {
               toast.success(

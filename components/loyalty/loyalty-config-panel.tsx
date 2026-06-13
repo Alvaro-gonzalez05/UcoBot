@@ -138,105 +138,131 @@ function CardPreview({
   }
 
   return (
-    <div className="rounded-3xl overflow-hidden border border-border bg-[#14151f] text-white shadow-xl max-w-[340px] mx-auto">
-      {config.cover_image_url ? (
-        <div
-          className="relative h-28 w-full overflow-hidden cursor-grab active:cursor-grabbing select-none touch-none group/cover"
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={handlePointerUp}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={config.cover_image_url}
-            alt="Portada"
-            draggable={false}
-            className="h-full w-full object-cover pointer-events-none"
-            style={{ objectPosition: `center ${config.cover_position}%` }}
-          />
-          {onCoverPositionChange && (
-            <span className="absolute top-2 right-2 rounded-full bg-black/60 backdrop-blur px-2.5 py-1 text-[9px] font-bold text-white/90 opacity-0 group-hover/cover:opacity-100 transition-opacity pointer-events-none">
-              ↕ Arrastrá para encuadrar
-            </span>
-          )}
-        </div>
-      ) : (
-        <div
-          className="h-20 w-full"
-          style={{ background: `linear-gradient(120deg, ${accent}33 0%, ${accent}0d 60%, transparent 100%)` }}
-        />
-      )}
-
-      <div className="p-5 -mt-8">
-        <div className="flex items-center gap-3 mb-4">
-          {config.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
+    <div className="max-w-[360px] mx-auto space-y-3">
+      {/* Tarjeta apaisada (igual que la ve el cliente) */}
+      <div
+        className="relative w-full aspect-[1.6/1] rounded-3xl overflow-hidden border shadow-xl text-white"
+        style={{ borderColor: `${accent}55` }}
+      >
+        {/* Fondo: portada arrastrable o degradado */}
+        {config.cover_image_url ? (
+          <div
+            className="absolute inset-0 cursor-grab active:cursor-grabbing select-none touch-none group/cover"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={config.logo_url}
-              alt="Logo"
-              className={cn(
-                "w-14 h-14 rounded-2xl border-2 border-[#14151f] bg-white",
-                config.logo_fit === "contain" ? "object-contain p-1" : "object-cover"
-              )}
+              src={config.cover_image_url}
+              alt="Portada"
+              draggable={false}
+              className="h-full w-full object-cover pointer-events-none"
+              style={{ objectPosition: `center ${config.cover_position}%` }}
             />
-          ) : (
-            <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg border-2 border-[#14151f]"
-              style={{ backgroundColor: accent, color: "#14151f" }}
-            >
-              {businessLabel.slice(0, 2).toUpperCase()}
-            </div>
-          )}
-          <div className="pt-6">
-            <p className="text-[9px] uppercase tracking-[0.2em] text-white/50 font-semibold">
-              {config.card_type === "stamps" ? "Tarjeta de sellos" : "Tarjeta de fidelidad"}
-            </p>
-            <p className="text-sm font-black">{businessLabel}</p>
+            {onCoverPositionChange && (
+              <span className="absolute top-2 left-1/2 -translate-x-1/2 z-10 rounded-full bg-black/60 backdrop-blur px-2.5 py-1 text-[9px] font-bold text-white/90 opacity-0 group-hover/cover:opacity-100 transition-opacity pointer-events-none">
+                ↕ Arrastrá para encuadrar
+              </span>
+            )}
           </div>
-        </div>
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{ background: `linear-gradient(120deg, #1C1C28 0%, ${accent}26 100%)` }}
+          />
+        )}
+        {/* Velo para legibilidad */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: "linear-gradient(100deg, rgba(12,14,23,0.92) 0%, rgba(12,14,23,0.72) 45%, rgba(12,14,23,0.45) 100%)" }}
+        />
 
-        {config.card_type === "points" ? (
-          <>
-            <div className="flex items-end gap-2 mb-3">
-              <p className="text-4xl font-black leading-none" style={{ color: accent }}>1.250</p>
-              <p className="text-xs text-white/60 mb-0.5">puntos</p>
+        {/* Contenido */}
+        <div className="relative h-full flex pointer-events-none">
+          <div className="flex-1 min-w-0 p-4 flex flex-col justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {config.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={config.logo_url}
+                  alt="Logo"
+                  className={cn(
+                    "w-11 h-11 rounded-xl bg-white shadow-md flex-shrink-0",
+                    config.logo_fit === "contain" ? "object-contain p-1" : "object-cover"
+                  )}
+                />
+              ) : (
+                <div
+                  className="w-11 h-11 rounded-xl flex items-center justify-center font-black text-sm shadow-md flex-shrink-0"
+                  style={{ backgroundColor: accent, color: "#14151f" }}
+                >
+                  {businessLabel.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-[8px] uppercase tracking-[0.2em] text-white/55 font-semibold">
+                  {config.card_type === "stamps" ? "Tarjeta de sellos" : "Tarjeta de fidelidad"}
+                </p>
+                <p className="text-sm font-black leading-tight truncate">{businessLabel}</p>
+              </div>
             </div>
-            <div className="rounded-xl bg-white p-3 flex items-center justify-center">
+
+            <div className="min-w-0">
+              <p className="text-[11px] text-white/60 truncate">Cliente de ejemplo</p>
+              {config.card_type === "stamps" ? (
+                <p className="text-2xl font-black leading-none mt-0.5" style={{ color: accent }}>
+                  {demoStamps}
+                  <span className="text-base text-white/40">/{config.stamps_required}</span>
+                  <span className="text-[11px] text-white/50 font-bold ml-1.5">sellos</span>
+                </p>
+              ) : (
+                <p className="text-2xl font-black leading-none mt-0.5" style={{ color: accent }}>
+                  1.250<span className="text-[11px] text-white/50 font-bold ml-1.5">puntos</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* QR de muestra */}
+          <div className="flex items-center justify-center pr-4">
+            <div className="bg-white rounded-xl p-2 shadow-lg">
               <div className="grid grid-cols-5 gap-0.5">
                 {Array.from({ length: 25 }).map((_, i) => (
-                  <div key={i} className={cn("w-2 h-2", [0,1,2,4,5,7,9,10,12,14,16,18,19,21,23,24].includes(i) ? "bg-[#14151f]" : "bg-white")} />
+                  <div key={i} className={cn("w-1.5 h-1.5", [0,1,2,4,5,7,9,10,12,14,16,18,19,21,23,24].includes(i) ? "bg-[#14151f]" : "bg-white")} />
                 ))}
               </div>
             </div>
-          </>
-        ) : (
-          <>
-            <div className="grid grid-cols-5 gap-2 mb-3">
-              {Array.from({ length: config.stamps_required }).map((_, i) => (
-                <div
-                  key={i}
-                  className="aspect-square rounded-full flex items-center justify-center text-sm font-bold"
-                  style={
-                    i < demoStamps
-                      ? { backgroundColor: accent, color: "#14151f" }
-                      : { backgroundColor: "rgba(255,255,255,0.92)", color: "#14151f33" }
-                  }
-                >
-                  {i < demoStamps ? "✓" : ""}
-                </div>
-              ))}
-            </div>
-            <p className="text-[11px] text-center text-white/70">
-              Completá los sellos y llevate{" "}
-              <span className="font-bold" style={{ color: accent }}>
-                {config.stamp_reward || "tu regalo"}
-              </span>{" "}
-              en tu {config.stamps_required}ª visita
-            </p>
-          </>
-        )}
+          </div>
+        </div>
       </div>
+
+      {config.card_type === "stamps" && (
+        <div className="rounded-2xl bg-[#14151f] border border-border p-3">
+          <div className="grid grid-cols-5 gap-2">
+            {Array.from({ length: config.stamps_required }).map((_, i) => (
+              <div
+                key={i}
+                className="aspect-square rounded-full flex items-center justify-center text-xs font-bold"
+                style={
+                  i < demoStamps
+                    ? { backgroundColor: accent, color: "#14151f" }
+                    : { backgroundColor: "rgba(255,255,255,0.92)", color: "#14151f33" }
+                }
+              >
+                {i < demoStamps ? "✓" : ""}
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-center text-white/70 mt-2">
+            Completá los sellos y llevate{" "}
+            <span className="font-bold" style={{ color: accent }}>
+              {config.stamp_reward || "tu regalo"}
+            </span>
+          </p>
+        </div>
+      )}
     </div>
   )
 }

@@ -20,7 +20,7 @@ export default async function PuntoDeVentaPage() {
       .range(0, 17),
     supabase
       .from("clients")
-      .select("id, name, phone, instagram_username, points, stamps, total_purchases")
+      .select("id, name, phone, instagram_username, points, stamps, total_purchases, loyalty_code")
       .eq("user_id", data.user.id)
       .order("created_at", { ascending: false })
       .limit(100),
