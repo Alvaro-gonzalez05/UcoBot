@@ -2,8 +2,10 @@ import { createAdminClient } from "@/lib/supabase/server"
 import { LoyaltyCardView } from "@/components/loyalty/loyalty-card-view"
 
 // Sin caché: la tarjeta siempre muestra el saldo y el diseño actuales.
-// (Esta página no usa cookies, así que Next intentaría cachearla como estática.)
+// `force-dynamic` re-ejecuta el componente, pero el `fetch` interno de Supabase
+// igual lo cachea el Data Cache de Next → `force-no-store` lo evita (datos frescos).
 export const dynamic = "force-dynamic"
+export const fetchCache = "force-no-store"
 
 /**
  * Tarjeta de fidelización pública del cliente final.

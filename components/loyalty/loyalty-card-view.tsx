@@ -50,7 +50,16 @@ export function LoyaltyCardView({
   settings,
 }: LoyaltyCardViewProps) {
   const [cardUrl, setCardUrl] = useState("")
-  const supabase = useMemo(() => createClient(), [])
+  // createClient nunca debería tirar, pero lo protegemos para que un fallo
+  // del cliente Realtime jamás deje la tarjeta en blanco.
+  const supabase = useMemo(() => {
+    try {
+      return createClient()
+    } catch (e) {
+      console.error("[loyalty] no se pudo iniciar Supabase client:", e)
+      return null
+    }
+  }, [])
 
   // Valores en vivo (se actualizan por Realtime sin refrescar)
   const [livePoints, setLivePoints] = useState(points)
@@ -111,21 +120,27 @@ export function LoyaltyCardView({
     }
   }
 
-  // Realtime instantáneo (broadcast desde el Punto de Venta), con re-suscripción
-  // automática si el canal se cae. Sin polling de fondo.
+  // Realtime instantáneo (broadcast desde el Punto de Venta) + refetch al
+  // volver a la pestaña. Todo protegido para no romper nunca el render.
   useEffect(() => {
-    const channel = supabase
-      .channel(loyaltyChannelName(loyaltyCode))
-      .on("broadcast", { event: "points-updated" }, ({ payload }) => {
-        applyUpdate(payload as LoyaltyUpdatePayload)
-      })
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") console.log("[loyalty] tarjeta suscrita a Realtime ✓")
-        else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT")
-          console.warn("[loyalty] canal Realtime con problemas:", status)
-      })
+    if (!supabase) return
+    let channel: ReturnType<NonNullable<typeof supabase>["channel"]> | null = null
 
-    // Un solo refetch al volver a la pestaña (cubre lo que haya pasado offline).
+    try {
+      channel = supabase
+        .channel(loyaltyChannelName(loyaltyCode))
+        .on("broadcast", { event: "points-updated" }, ({ payload }) => {
+          applyUpdate(payload as LoyaltyUpdatePayload)
+        })
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") console.log("[loyalty] tarjeta suscrita a Realtime ✓")
+          else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT")
+            console.warn("[loyalty] canal Realtime con problemas:", status)
+        })
+    } catch (e) {
+      console.error("[loyalty] error suscribiendo a Realtime:", e)
+    }
+
     const onVisible = () => {
       if (!document.hidden) refetch()
     }
@@ -133,7 +148,7 @@ export function LoyaltyCardView({
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible)
-      supabase.removeChannel(channel)
+      if (channel) supabase.removeChannel(channel)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loyaltyCode, supabase])
@@ -149,8 +164,8 @@ export function LoyaltyCardView({
       <div className="w-full max-w-md flex flex-col gap-4">
         {/* ── Tarjeta apaisada ── */}
         <motion.div
-          initial={{ opacity: 0, y: 24, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
+          initial={{ y: 18, scale: 0.97 }}
+          animate={{ y: 0, scale: 1 }}
           transition={{ type: "spring", stiffness: 230, damping: 22 }}
           className="relative w-full aspect-[1.6/1] rounded-3xl overflow-hidden border shadow-2xl"
           style={{ borderColor: `${accent}55` }}
@@ -331,16 +346,16 @@ export function LoyaltyCardView({
                 return (
                   <motion.div
                     key={i}
-                    initial={{ scale: 0.6, opacity: 0 }}
+                    initial={{ scale: 0.85 }}
                     animate={
                       isNew
-                        ? { scale: [1.9, 0.9, 1], opacity: 1, rotate: [-14, 6, 0] }
-                        : { scale: 1, opacity: 1 }
+                        ? { scale: [1.9, 0.9, 1], rotate: [-14, 6, 0] }
+                        : { scale: 1 }
                     }
                     transition={
                       isNew
                         ? { duration: 0.65, ease: "easeOut" }
-                        : { delay: 0.15 + i * 0.04, type: "spring", stiffness: 300, damping: 18 }
+                        : { delay: 0.1 + i * 0.03, type: "spring", stiffness: 300, damping: 18 }
                     }
                     className="aspect-square rounded-full flex items-center justify-center text-sm font-black"
                     style={

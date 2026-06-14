@@ -14,6 +14,7 @@ import { ShoppingCart, Package, Edit, Trash2, Eye, Settings, MoreHorizontal, Fil
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
+import { ProductImportWizard } from "./product-import-wizard"
 import { ProductEditForm } from "./product-edit-form"
 import { toast } from "sonner"
 import { DashboardPagination } from "./dashboard-pagination"
@@ -662,9 +663,12 @@ export function PedidosClient({
 
         {/* ─── PRODUCTS TAB ─── */}
         <TabsContent value="products" className="flex-1 overflow-y-auto space-y-4 pr-1 mt-0">
-          <div className="flex items-center justify-between px-1">
+          <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
             <h3 className="text-xl font-bold dark:text-white">Catálogo de Productos</h3>
-            <ProductForm onProductCreated={refreshProducts} existingCategories={categories} />
+            <div className="flex items-center gap-2">
+              <ProductImportWizard onImported={refreshProducts} />
+              <ProductForm onProductCreated={refreshProducts} existingCategories={categories} />
+            </div>
           </div>
 
           {!products || products.length === 0 ? (
