@@ -439,10 +439,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       // Procesar fidelización (no bloquea la venta si falla)
       if (selectedClient && isStampsMode && loyaltySettings) {
         try {
-          // Modo sellos: +1 sello por compra; el canje consume la tarjeta completa
-          let stampsDelta = loyaltySettings.is_active ? 1 : 0
+          // Modo sellos:
+          //  - Canje: consume la tarjeta completa y queda en 0 (no suma sello esa compra)
+          //  - Compra normal: +1 sello si el programa está activo
+          const required = loyaltySettings.stamps_required
+          const currentStamps = selectedClient.stamps || 0
+          let newStamps: number
           if (redeemStampGift) {
-            stampsDelta -= loyaltySettings.stamps_required
+            newStamps = Math.max(0, currentStamps - required)
             await supabase.from("points_transactions").insert({
               user_id: userId,
               client_id: selectedClient.id,
@@ -450,9 +454,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               points_amount: 0,
               description: `Tarjeta de sellos completa: canje de "${loyaltySettings.stamp_reward || "regalo"}" (Punto de venta)`,
             })
+          } else {
+            newStamps = currentStamps + (loyaltySettings.is_active ? 1 : 0)
           }
 
-          const newStamps = Math.max(0, (selectedClient.stamps || 0) + stampsDelta)
           const newPurchases = (selectedClient.total_purchases || 0) + 1
           await supabase
             .from("clients")
@@ -472,7 +477,6 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           }
 
           if (loyaltySettings.is_active) {
-            const required = loyaltySettings.stamps_required
             toast.success(
               redeemStampGift
                 ? `🎁 Regalo entregado. ${selectedClient.name} arranca de nuevo: ${newStamps}/${required} sellos`
