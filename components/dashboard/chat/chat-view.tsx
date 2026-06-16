@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo, Fragment } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -11,10 +11,10 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2 } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { cn } from "@/lib/utils"
-import { format } from "date-fns"
+import { format, isToday, isYesterday, isSameDay } from "date-fns"
 import { es } from "date-fns/locale"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import {
@@ -39,6 +39,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
 
 interface Conversation {
@@ -84,6 +90,20 @@ interface ClientOrder {
   id: string
   status: string
   total_amount: number
+  created_at: string
+}
+
+interface SavedSticker {
+  id: string
+  storage_path: string
+  public_url: string | null
+  mime_type: string | null
+  created_at: string
+}
+
+interface ConversationLink {
+  url: string
+  messageId: string
   created_at: string
 }
 
@@ -216,6 +236,140 @@ const SwipeableMessage = ({
   )
 }
 
+// Reproductor de audio estilo WhatsApp (waveform + play/pause), temático claro/oscuro
+function AudioPlayer({
+  src,
+  isClient,
+  initials,
+  platform,
+}: {
+  src: string
+  isClient: boolean
+  initials: string
+  platform?: string
+}) {
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+
+  // Barras de la onda generadas de forma determinística según el src (estables entre renders)
+  const bars = useMemo(() => {
+    const n = 32
+    const arr: number[] = []
+    let seed = 0
+    for (let i = 0; i < src.length; i++) seed = (seed * 31 + src.charCodeAt(i)) >>> 0
+    for (let i = 0; i < n; i++) {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      arr.push(0.3 + ((seed % 100) / 100) * 0.7)
+    }
+    return arr
+  }, [src])
+
+  const togglePlay = () => {
+    const audio = audioRef.current
+    if (!audio) return
+    if (isPlaying) audio.pause()
+    else audio.play().catch(() => {})
+  }
+
+  const formatDur = (s: number) => {
+    if (!isFinite(s) || isNaN(s)) return "0:00"
+    const m = Math.floor(s / 60)
+    const sec = Math.floor(s % 60)
+    return `${m}:${sec.toString().padStart(2, "0")}`
+  }
+
+  const progress = duration > 0 && isFinite(duration) ? currentTime / duration : 0
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current
+    if (!audio || !isFinite(duration) || duration === 0) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width))
+    audio.currentTime = ratio * duration
+    setCurrentTime(ratio * duration)
+  }
+
+  return (
+    <div className="flex items-center gap-3 min-w-[230px] max-w-[260px] py-1">
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="metadata"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onEnded={() => {
+          setIsPlaying(false)
+          setCurrentTime(0)
+        }}
+        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+      />
+
+      {/* Avatar con badge de micrófono */}
+      <div className="relative shrink-0">
+        <Avatar className="h-10 w-10">
+          <AvatarFallback
+            className={cn(
+              "text-white text-xs",
+              isClient ? (platform === "instagram" ? "bg-pink-500" : "bg-green-500") : "bg-primary-foreground/20"
+            )}
+          >
+            {isClient ? initials : <Mic className="h-4 w-4" />}
+          </AvatarFallback>
+        </Avatar>
+        <span
+          className={cn(
+            "absolute -bottom-0.5 -right-0.5 rounded-full p-0.5",
+            isClient ? "bg-white dark:bg-slate-800" : "bg-primary"
+          )}
+        >
+          <Mic className={cn("h-3 w-3", isClient ? "text-green-500" : "text-primary-foreground")} />
+        </span>
+      </div>
+
+      {/* Play / Pause */}
+      <button
+        type="button"
+        onClick={togglePlay}
+        className={cn("shrink-0 flex items-center justify-center", isClient ? "text-primary" : "text-primary-foreground")}
+      >
+        {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+      </button>
+
+      {/* Onda + tiempo */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-[2px] h-7 cursor-pointer" onClick={handleSeek}>
+          {bars.map((h, i) => {
+            const played = i / bars.length <= progress
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "flex-1 rounded-full transition-colors",
+                  played
+                    ? isClient
+                      ? "bg-primary"
+                      : "bg-primary-foreground"
+                    : isClient
+                    ? "bg-muted-foreground/30"
+                    : "bg-primary-foreground/40"
+                )}
+                style={{ height: `${h * 100}%` }}
+              />
+            )
+          })}
+        </div>
+        <span className={cn("text-[10px] mt-0.5 block", isClient ? "text-muted-foreground" : "text-primary-foreground/70")}>
+          {formatDur(isPlaying || currentTime > 0 ? currentTime : duration)}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function ChatView({ userId }: ChatViewProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
@@ -243,6 +397,25 @@ export function ChatView({ userId }: ChatViewProps) {
   const [clientProfile, setClientProfile] = useState<ClientProfile | null>(null)
   const [loyaltyCardType, setLoyaltyCardType] = useState<"points" | "stamps">("points")
   const [isImportOpen, setIsImportOpen] = useState(false)
+
+  // Stickers guardados
+  const [savedStickers, setSavedStickers] = useState<SavedSticker[]>([])
+  const [isStickerPickerOpen, setIsStickerPickerOpen] = useState(false)
+  const [savingStickerId, setSavingStickerId] = useState<string | null>(null)
+
+  // Medios/enlaces/documentos de la conversación (panel del cliente)
+  const [convMedia, setConvMedia] = useState<Message[]>([])
+  const [convDocs, setConvDocs] = useState<Message[]>([])
+  const [convLinks, setConvLinks] = useState<ConversationLink[]>([])
+  const [isLoadingMediaPanel, setIsLoadingMediaPanel] = useState(false)
+
+  // Grabación de notas de voz
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingTime, setRecordingTime] = useState(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const recordingCancelledRef = useRef(false)
 
   // Avisar al downbar móvil si hay un chat abierto (se oculta solo adentro del chat)
   useEffect(() => {
@@ -1048,6 +1221,14 @@ export function ChatView({ userId }: ChatViewProps) {
     return format(date, "dd/MM/yyyy")
   }
 
+  // Etiqueta del separador de día estilo WhatsApp: "Hoy", "Ayer" o la fecha exacta
+  const formatDateSeparator = (dateString: string) => {
+    const date = new Date(dateString)
+    if (isToday(date)) return "Hoy"
+    if (isYesterday(date)) return "Ayer"
+    return format(date, "d 'de' MMMM 'de' yyyy", { locale: es })
+  }
+
   const getInitials = (name: string | undefined | null) => {
     if (!name) return "??"
     const cleanName = name.startsWith('@') ? name.substring(1) : name
@@ -1056,15 +1237,286 @@ export function ChatView({ userId }: ChatViewProps) {
 
   const getMediaUrl = (msg: Message) => {
     if (!selectedConversation) return ''
-    
-    const mediaId = msg.message_type === 'image' 
-      ? msg.metadata?.image?.id 
-      : msg.metadata?.audio?.id
-      
+
+    let mediaId: string | undefined
+    if (msg.metadata?.is_sticker) {
+      mediaId = msg.metadata?.sticker?.id
+    } else if (msg.message_type === 'image') {
+      mediaId = msg.metadata?.image?.id
+    } else if (msg.message_type === 'video') {
+      mediaId = msg.metadata?.video?.id
+    } else if (msg.message_type === 'audio') {
+      mediaId = msg.metadata?.audio?.id
+    } else if (msg.message_type === 'document') {
+      mediaId = msg.metadata?.document?.id
+    }
+
     if (!mediaId) return ''
-    
     return `/api/media/proxy?mediaId=${mediaId}&botId=${selectedConversation.bot_id}`
   }
+
+  // Convierte URLs dentro del texto en enlaces clickeables
+  const renderTextWithLinks = (text: string, isClient: boolean) => {
+    if (!text) return text
+    const parts = text.split(/(https?:\/\/[^\s]+)/g)
+    return parts.map((part, i) =>
+      /^https?:\/\//.test(part) ? (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "underline break-all hover:opacity-80",
+            isClient ? "text-blue-600 dark:text-blue-400" : "text-primary-foreground"
+          )}
+        >
+          {part}
+        </a>
+      ) : (
+        <span key={i}>{part}</span>
+      )
+    )
+  }
+
+  // Carga los stickers guardados del negocio
+  const loadSavedStickers = async () => {
+    try {
+      const res = await fetch('/api/chat/stickers')
+      if (!res.ok) return
+      const data = await res.json()
+      setSavedStickers(data.stickers || [])
+    } catch (error) {
+      console.error('Error cargando stickers guardados:', error)
+    }
+  }
+
+  // Guarda un sticker recibido para reenviarlo luego
+  const handleSaveSticker = async (msg: Message) => {
+    if (!selectedConversation) return
+    const mediaId = msg.metadata?.sticker?.id
+    if (!mediaId) {
+      toast.error("No se pudo identificar el sticker")
+      return
+    }
+    setSavingStickerId(msg.id)
+    try {
+      const res = await fetch('/api/chat/stickers/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mediaId, botId: selectedConversation.bot_id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al guardar')
+      toast.success("Sticker guardado", { description: "Ya podés reenviarlo desde el selector de stickers." })
+      loadSavedStickers()
+    } catch (error) {
+      toast.error("Error al guardar sticker", {
+        description: error instanceof Error ? error.message : "Inténtalo de nuevo",
+      })
+    } finally {
+      setSavingStickerId(null)
+    }
+  }
+
+  // Envía un sticker guardado a la conversación actual
+  const handleSendSticker = async (stickerId: string) => {
+    if (!selectedConversation) return
+    if (selectedConversation.status !== 'paused') {
+      toast.error("La IA está activa", {
+        description: "Debes pausar la respuesta automática para enviar stickers.",
+      })
+      return
+    }
+    setIsStickerPickerOpen(false)
+    try {
+      const res = await fetch('/api/chat/stickers/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stickerId, conversationId: selectedConversation.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al enviar')
+      toast.success("Sticker enviado")
+    } catch (error) {
+      toast.error("Error al enviar sticker", {
+        description: error instanceof Error ? error.message : "Inténtalo de nuevo",
+      })
+    }
+  }
+
+  // ---- Grabación de notas de voz ----
+  const formatRecordingTime = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`
+
+  const pickAudioMime = () => {
+    if (typeof MediaRecorder === "undefined") return ""
+    // Preferimos formatos que acepta la API de WhatsApp (ogg/opus, mp4/aac). webm es el último recurso.
+    const candidates = ["audio/ogg;codecs=opus", "audio/mp4", "audio/webm;codecs=opus", "audio/webm"]
+    for (const c of candidates) {
+      if (MediaRecorder.isTypeSupported(c)) return c
+    }
+    return ""
+  }
+
+  const sendAudioBlob = async (blob: Blob, type: string) => {
+    if (!selectedConversation) return
+
+    setIsSending(true)
+    let toastId: string | number | undefined
+    try {
+      let finalBlob = blob
+      let finalType = type
+      let ext = type.includes("ogg") ? "ogg" : type.includes("mp4") ? "m4a" : "mp3"
+
+      // WhatsApp no acepta webm: transcodificamos a MP3 en el navegador (Chrome/Edge)
+      if (type.includes("webm")) {
+        toastId = toast.loading("Procesando audio...")
+        const { transcodeToMp3 } = await import("@/lib/audio/transcode")
+        finalBlob = await transcodeToMp3(blob, "webm")
+        finalType = "audio/mpeg"
+        ext = "mp3"
+        toast.dismiss(toastId)
+        toastId = undefined
+      }
+
+      const file = new File([finalBlob], `voice-${Date.now()}.${ext}`, { type: finalType })
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("conversationId", selectedConversation.id)
+
+      const res = await fetch("/api/chat/send-media", { method: "POST", body: formData })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Error al enviar audio")
+      toast.success("Audio enviado")
+    } catch (error) {
+      if (toastId) toast.dismiss(toastId)
+      toast.error("Error al enviar audio", {
+        description: error instanceof Error ? error.message : "Inténtalo de nuevo",
+      })
+    } finally {
+      setIsSending(false)
+    }
+  }
+
+  const startRecording = async () => {
+    if (!selectedConversation) return
+    if (selectedConversation.status !== "paused") {
+      toast.error("La IA está activa", {
+        description: "Debes pausar la respuesta automática para enviar audios.",
+      })
+      return
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mime = pickAudioMime()
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+      audioChunksRef.current = []
+      recordingCancelledRef.current = false
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop())
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current)
+          recordingTimerRef.current = null
+        }
+        setIsRecording(false)
+        setRecordingTime(0)
+        if (recordingCancelledRef.current) return
+        const chunks = audioChunksRef.current
+        if (!chunks.length) return
+        const type = (mime || "audio/webm").split(";")[0]
+        await sendAudioBlob(new Blob(chunks, { type }), type)
+      }
+
+      mediaRecorderRef.current = recorder
+      recorder.start()
+      setIsRecording(true)
+      setRecordingTime(0)
+      recordingTimerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000)
+    } catch (error) {
+      console.error("Error al acceder al micrófono:", error)
+      toast.error("No se pudo acceder al micrófono", {
+        description: "Revisá los permisos del navegador.",
+      })
+    }
+  }
+
+  const stopRecording = (cancel = false) => {
+    recordingCancelledRef.current = cancel
+    const recorder = mediaRecorderRef.current
+    if (recorder && recorder.state !== "inactive") recorder.stop()
+  }
+
+  // Limpieza del timer de grabación al desmontar
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
+    }
+  }, [])
+
+  // Cargar stickers guardados al montar
+  useEffect(() => {
+    loadSavedStickers()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Cargar archivos, enlaces y documentos de la conversación al abrir el panel
+  useEffect(() => {
+    if (!selectedConversation || !isClientDetailsOpen) return
+
+    let cancelled = false
+    const fetchConversationMedia = async () => {
+      setIsLoadingMediaPanel(true)
+      try {
+        const { data } = await supabase
+          .from('messages')
+          .select('id, content, message_type, metadata, created_at, sender_type')
+          .eq('conversation_id', selectedConversation.id)
+          .order('created_at', { ascending: false })
+          .limit(500)
+
+        if (cancelled) return
+
+        const msgs = (data || []) as Message[]
+        const media = msgs.filter(
+          (m) => (m.message_type === 'image' && !m.metadata?.is_sticker) || m.message_type === 'video'
+        )
+        const docs = msgs.filter((m) => m.message_type === 'document')
+
+        const links: ConversationLink[] = []
+        const seen = new Set<string>()
+        const re = /(https?:\/\/[^\s]+)/g
+        for (const m of msgs) {
+          if (!m.content) continue
+          const found = m.content.match(re)
+          if (found) {
+            for (const url of found) {
+              if (!seen.has(url)) {
+                seen.add(url)
+                links.push({ url, messageId: m.id, created_at: m.created_at })
+              }
+            }
+          }
+        }
+
+        setConvMedia(media)
+        setConvDocs(docs)
+        setConvLinks(links)
+      } catch (error) {
+        console.error('Error cargando archivos del chat:', error)
+      } finally {
+        if (!cancelled) setIsLoadingMediaPanel(false)
+      }
+    }
+
+    fetchConversationMedia()
+    return () => {
+      cancelled = true
+    }
+  }, [selectedConversation, isClientDetailsOpen, supabase])
 
   const formatCurrency = (value: number | null | undefined) => {
     if (!value) return "$0"
@@ -1331,11 +1783,22 @@ export function ChatView({ userId }: ChatViewProps) {
                   <p>No hay mensajes en esta conversación.</p>
                 </div>
               ) : (
-                messages.map((msg) => {
+                messages.map((msg, index) => {
                   const isClient = msg.sender_type === 'client'
+                  const isSticker = !!msg.metadata?.is_sticker
+                  const showDateSeparator =
+                    index === 0 ||
+                    !isSameDay(new Date(msg.created_at), new Date(messages[index - 1].created_at))
                   return (
-                    <SwipeableMessage 
-                      key={msg.id} 
+                    <Fragment key={msg.id}>
+                      {showDateSeparator && (
+                        <div className="sticky top-2 z-20 flex justify-center my-3 select-none pointer-events-none">
+                          <span className="bg-white dark:bg-slate-800 text-muted-foreground text-xs font-medium px-3 py-1 rounded-lg shadow-sm border">
+                            {formatDateSeparator(msg.created_at)}
+                          </span>
+                        </div>
+                      )}
+                    <SwipeableMessage
                       onReply={() => setReplyingTo(msg)}
                       isClient={isClient}
                     >
@@ -1351,12 +1814,13 @@ export function ChatView({ userId }: ChatViewProps) {
                           </Button>
                         )}
                         
-                        <div 
+                        <div
                           className={cn(
                             "rounded-lg p-3 shadow-sm relative",
-                            isClient 
-                              ? "bg-white dark:bg-slate-800 rounded-tl-none border" 
-                              : "bg-primary text-primary-foreground rounded-tr-none"
+                            isClient
+                              ? "bg-white dark:bg-slate-800 rounded-tl-none border"
+                              : "bg-primary text-primary-foreground rounded-tr-none",
+                            isSticker && "!bg-transparent !shadow-none !p-0 !border-0"
                           )}
                         >
                           {/* Reply Context Display */}
@@ -1370,12 +1834,38 @@ export function ChatView({ userId }: ChatViewProps) {
                             />
                           )}
 
-                          {msg.message_type === 'image' && msg.metadata?.image ? (
+                          {isSticker ? (
+                          <div className="relative group/sticker">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={getMediaUrl(msg)}
+                              alt="Sticker"
+                              className="w-32 h-32 object-contain"
+                              onError={(e) => {
+                                if (msg.metadata?.sticker?.link && e.currentTarget.src !== msg.metadata.sticker.link) {
+                                  e.currentTarget.src = msg.metadata.sticker.link
+                                }
+                              }}
+                            />
+                            {isClient && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                className="absolute bottom-1 right-1 h-7 px-2 text-[11px] gap-1 opacity-0 group-hover/sticker:opacity-100 transition-opacity shadow"
+                                onClick={() => handleSaveSticker(msg)}
+                                disabled={savingStickerId === msg.id}
+                              >
+                                {savingStickerId === msg.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Bookmark className="h-3 w-3" />}
+                                Guardar
+                              </Button>
+                            )}
+                          </div>
+                        ) : msg.message_type === 'image' && msg.metadata?.image ? (
                           <div className="space-y-2">
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img 
-                              src={getMediaUrl(msg)} 
-                              alt="Imagen compartida" 
+                            <img
+                              src={getMediaUrl(msg)}
+                              alt="Imagen compartida"
                               className="rounded-md max-w-full h-auto max-h-[300px] object-cover"
                               onError={(e) => {
                                 // Fallback if proxy fails or ID is missing
@@ -1385,16 +1875,16 @@ export function ChatView({ userId }: ChatViewProps) {
                               }}
                             />
                             {msg.content && msg.content !== '[Image]' && (
-                              <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                              <p className="text-sm whitespace-pre-wrap">{renderTextWithLinks(msg.content, isClient)}</p>
                             )}
                           </div>
                         ) : msg.message_type === 'audio' && msg.metadata?.audio ? (
-                          <div className="min-w-[240px]">
-                            <audio controls className="w-full h-10 mt-1">
-                              <source src={getMediaUrl(msg)} type={msg.metadata.audio.mime_type} />
-                              Tu navegador no soporta audio.
-                            </audio>
-                          </div>
+                          <AudioPlayer
+                            src={getMediaUrl(msg)}
+                            isClient={isClient}
+                            initials={getInitials(selectedConversation?.client_name)}
+                            platform={selectedConversation?.platform}
+                          />
                         ) : msg.message_type === 'location' && msg.metadata?.location ? (
                           <div className="min-w-[200px]">
                             <a 
@@ -1421,11 +1911,11 @@ export function ChatView({ userId }: ChatViewProps) {
                             </a>
                           </div>
                         ) : (
-                          <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                          <p className="text-sm whitespace-pre-wrap">{renderTextWithLinks(msg.content, isClient)}</p>
                         )}
                         <div className={cn(
                           "text-[10px] mt-1 flex items-center justify-end gap-1",
-                          isClient ? "text-muted-foreground" : "text-primary-foreground/70"
+                          isSticker ? "text-muted-foreground" : isClient ? "text-muted-foreground" : "text-primary-foreground/70"
                         )}>
                           {format(new Date(msg.created_at), "HH:mm")}
                           {!isClient && <CheckCheck className="h-3 w-3" />}
@@ -1444,6 +1934,7 @@ export function ChatView({ userId }: ChatViewProps) {
                       )}
                     </div>
                     </SwipeableMessage>
+                    </Fragment>
                   )
                 })
               )}
@@ -1472,10 +1963,46 @@ export function ChatView({ userId }: ChatViewProps) {
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="text-muted-foreground">
+                <Button variant="ghost" size="icon" className="text-muted-foreground hidden md:flex">
                   <Smile className="h-5 w-5" />
                 </Button>
-                <input 
+                <Popover open={isStickerPickerOpen} onOpenChange={setIsStickerPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground"
+                      title="Stickers guardados"
+                      disabled={selectedConversation.status !== 'paused'}
+                    >
+                      <Sticker className="h-5 w-5" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-72 p-2">
+                    <p className="text-xs font-medium text-muted-foreground px-1 pb-2">Stickers guardados</p>
+                    {savedStickers.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-6 px-2">
+                        Todavía no guardaste stickers. Tocá &quot;Guardar&quot; sobre un sticker recibido.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                        {savedStickers.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => handleSendSticker(s.id)}
+                            className="aspect-square rounded-md border bg-muted/30 p-1 hover:bg-muted transition-colors"
+                            title="Enviar sticker"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={s.public_url || ''} alt="Sticker" className="w-full h-full object-contain" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+                <input
                   type="file" 
                   ref={fileInputRef} 
                   className="hidden" 
@@ -1491,22 +2018,59 @@ export function ChatView({ userId }: ChatViewProps) {
                 >
                   <Paperclip className="h-5 w-5" />
                 </Button>
-                <Textarea 
-                  placeholder="Escribe un mensaje..." 
-                  className="flex-1 min-h-[50px] max-h-[120px] resize-none py-[14px]"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSendMessage()
-                    }
-                  }}
-                  disabled={isSending}
-                />
-                <Button onClick={handleSendMessage} disabled={isSending || !newMessage.trim() || selectedConversation.status !== 'paused'}>
-                  <Send className="h-4 w-4" />
-                </Button>
+                {isRecording ? (
+                  <div className="flex-1 flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-500"
+                      onClick={() => stopRecording(true)}
+                      title="Cancelar grabación"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </Button>
+                    <div className="flex-1 flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse shrink-0" />
+                      <span className="text-sm font-mono text-red-500">{formatRecordingTime(recordingTime)}</span>
+                      <span className="text-xs text-muted-foreground hidden sm:inline">Grabando audio...</span>
+                    </div>
+                    <Button onClick={() => stopRecording(false)} disabled={isSending} title="Enviar audio">
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Textarea
+                      placeholder="Escribe un mensaje..."
+                      className="flex-1 min-h-[50px] max-h-[120px] resize-none py-[14px]"
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleSendMessage()
+                        }
+                      }}
+                      disabled={isSending}
+                    />
+                    {newMessage.trim() ? (
+                      <Button onClick={handleSendMessage} disabled={isSending || selectedConversation.status !== 'paused'}>
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-muted-foreground"
+                        onClick={startRecording}
+                        disabled={isSending || selectedConversation.status !== 'paused'}
+                        title="Grabar audio"
+                      >
+                        <Mic className="h-5 w-5" />
+                      </Button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </>
@@ -1616,6 +2180,106 @@ export function ChatView({ userId }: ChatViewProps) {
                   <div className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4 text-sm text-slate-500 dark:text-muted-foreground">
                     Este cliente aun no tiene pedidos registrados.
                   </div>
+                )}
+              </div>
+
+              <div className="mb-5">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-xs font-semibold tracking-widest text-slate-400 dark:text-muted-foreground flex items-center gap-1">
+                    <FileText className="h-4 w-4 text-lime-500" />
+                    ARCHIVOS, ENLACES Y DOCUMENTOS
+                  </p>
+                  <span className="text-xs font-medium text-slate-400 dark:text-muted-foreground">
+                    {convMedia.length + convLinks.length + convDocs.length}
+                  </span>
+                </div>
+
+                {isLoadingMediaPanel ? (
+                  <div className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4 text-sm text-slate-500 dark:text-muted-foreground">Cargando archivos...</div>
+                ) : (convMedia.length + convLinks.length + convDocs.length) === 0 ? (
+                  <div className="rounded-2xl border dark:border-border bg-white dark:bg-muted/30 p-4 text-sm text-slate-500 dark:text-muted-foreground">
+                    Sin archivos, enlaces ni documentos en este chat.
+                  </div>
+                ) : (
+                  <Tabs defaultValue="media">
+                    <TabsList className="grid w-full grid-cols-3 h-8">
+                      <TabsTrigger value="media" className="text-xs">Multimedia</TabsTrigger>
+                      <TabsTrigger value="links" className="text-xs">Enlaces</TabsTrigger>
+                      <TabsTrigger value="docs" className="text-xs">Docs</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="media" className="mt-3">
+                      {convMedia.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center">Sin multimedia.</p>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {convMedia.map((m) => (
+                            <a
+                              key={m.id}
+                              href={getMediaUrl(m)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="relative aspect-square rounded-md overflow-hidden bg-muted border block"
+                            >
+                              {m.message_type === 'video' ? (
+                                <div className="absolute inset-0 flex items-center justify-center bg-slate-800/80">
+                                  <Play className="h-6 w-6 text-white" />
+                                </div>
+                              ) : (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={getMediaUrl(m)} alt="media" className="w-full h-full object-cover" />
+                              )}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="links" className="mt-3">
+                      {convLinks.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center">Sin enlaces.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {convLinks.map((l, i) => (
+                            <a
+                              key={i}
+                              href={l.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 rounded-lg border dark:border-border bg-white dark:bg-muted/30 p-2 hover:bg-muted/50 transition-colors"
+                            >
+                              <Link2 className="h-4 w-4 text-blue-500 shrink-0" />
+                              <span className="text-xs text-blue-600 dark:text-blue-400 truncate">{l.url}</span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="docs" className="mt-3">
+                      {convDocs.length === 0 ? (
+                        <p className="text-xs text-muted-foreground py-3 text-center">Sin documentos.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {convDocs.map((d) => (
+                            <a
+                              key={d.id}
+                              href={getMediaUrl(d)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 rounded-lg border dark:border-border bg-white dark:bg-muted/30 p-2 hover:bg-muted/50 transition-colors"
+                            >
+                              <FileText className="h-4 w-4 text-slate-500 shrink-0" />
+                              <span className="text-xs text-slate-700 dark:text-foreground truncate flex-1">
+                                {d.metadata?.document?.filename || d.content || 'Documento'}
+                              </span>
+                              <Download className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
                 )}
               </div>
 

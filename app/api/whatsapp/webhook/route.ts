@@ -127,6 +127,7 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         audio,
         video,
         location,
+        sticker,
         context // Extract context for replies
       } = message
 
@@ -229,6 +230,12 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         case 'audio':
           messageContent = { ...messageContent, audio }
           textContent = '[Audio message]'
+          break
+        case 'sticker':
+          // Guardamos el objeto sticker y marcamos is_sticker para renderizarlo
+          // sin globo. Se almacena como 'image' para respetar el CHECK de message_type.
+          messageContent = { ...messageContent, sticker, is_sticker: true }
+          textContent = '[Sticker]'
           break
         case 'video':
           messageContent = { ...messageContent, video }
@@ -376,6 +383,9 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       let internalMessageType = 'text';
       if (['image', 'audio', 'document', 'video', 'location'].includes(messageType)) {
         internalMessageType = messageType;
+      } else if (messageType === 'sticker') {
+        // Los stickers se almacenan como 'image' (CHECK-safe) y se distinguen por metadata.is_sticker
+        internalMessageType = 'image';
       }
       // Treat buttons and interactive messages as text for storage purposes, 
       // but keep the original type in metadata
