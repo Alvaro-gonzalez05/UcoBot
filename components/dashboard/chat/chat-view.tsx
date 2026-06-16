@@ -252,6 +252,45 @@ function AudioPlayer({
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
+  const [resolvedSrc, setResolvedSrc] = useState(src)
+  const [isConverting, setIsConverting] = useState(false)
+  const triedFallbackRef = useRef(false)
+  const userIntentRef = useRef(false)
+
+  useEffect(() => {
+    setResolvedSrc(src)
+    triedFallbackRef.current = false
+  }, [src])
+
+  // Si el navegador no puede reproducir el formato (p. ej. ogg/opus en Safari/iOS),
+  // descargamos el audio y lo transcodificamos a MP3 en el cliente para poder escucharlo.
+  const fallbackTranscode = async () => {
+    // Solo si el usuario realmente intentó reproducir (evita transcodificar todo al montar)
+    if (!userIntentRef.current || triedFallbackRef.current) return
+    triedFallbackRef.current = true
+    setIsConverting(true)
+    try {
+      const resp = await fetch(src)
+      const blob = await resp.blob()
+      const ct = blob.type || resp.headers.get("content-type") || ""
+      const inExt = ct.includes("ogg")
+        ? "ogg"
+        : ct.includes("mp4") || ct.includes("m4a")
+        ? "mp4"
+        : ct.includes("webm")
+        ? "webm"
+        : "ogg"
+      const { transcodeToMp3 } = await import("@/lib/audio/transcode")
+      const mp3 = await transcodeToMp3(blob, inExt)
+      const url = URL.createObjectURL(mp3)
+      setResolvedSrc(url)
+      setTimeout(() => audioRef.current?.play().catch(() => {}), 60)
+    } catch (e) {
+      console.error("Error transcodificando audio para reproducir:", e)
+    } finally {
+      setIsConverting(false)
+    }
+  }
 
   // Barras de la onda generadas de forma determinística según el src (estables entre renders)
   const bars = useMemo(() => {
@@ -268,9 +307,16 @@ function AudioPlayer({
 
   const togglePlay = () => {
     const audio = audioRef.current
-    if (!audio) return
-    if (isPlaying) audio.pause()
-    else audio.play().catch(() => {})
+    if (!audio || isConverting) return
+    if (isPlaying) {
+      audio.pause()
+      return
+    }
+    userIntentRef.current = true
+    const p = audio.play()
+    if (p && typeof p.catch === "function") {
+      p.catch(() => fallbackTranscode())
+    }
   }
 
   const formatDur = (s: number) => {
@@ -295,7 +341,7 @@ function AudioPlayer({
     <div className="flex items-center gap-3 min-w-[230px] max-w-[260px] py-1">
       <audio
         ref={audioRef}
-        src={src}
+        src={resolvedSrc}
         preload="metadata"
         onPlay={() => setIsPlaying(true)}
         onPause={() => setIsPlaying(false)}
@@ -303,6 +349,7 @@ function AudioPlayer({
           setIsPlaying(false)
           setCurrentTime(0)
         }}
+        onError={() => fallbackTranscode()}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
         onDurationChange={(e) => setDuration(e.currentTarget.duration)}
@@ -334,9 +381,16 @@ function AudioPlayer({
       <button
         type="button"
         onClick={togglePlay}
+        disabled={isConverting}
         className={cn("shrink-0 flex items-center justify-center", isClient ? "text-primary" : "text-primary-foreground")}
       >
-        {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+        {isConverting ? (
+          <Loader2 className="h-6 w-6 animate-spin" />
+        ) : isPlaying ? (
+          <Pause className="h-6 w-6" />
+        ) : (
+          <Play className="h-6 w-6" />
+        )}
       </button>
 
       {/* Onda + tiempo */}
@@ -1367,13 +1421,15 @@ export function ChatView({ userId }: ChatViewProps) {
     try {
       let finalBlob = blob
       let finalType = type
-      let ext = type.includes("ogg") ? "ogg" : type.includes("mp4") ? "m4a" : "mp3"
+      let ext = type.includes("ogg") ? "ogg" : "mp3"
 
-      // WhatsApp no acepta webm: transcodificamos a MP3 en el navegador (Chrome/Edge)
-      if (type.includes("webm")) {
+      // WhatsApp solo acepta de forma confiable ogg/opus y mp3. El webm (Chrome/Edge) y el
+      // mp4 fragmentado del navegador (Safari/iOS) los rechaza, así que los transcodificamos a MP3.
+      if (!type.includes("ogg")) {
         toastId = toast.loading("Procesando audio...")
         const { transcodeToMp3 } = await import("@/lib/audio/transcode")
-        finalBlob = await transcodeToMp3(blob, "webm")
+        const inExt = type.includes("mp4") ? "mp4" : "webm"
+        finalBlob = await transcodeToMp3(blob, inExt)
         finalType = "audio/mpeg"
         ext = "mp3"
         toast.dismiss(toastId)
