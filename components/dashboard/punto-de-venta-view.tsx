@@ -7,11 +7,12 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2, QrCode, Gift } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings } from "lucide-react"
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialog"
 import { broadcastLoyaltyUpdate } from "@/lib/loyalty-realtime"
+import { PosSettingsDialog, type PosSettings } from "@/components/dashboard/pos-settings-dialog"
 
 interface Product {
   id: string
@@ -118,7 +119,20 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [redeemedReward, setRedeemedReward] = useState<Reward | null>(null)
   const [redeemStampGift, setRedeemStampGift] = useState(false)
 
+  // Configuración del POS (medios de pago + propina) y cobro
+  const [posSettings, setPosSettings] = useState<PosSettings>({
+    payment_methods: ["cash", "card", "transfer", "link"],
+    tip_enabled: false,
+    tip_percent: 10,
+  })
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [tip, setTip] = useState(0)
+  const [amountPaid, setAmountPaid] = useState("")
+
   const isStampsMode = loyaltySettings?.card_type === "stamps"
+
+  // Solo los medios de pago habilitados por el negocio
+  const enabledPaymentOptions = paymentOptions.filter((o) => posSettings.payment_methods.includes(o.id))
 
   useEffect(() => {
     // Cargar premios activos y la regla de puntos del negocio
@@ -140,6 +154,26 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       setLoyaltySettings(settings as LoyaltySettings | null)
     }
     loadLoyalty().catch((err) => console.error("Error loading loyalty data:", err))
+
+    // Cargar configuración del POS (medios de pago + propina)
+    supabase
+      .from("pos_settings")
+      .select("payment_methods, tip_enabled, tip_percent")
+      .eq("user_id", userId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          const pm = Array.isArray(data.payment_methods) && data.payment_methods.length > 0
+            ? data.payment_methods
+            : ["cash", "card", "transfer", "link"]
+          setPosSettings({
+            payment_methods: pm,
+            tip_enabled: data.tip_enabled ?? false,
+            tip_percent: Number(data.tip_percent) || 10,
+          })
+          if (!pm.includes("cash")) setPaymentMethod(pm[0])
+        }
+      })
   }, [userId])
 
   const handleCardScan = async (loyaltyCode: string) => {
@@ -204,9 +238,16 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   }, [redeemedReward, subtotal])
 
   const discountedSubtotal = subtotal - rewardDiscount
-  const taxAmount = discountedSubtotal * 0.15
-  const total = discountedSubtotal + taxAmount
+  const total = discountedSubtotal + tip
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
+
+  // Vuelto: lo que paga el cliente menos el total
+  const paidNum = parseFloat(amountPaid.replace(",", ".")) || 0
+  const change = paidNum > 0 ? paidNum - total : 0
+
+  // Sugerencia de propina configurada por el negocio
+  const suggestedTip = Math.round(discountedSubtotal * (posSettings.tip_percent / 100))
+  const tipApplied = tip > 0
 
   const fetchProductsPage = async ({
     pageNumber,
@@ -419,6 +460,22 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         })
       }
 
+      if (tip > 0) {
+        orderItems.push({
+          product_id: null,
+          name: "Propina / extra",
+          quantity: 1,
+          price: Number(tip.toFixed(2)),
+          subtotal: Number(tip.toFixed(2)),
+        })
+      }
+
+      // Nota de cobro: medio de pago, canje, y vuelto si se ingresó
+      const noteParts = [`Venta generada desde Punto de venta. Metodo de pago: ${paymentLabel}`]
+      if (redeemedReward) noteParts.push(`Canje: ${redeemedReward.name}`)
+      if (tip > 0) noteParts.push(`Propina/extra: ${formatCurrency(tip)}`)
+      if (paidNum > 0) noteParts.push(`Pagó con ${formatCurrency(paidNum)} · Vuelto: ${formatCurrency(Math.max(0, change))}`)
+
       const { error } = await supabase
         .from("orders")
         .insert({
@@ -428,7 +485,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           items: orderItems,
           total_amount: Number(total.toFixed(2)),
           delivery_phone: selectedClient?.phone || selectedClient?.instagram_username || "venta-local",
-          customer_notes: `Venta generada desde Punto de venta. Metodo de pago: ${paymentLabel}${redeemedReward ? `. Canje: ${redeemedReward.name}` : ""}`,
+          customer_notes: noteParts.join(". "),
           source: "pos",
         })
 
@@ -565,9 +622,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       setCartItems([])
       setSelectedClient(null)
       setClientSearch("")
-      setPaymentMethod("cash")
+      setPaymentMethod(posSettings.payment_methods[0] || "cash")
       setRedeemedReward(null)
       setRedeemStampGift(false)
+      setTip(0)
+      setAmountPaid("")
       setIsCartOpen(false)
     } catch (error) {
       console.error("Error creating POS order:", error)
@@ -703,14 +762,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           )}
         >
           <div className={cn("flex h-full w-full flex-col overflow-hidden rounded-[2rem] bg-white dark:bg-card", !isCartOpen && "lg:hidden")}>
-            <div className="flex-1 w-full overflow-y-auto overflow-x-hidden pt-1 custom-scrollbar">
-              <div className="w-full min-w-0 space-y-4 p-3 pb-24 sm:p-4 lg:pb-4 text-left">
-                <div className="w-full rounded-[1.75rem] bg-[#1f2030] p-4 text-white">
+            {/* Cliente — fijo arriba */}
+            <div className="flex-shrink-0 p-3 sm:p-4 pb-2 text-left">
+                <div className="w-full rounded-[1.5rem] bg-[#1f2030] p-3.5 text-white">
                   <div className="mb-3 flex items-center justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#d8ff55]">Cliente</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => setScannerOpen(true)}
@@ -719,11 +778,19 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                         <QrCode className="h-3.5 w-3.5" />
                         Escanear
                       </button>
-                      <Link href="/dashboard/clientes" className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60 hover:text-white transition-colors">
+                      <Link href="/dashboard/clientes" className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60 hover:text-white transition-colors">
                         Crear nuevo
                       </Link>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
+                        onClick={() => setSettingsOpen(true)}
+                        title="Configuración del punto de venta"
+                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                      >
+                        <Settings className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setIsCartOpen(false)}
                         className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
                       >
@@ -793,9 +860,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     </div>
                   )}
                 </div>
+            </div>
 
-                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            {/* Carrito + fidelización — única zona scrolleable */}
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 sm:px-4 space-y-3 text-left">
+                <div className="w-full rounded-[1.5rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-3.5">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Carrito actual</p>
                     </div>
@@ -942,11 +1012,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     </div>
                   </div>
                 )}
+            </div>
 
-                <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {paymentOptions.map((option) => {
+            {/* Pago + factura — fijo abajo */}
+            <div className="flex-shrink-0 px-3 sm:px-4 pt-3 pb-3 sm:pb-4 space-y-3 border-t border-slate-100 dark:border-border text-left">
+                <div className="w-full rounded-[1.5rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {enabledPaymentOptions.map((option) => {
                       const Icon = option.icon
                       const isActive = paymentMethod === option.id
                       return (
@@ -955,13 +1028,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                           type="button"
                           onClick={() => setPaymentMethod(option.id)}
                           className={cn(
-                            "rounded-[1.15rem] border p-4 text-center transition-all",
+                            "rounded-[1.15rem] border p-2.5 text-center transition-all",
                             isActive
                               ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-lg"
                               : "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-400 hover:border-slate-300 hover:text-slate-700 dark:hover:text-foreground"
                           )}
                         >
-                          <Icon className="mx-auto mb-2 h-5 w-5" />
+                          <Icon className="mx-auto mb-1 h-5 w-5" />
                           <span className="text-xs font-semibold">{option.label}</span>
                         </button>
                       )
@@ -969,8 +1042,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   </div>
                 </div>
 
-                <div className="w-full rounded-[1.75rem] border border-slate-100 dark:border-border bg-white dark:bg-card p-4 shadow-sm dark:shadow-none">
-                  <div className="space-y-2 text-sm text-slate-500 dark:text-muted-foreground">
+                <div className="w-full rounded-[1.5rem] border border-slate-100 dark:border-border bg-white dark:bg-card p-3 shadow-sm dark:shadow-none">
+                  <div className="space-y-1.5 text-sm text-slate-500 dark:text-muted-foreground">
                     <div className="flex items-center justify-between">
                       <span>Subtotal</span>
                       <span className="font-semibold text-slate-700 dark:text-foreground">{formatCurrency(subtotal)}</span>
@@ -981,24 +1054,95 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                         <span className="font-semibold">-{formatCurrency(rewardDiscount)}</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between">
-                      <span>Impuestos (15%)</span>
-                      <span className="font-semibold text-slate-700 dark:text-foreground">{formatCurrency(taxAmount)}</span>
-                    </div>
+                    {tip > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span>Propina / extra</span>
+                        <span className="font-semibold text-slate-700 dark:text-foreground">+{formatCurrency(tip)}</span>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="mt-5 flex flex-wrap items-end justify-between border-t border-slate-100 dark:border-border pt-4 gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-muted-foreground">Total</p>
+                  {/* Propina / extra */}
+                  {posSettings.tip_enabled && cartItems.length > 0 && (
+                    <div className="mt-2.5 flex items-center gap-2 border-t border-slate-100 dark:border-border pt-2.5">
+                      <span className="text-xs text-slate-400 flex-shrink-0">Propina</span>
+                      <button
+                        type="button"
+                        onClick={() => setTip(tipApplied ? 0 : suggestedTip)}
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-bold transition-colors flex-shrink-0",
+                          tipApplied
+                            ? "bg-[#1f2030] text-[#d8ff55]"
+                            : "bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground hover:bg-slate-200"
+                        )}
+                      >
+                        {posSettings.tip_percent}%
+                      </button>
+                      <div className="relative flex-1">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={tip ? String(tip) : ""}
+                          onChange={(e) => setTip(parseFloat(e.target.value) || 0)}
+                          placeholder="Otro monto"
+                          className="h-8 pl-5 text-sm"
+                        />
+                      </div>
                     </div>
-                    <p className="min-w-0 truncate text-3xl font-black tracking-tight text-slate-900 dark:text-foreground sm:text-4xl">{formatCurrency(total)}</p>
+                  )}
+
+                  <div className="mt-2.5 flex flex-wrap items-end justify-between border-t border-slate-100 dark:border-border pt-2.5 gap-2">
+                    <p className="text-sm font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-muted-foreground">Total</p>
+                    <p className="min-w-0 truncate text-2xl font-black tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">{formatCurrency(total)}</p>
                   </div>
 
-                  <div className="flex flex-col gap-2 mt-5">
+                  {/* Paga con → vuelto */}
+                  {cartItems.length > 0 && (
+                    <div className="mt-2.5 space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400 flex-shrink-0 w-[68px]">Paga con</span>
+                        <div className="relative flex-1">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            value={amountPaid}
+                            onChange={(e) => setAmountPaid(e.target.value)}
+                            placeholder="Monto recibido"
+                            className="h-8 pl-5 text-sm"
+                          />
+                        </div>
+                      </div>
+                      {paidNum > 0 && (
+                        <div className="flex items-center justify-between text-sm px-0.5">
+                          <span className={change >= 0 ? "text-slate-500 dark:text-muted-foreground" : "text-red-500"}>
+                            {change >= 0 ? "Vuelto" : "Falta"}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("font-bold", change >= 0 ? "text-slate-800 dark:text-foreground" : "text-red-500")}>
+                              {formatCurrency(Math.abs(change))}
+                            </span>
+                            {change > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setTip(Number((tip + change).toFixed(2)))}
+                                className="rounded-full bg-[#d8ff55]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#1f2030] dark:text-[#d8ff55] hover:bg-[#d8ff55]/35 transition-colors"
+                              >
+                                Dejar de propina
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-2 mt-3">
                     <Button
                       onClick={finalizeSale}
                       disabled={isSubmitting || cartItems.length === 0}
-                      className="h-14 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
+                      className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
                     >
                       {isSubmitting ? "Procesando..." : "Finalizar venta"}
                       <CheckCircle2 className="ml-2 h-4 w-4" />
@@ -1007,19 +1151,32 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       onClick={moveOrder}
                       disabled={isSubmitting || cartItems.length === 0}
                       variant="outline"
-                      className="h-12 w-full rounded-[1.25rem] border-slate-200 dark:border-border text-sm font-bold uppercase tracking-[0.25em] text-slate-600 dark:text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted hover:text-slate-900 dark:hover:text-foreground"
+                      className="h-11 w-full rounded-[1.25rem] border-slate-200 dark:border-border text-sm font-bold uppercase tracking-[0.25em] text-slate-600 dark:text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted hover:text-slate-900 dark:hover:text-foreground"
                     >
                       Pasar pedido
                     </Button>
                   </div>
                 </div>
-              </div>
             </div>
           </div>
         </aside>
       </div>
 
       <LoyaltyScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onScan={handleCardScan} />
+
+      <PosSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        userId={userId}
+        settings={posSettings}
+        onSaved={(s) => {
+          setPosSettings(s)
+          // Si el medio de pago elegido quedó deshabilitado, pasar al primero válido
+          if (!s.payment_methods.includes(paymentMethod)) setPaymentMethod(s.payment_methods[0])
+          // Si apagaron la propina, limpiar lo cargado
+          if (!s.tip_enabled) setTip(0)
+        }}
+      />
 
       {!isCartOpen && cartItems.length > 0 && (
         <button
