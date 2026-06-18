@@ -208,7 +208,7 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
           </button>
 
           {/* Perfil — abre el mismo dropdown que el header, en versión glass hacia arriba */}
-          {user && profile ? (
+          {user ? (
             <ProfileDropdown
               user={user}
               profile={profile}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, type CSSProperties } from "react"
+import { bestProductPromotion, totalCapAdjustment, promotionLabel, type Promotion } from "@/lib/promotions"
 import { toast } from "sonner"
 
 // ---- Color helpers ----
@@ -87,7 +88,7 @@ const KEYFRAMES = `
 `
 
 // ---- Main component ----
-export function PublicFormRenderer({ form }: { form: FormModel }) {
+export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel; promotions?: Promotion[] }) {
   const [conversationId, setConversationId] = useState<string | undefined>(undefined)
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
@@ -136,7 +137,14 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState(false)
 
-  const productsTotal = selectedProducts.reduce((sum, p) => sum + p.price, 0)
+  const productsTotal = (() => {
+    const items = selectedProducts.map((p) => {
+      const promo = bestProductPromotion(p, promotions)
+      return { originalPrice: p.price, price: promo ? promo.price : p.price, quantity: 1, promoId: promo?.promo.id }
+    })
+    const sum = items.reduce((s, it) => s + it.price, 0)
+    return sum + totalCapAdjustment(items, promotions)
+  })()
   const extraCostsTotal = (cotizador?.extraCosts || [])
     .filter(ec => checkedExtraCosts.includes(ec.label))
     .reduce((sum, ec) => sum + ec.amount, 0)
@@ -349,6 +357,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
                         <ProductSelector
                           field={field}
                           userId={form.user_id}
+                          promotions={promotions}
                           selectedProducts={selectedProducts}
                           onToggle={(p) => {
                             setSelectedProducts(prev => {
@@ -400,6 +409,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
             <CotizadorSidebar
               cotizador={cotizador}
               selectedProducts={selectedProducts}
+              promotions={promotions}
               checkedExtraCosts={checkedExtraCosts}
               onToggleExtraCost={(label) => setCheckedExtraCosts(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label])}
               cotizadorTotal={cotizadorTotal}
@@ -456,6 +466,7 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
           <CotizadorSidebar
             cotizador={cotizador}
             selectedProducts={selectedProducts}
+            promotions={promotions}
             checkedExtraCosts={checkedExtraCosts}
             onToggleExtraCost={(label) => setCheckedExtraCosts(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label])}
             cotizadorTotal={cotizadorTotal}
@@ -477,13 +488,14 @@ export function PublicFormRenderer({ form }: { form: FormModel }) {
 
 // ---- Cotizador sidebar (shared between desktop and mobile) ----
 function CotizadorSidebar({
-  cotizador, selectedProducts, checkedExtraCosts, onToggleExtraCost,
+  cotizador, selectedProducts, promotions, checkedExtraCosts, onToggleExtraCost,
   cotizadorTotal, themeGradient, color1, color2, onGradient, onGradientDim,
   panelBase, textPrimary, bodyColor, isDark,
   showPayment, values, onChangeValue, inputOverride, labelColor,
 }: {
   cotizador: CotizadorConfig | undefined
   selectedProducts: Product[]
+  promotions: Promotion[]
   checkedExtraCosts: string[]
   onToggleExtraCost: (label: string) => void
   cotizadorTotal: number
@@ -518,12 +530,18 @@ function CotizadorSidebar({
           {selectedProducts.length === 0 ? (
             <p className="text-xs text-center opacity-60" style={{ color: onGradient }}>Seleccioná un producto para ver el precio</p>
           ) : (
-            selectedProducts.map(p => (
+            selectedProducts.map(p => {
+              const promo = bestProductPromotion(p, promotions)
+              return (
               <div key={p.id} className="flex justify-between items-center gap-2">
                 <span className="text-xs truncate" style={{ color: onGradient }}>{p.name}</span>
-                <span className="text-xs font-bold flex-shrink-0" style={{ color: onGradient }}>${p.price.toLocaleString("es-AR")}</span>
+                <span className="text-xs font-bold flex-shrink-0 flex items-baseline gap-1.5" style={{ color: onGradient }}>
+                  {promo && <span style={{ opacity: 0.6, textDecoration: "line-through", fontWeight: 400 }}>${p.price.toLocaleString("es-AR")}</span>}
+                  <span>${(promo ? promo.price : p.price).toLocaleString("es-AR")}</span>
+                </span>
               </div>
-            ))
+              )
+            })
           )}
           {cotizador?.extraCosts && cotizador.extraCosts.length > 0 && (
             <>
@@ -586,11 +604,12 @@ function CotizadorSidebar({
 const PAGE_SIZE = 5
 
 function ProductSelector({
-  field, userId, selectedProducts, onToggle,
+  field, userId, promotions, selectedProducts, onToggle,
   accentColor, labelColor, bodyColor, isDark,
 }: {
   field: FormField
   userId: string
+  promotions: Promotion[]
   selectedProducts: Product[]
   onToggle: (p: Product) => void
   accentColor: string
@@ -686,6 +705,7 @@ function ProductSelector({
       <div className="grid grid-cols-2 gap-2 sm:gap-3">
         {products.map(product => {
           const isSelected = selectedProducts.some(sp => sp.id === product.id)
+          const promo = bestProductPromotion(product, promotions)
           return (
             <button
               key={product.id}
@@ -720,10 +740,15 @@ function ProductSelector({
                         {/* Bottom gradient so price text is readable */}
                         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "55%", background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)" }} />
                         {/* Price over image */}
-                        <div style={{ position: "absolute", bottom: 8, left: 10 }}>
+                        <div style={{ position: "absolute", bottom: 8, left: 10, display: "flex", alignItems: "baseline", gap: 6 }}>
                           <span style={{ fontSize: 15, fontWeight: 900, color: "#fff", textShadow: "0 1px 4px rgba(0,0,0,0.4)", letterSpacing: "-0.02em" }}>
-                            ${product.price.toLocaleString("es-AR")}
+                            ${(promo ? promo.price : product.price).toLocaleString("es-AR")}
                           </span>
+                          {promo && (
+                            <span style={{ fontSize: 11, color: "#fff", opacity: 0.7, textDecoration: "line-through" }}>
+                              ${product.price.toLocaleString("es-AR")}
+                            </span>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -742,9 +767,29 @@ function ProductSelector({
                         }}>
                           {product.name.charAt(0).toUpperCase()}
                         </span>
-                        <span style={{ fontSize: 14, fontWeight: 900, letterSpacing: "-0.02em", color: isSelected ? accentColor : (isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.35)") }}>
-                          ${product.price.toLocaleString("es-AR")}
+                        <span style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                          <span style={{ fontSize: 14, fontWeight: 900, letterSpacing: "-0.02em", color: isSelected ? accentColor : (isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.35)") }}>
+                            ${(promo ? promo.price : product.price).toLocaleString("es-AR")}
+                          </span>
+                          {promo && (
+                            <span style={{ fontSize: 11, opacity: 0.6, textDecoration: "line-through", color: isDark ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.4)" }}>
+                              ${product.price.toLocaleString("es-AR")}
+                            </span>
+                          )}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Discount badge */}
+                    {promo && (
+                      <div style={{
+                        position: "absolute", top: 8, left: 8,
+                        padding: "2px 8px", borderRadius: 999,
+                        background: accentColor, color: "#0b0b0b",
+                        fontSize: 10, fontWeight: 900, letterSpacing: "-0.01em",
+                        boxShadow: `0 2px 8px ${accentColor}55`,
+                      }}>
+                        {promotionLabel(promo.promo)}
                       </div>
                     )}
 

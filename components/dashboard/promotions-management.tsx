@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Dialog,
@@ -34,6 +35,20 @@ interface Promotion {
   is_active: boolean
   image_url?: string
   created_at: string
+  discount_type?: "percentage" | "fixed_amount" | null
+  discount_value?: number | null
+  max_discount_amount?: number | null
+  max_discount_scope?: "product" | "total" | null
+  applies_to?: "all" | "products" | "category" | null
+  product_ids?: string[] | null
+  category?: string | null
+}
+
+interface ProductOption {
+  id: string
+  name: string
+  price: number
+  category?: string | null
 }
 
 interface Reward {
@@ -52,6 +67,7 @@ interface Reward {
 interface PromotionsManagementProps {
   initialPromotions: Promotion[]
   initialRewards: Reward[]
+  products: ProductOption[]
   userId: string
 }
 
@@ -89,7 +105,10 @@ function getPromotionProgress(promotion: Promotion): number {
   return Math.min(100, Math.round((promotion.current_uses / promotion.max_uses) * 100))
 }
 
-export function PromotionsManagement({ initialPromotions, initialRewards, userId }: PromotionsManagementProps) {
+export function PromotionsManagement({ initialPromotions, initialRewards, products, userId }: PromotionsManagementProps) {
+  const productCategories = Array.from(
+    new Set((products || []).map((p) => p.category).filter((c): c is string => !!c))
+  ).sort()
   const [promotions, setPromotions] = useState<Promotion[]>(initialPromotions)
   const [rewards, setRewards] = useState<Reward[]>(initialRewards)
   const [loyaltyCardType, setLoyaltyCardType] = useState<LoyaltyCardType>("points")
@@ -109,6 +128,13 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
     end_date: "",
     is_active: true,
     image_url: "",
+    discount_type: "percentage" as "percentage" | "fixed_amount",
+    discount_value: "",
+    max_discount_amount: "",
+    max_discount_scope: "product" as "product" | "total",
+    applies_to: "all" as "all" | "products" | "category",
+    product_ids: [] as string[],
+    category: "",
   })
 
   const [rewardForm, setRewardForm] = useState({
@@ -122,7 +148,10 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
   })
 
   const resetPromotionForm = () => {
-    setPromotionForm({ name: "", description: "", max_uses: "", start_date: "", end_date: "", is_active: true, image_url: "" })
+    setPromotionForm({
+      name: "", description: "", max_uses: "", start_date: "", end_date: "", is_active: true, image_url: "",
+      discount_type: "percentage", discount_value: "", max_discount_amount: "", max_discount_scope: "product", applies_to: "all", product_ids: [], category: "",
+    })
   }
 
   const resetRewardForm = () => {
@@ -143,6 +172,16 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
         end_date: promotionForm.end_date,
         is_active: promotionForm.is_active,
         image_url: promotionForm.image_url || null,
+        discount_type: promotionForm.discount_type,
+        discount_value: promotionForm.discount_value ? Number.parseFloat(promotionForm.discount_value) : null,
+        max_discount_amount:
+          promotionForm.discount_type === "percentage" && promotionForm.max_discount_amount
+            ? Number.parseFloat(promotionForm.max_discount_amount)
+            : null,
+        max_discount_scope: promotionForm.max_discount_scope,
+        applies_to: promotionForm.applies_to,
+        product_ids: promotionForm.applies_to === "products" ? promotionForm.product_ids : [],
+        category: promotionForm.applies_to === "category" ? promotionForm.category || null : null,
       }
       const { data, error } = await supabase.from("promotions").insert([promotionData]).select().single()
       if (error) throw error
@@ -564,6 +603,105 @@ export function PromotionsManagement({ initialPromotions, initialRewards, userId
                   </div>
                 )}
               </div>
+
+              {/* Descuento real */}
+              <div className="grid gap-4 grid-cols-2">
+                <div className="flex flex-col gap-2">
+                  <Label className="font-semibold">Tipo de descuento *</Label>
+                  <Select value={promotionForm.discount_type} onValueChange={(v) => setPromotionForm({ ...promotionForm, discount_type: v as "percentage" | "fixed_amount" })}>
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="percentage">Porcentaje (%)</SelectItem>
+                      <SelectItem value="fixed_amount">Monto fijo ($)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="discount-value" className="font-semibold">Valor *</Label>
+                  <Input id="discount-value" type="number" min="0" step="0.01" value={promotionForm.discount_value} onChange={(e) => setPromotionForm({ ...promotionForm, discount_value: e.target.value })} placeholder={promotionForm.discount_type === "percentage" ? "20" : "500"} required className="rounded-xl" />
+                </div>
+              </div>
+
+              {promotionForm.discount_type === "percentage" && (
+                <div className="flex flex-col gap-2">
+                  <div className="grid gap-4 grid-cols-2">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="max-discount" className="font-semibold">Tope de descuento (opcional)</Label>
+                      <Input id="max-discount" type="number" min="0" step="0.01" value={promotionForm.max_discount_amount} onChange={(e) => setPromotionForm({ ...promotionForm, max_discount_amount: e.target.value })} placeholder="Ej: 10000" className="rounded-xl" />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <Label className="font-semibold">El tope aplica</Label>
+                      <Select value={promotionForm.max_discount_scope} onValueChange={(v) => setPromotionForm({ ...promotionForm, max_discount_scope: v as "product" | "total" })}>
+                        <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="product">Por producto</SelectItem>
+                          <SelectItem value="total">Sobre el total de la compra</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    El descuento no superará este monto {promotionForm.max_discount_scope === "total" ? "en el total de la compra" : "por producto"}. Dejá el monto vacío para sin tope.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Label className="font-semibold">Aplica a *</Label>
+                <Select value={promotionForm.applies_to} onValueChange={(v) => setPromotionForm({ ...promotionForm, applies_to: v as "all" | "products" | "category", product_ids: [], category: "" })}>
+                  <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los productos / toda la venta</SelectItem>
+                    <SelectItem value="products">Productos específicos</SelectItem>
+                    <SelectItem value="category">Una categoría</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {promotionForm.applies_to === "category" && (
+                <div className="flex flex-col gap-2">
+                  <Label className="font-semibold">Categoría</Label>
+                  {productCategories.length > 0 ? (
+                    <Select value={promotionForm.category} onValueChange={(v) => setPromotionForm({ ...promotionForm, category: v })}>
+                      <SelectTrigger className="rounded-xl"><SelectValue placeholder="Elegí una categoría" /></SelectTrigger>
+                      <SelectContent>
+                        {productCategories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No tenés categorías cargadas en tus productos.</p>
+                  )}
+                </div>
+              )}
+
+              {promotionForm.applies_to === "products" && (
+                <div className="flex flex-col gap-2">
+                  <Label className="font-semibold">Productos en promoción</Label>
+                  <div className="max-h-44 overflow-y-auto rounded-xl border p-2 space-y-1">
+                    {products.length > 0 ? products.map((p) => {
+                      const checked = promotionForm.product_ids.includes(p.id)
+                      return (
+                        <label key={p.id} className="flex items-center gap-2 text-sm cursor-pointer p-1.5 rounded-lg hover:bg-muted">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(c) => setPromotionForm((prev) => ({
+                              ...prev,
+                              product_ids: c ? [...prev.product_ids, p.id] : prev.product_ids.filter((id) => id !== p.id),
+                            }))}
+                          />
+                          <span className="flex-1 truncate">{p.name}</span>
+                          <span className="text-muted-foreground">${p.price}</span>
+                        </label>
+                      )
+                    }) : (
+                      <p className="text-xs text-muted-foreground p-2">No tenés productos cargados.</p>
+                    )}
+                  </div>
+                  {promotionForm.product_ids.length > 0 && (
+                    <p className="text-xs text-muted-foreground">{promotionForm.product_ids.length} producto(s) seleccionado(s)</p>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-col gap-2">
                 <Label htmlFor="max-uses" className="font-semibold">Máximo de Usos</Label>

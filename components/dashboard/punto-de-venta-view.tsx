@@ -13,6 +13,7 @@ import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialog"
 import { broadcastLoyaltyUpdate } from "@/lib/loyalty-realtime"
 import { PosSettingsDialog, type PosSettings } from "@/components/dashboard/pos-settings-dialog"
+import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
 
 interface Product {
   id: string
@@ -40,6 +41,11 @@ interface CartItem {
   productId: string
   name: string
   price: number
+  /** Precio original sin promoción (solo si tiene una promo aplicada) */
+  originalPrice?: number
+  /** Promo aplicada a este item (para mostrar y para contar usos al cerrar) */
+  promoId?: string
+  promoLabel?: string
   imageUrl?: string | null
   quantity: number
 }
@@ -85,6 +91,7 @@ interface PuntoDeVentaViewProps {
   products: Product[]
   categories: string[]
   clients: Client[]
+  promotions: Promotion[]
 }
 
 const PRODUCTS_PAGE_SIZE = 18
@@ -96,7 +103,7 @@ const paymentOptions = [
   { id: "link", label: "Link Pago", icon: Link2 },
 ]
 
-export function PuntoDeVentaView({ userId, products: initialProducts, categories: initialCategories, clients }: PuntoDeVentaViewProps) {
+export function PuntoDeVentaView({ userId, products: initialProducts, categories: initialCategories, clients, promotions }: PuntoDeVentaViewProps) {
   const supabase = createClient()
   const [activeCategory, setActiveCategory] = useState("Todos")
   const [productSearch, setProductSearch] = useState("")
@@ -231,13 +238,18 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
 
+  // Tope de descuento SOBRE EL TOTAL: si la suma de descuentos de una promo superó su tope,
+  // se devuelve el excedente (el subtotal ya trae el % completo aplicado por ítem).
+  const promoCapAdjustment = useMemo(() => totalCapAdjustment(cartItems, promotions), [cartItems, promotions])
+  const subtotalAfterCaps = subtotal + promoCapAdjustment
+
   // Descuento por canje de premio (porcentaje o monto fijo, capado al subtotal)
   const rewardDiscount = useMemo(() => {
     if (!redeemedReward) return 0
-    return parseRewardDiscount(redeemedReward, subtotal)
-  }, [redeemedReward, subtotal])
+    return parseRewardDiscount(redeemedReward, subtotalAfterCaps)
+  }, [redeemedReward, subtotalAfterCaps])
 
-  const discountedSubtotal = subtotal - rewardDiscount
+  const discountedSubtotal = subtotalAfterCaps - rewardDiscount
   const total = discountedSubtotal + tip
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
@@ -367,6 +379,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   }
 
   const addProductToCart = (product: Product) => {
+    const promo = bestProductPromotion(
+      { id: product.id, price: product.price, category: product.category },
+      promotions
+    )
     setCartItems((prev) => {
       const existingItem = prev.find((item) => item.productId === product.id)
       if (existingItem) {
@@ -382,7 +398,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         {
           productId: product.id,
           name: product.name,
-          price: product.price,
+          price: promo ? promo.price : product.price,
+          originalPrice: promo ? product.price : undefined,
+          promoId: promo ? promo.promo.id : undefined,
+          promoLabel: promo ? promotionLabel(promo.promo) : undefined,
           imageUrl: product.image_url,
           quantity: 1,
         },
@@ -619,6 +638,19 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       }
 
       toast.success(status === "completed" ? "Venta registrada como finalizada" : "Pedido pasado correctamente")
+
+      // Contabilizar un uso por cada promoción aplicada en esta venta (respeta el límite en DB)
+      const usedPromoIds = Array.from(
+        new Set(cartItems.map((i) => i.promoId).filter((id): id is string => !!id))
+      )
+      for (const pid of usedPromoIds) {
+        try {
+          await supabase.rpc("increment_promotion_use", { p_id: pid })
+        } catch (e) {
+          console.error("Error incrementing promotion use:", e)
+        }
+      }
+
       setCartItems([])
       setSelectedClient(null)
       setClientSearch("")
@@ -640,15 +672,15 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const moveOrder = () => submitSale("pending")
 
   return (
-    <div className="h-full w-full bg-[#f3f3f6] dark:bg-background p-3 sm:p-4 lg:p-4 xl:p-6 overflow-hidden">
-      <div className="mx-auto flex h-full max-w-[1500px] gap-4 overflow-hidden rounded-[2rem] bg-transparent">
+    <div className="h-full w-full bg-background p-3 sm:p-4 lg:p-4 xl:p-6 overflow-hidden">
+      <div className="mx-auto flex h-full max-w-[1500px] gap-4 rounded-[2rem] bg-transparent">
         <section
           className={cn(
-            "min-w-0 flex-1 rounded-[2rem] bg-[#f7f7fa] dark:bg-background p-4 transition-all duration-500 sm:p-5",
+            "min-w-0 flex-1 rounded-[2rem] bg-white dark:bg-card p-4 transition-all duration-500 sm:p-5 shadow-[0_12px_34px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_12px_34px_-12px_rgba(0,0,0,0.9)]",
             isCartOpen ? "lg:mr-0" : ""
           )}
         >
-          <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] bg-white dark:bg-muted px-4 py-3 shadow-[0_10px_30px_rgba(17,24,39,0.04)] dark:shadow-none">
+          <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] bg-white dark:bg-muted px-4 py-3 shadow-[0_16px_40px_-8px_rgba(17,24,39,0.45)] dark:shadow-[0_16px_40px_-8px_rgba(0,0,0,0.85)]">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <Input
               value={productSearch}
@@ -658,14 +690,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             />
           </div>
 
-          <div className="mb-5 flex gap-2 overflow-x-auto pb-1">
+          <div className="mb-4 -mx-2.5 flex gap-2 overflow-x-auto px-2.5 py-3.5">
             {categories.map((category) => (
               <button
                 key={category}
                 type="button"
                 onClick={() => setActiveCategory(category)}
                 className={cn(
-                  "whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors shadow-[0_4px_12px_-3px_rgba(17,24,39,0.4)] dark:shadow-[0_4px_12px_-3px_rgba(0,0,0,0.7)]",
                   activeCategory === category
                     ? "bg-[#1f2030] text-[#d8ff55]"
                     : "bg-white dark:bg-muted text-slate-400 hover:text-slate-700 dark:hover:text-foreground"
@@ -679,7 +711,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           {isRefetching ? (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] 2xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               {Array.from({ length: PRODUCTS_PAGE_SIZE }).map((_, i) => (
-                <div key={i} className="animate-pulse rounded-[2rem] bg-white dark:bg-muted p-3 shadow-[0_10px_35px_rgba(17,24,39,0.05)] dark:shadow-none">
+                <div key={i} className="animate-pulse rounded-[2rem] bg-white dark:bg-muted p-3 shadow-[0_18px_45px_-8px_rgba(17,24,39,0.5)] dark:shadow-[0_18px_45px_-8px_rgba(0,0,0,0.9)]">
                   <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted dark:bg-muted/60 p-2">
                     <div className="aspect-square rounded-[1.25rem] bg-slate-200 dark:bg-muted-foreground/20" />
                   </div>
@@ -704,42 +736,75 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               ) : (
                 <>
               <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] 2xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
-                {products.map((product) => (
+                {products.map((product) => {
+                  const promo = bestProductPromotion(
+                    { id: product.id, price: product.price, category: product.category },
+                    promotions
+                  )
+                  return (
                   <button
                     key={product.id}
                     type="button"
                     onClick={() => addProductToCart(product)}
-                    className="group rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-muted shadow-[0_10px_35px_rgba(17,24,39,0.05)] dark:shadow-none transition-transform duration-200 hover:-translate-y-1"
+                    className="group relative rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-muted shadow-[0_18px_45px_-8px_rgba(17,24,39,0.5)] dark:shadow-[0_18px_45px_-8px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_28px_60px_-8px_rgba(17,24,39,0.6)] dark:hover:shadow-[0_28px_60px_-8px_rgba(0,0,0,1)]"
                   >
-                    {product.image_url && (
-                      <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted p-2">
-                        <div className="aspect-square overflow-hidden rounded-[1.25rem] bg-white dark:bg-card">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {/* Media: imagen o placeholder con la inicial. El badge va acá (nunca tapa el nombre) */}
+                    <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted">
+                      <div className="aspect-square overflow-hidden rounded-[1.5rem]">
+                        {product.image_url ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
                           <img
                             src={product.image_url}
                             alt={product.name}
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
-                        </div>
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#eef1f5] to-[#e1e5ea] dark:from-muted dark:to-card">
+                            <span className="select-none text-4xl font-black text-slate-300 dark:text-muted-foreground/40">
+                              {product.name.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                    )}
+                      {promo && (
+                        <span className="absolute left-2 top-2 rounded-full bg-[#D1F366] px-2.5 py-1 text-[10px] font-extrabold text-[#1C1C28] shadow-md">
+                          {promotionLabel(promo.promo)}
+                        </span>
+                      )}
+                    </div>
 
-                    <div className="min-w-0 space-y-1">
-                      <h3 className="line-clamp-2 min-h-[3rem] text-[15px] font-semibold leading-tight text-slate-900 dark:text-foreground">{product.name}</h3>
-                      <p className="line-clamp-2 min-h-[2.5rem] text-xs text-slate-400">{product.description || product.category || "Producto disponible para venta inmediata"}</p>
-                      <div className="flex items-center justify-between gap-2 pt-1">
+                    {/* Nombre + precio */}
+                    <div className="min-w-0 space-y-1.5 px-1">
+                      {product.category && (
+                        <span className="block truncate text-[10px] font-semibold uppercase tracking-wide text-slate-400 dark:text-muted-foreground">
+                          {product.category}
+                        </span>
+                      )}
+                      <h3 className="line-clamp-2 min-h-[2.5rem] text-[15px] font-semibold leading-tight text-slate-900 dark:text-foreground">
+                        {product.name}
+                      </h3>
+                      <div className="flex items-end justify-between gap-2 pt-0.5">
                         <div className="min-w-0 flex-1">
-                          <span className="block truncate text-lg font-black leading-none tracking-tight text-slate-900 dark:text-foreground sm:text-xl">
-                            {formatCurrency(product.price)}
+                          {promo && (
+                            <span className="block text-xs leading-none text-slate-400 line-through">
+                              {formatCurrency(product.price)}
+                            </span>
+                          )}
+                          <span className={cn(
+                            "block truncate text-lg font-black leading-tight tracking-tight sm:text-xl",
+                            promo ? "text-[#5c7a16] dark:text-[#D1F366]" : "text-slate-900 dark:text-foreground"
+                          )}>
+                            {formatCurrency(promo ? promo.price : product.price)}
                           </span>
                         </div>
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#f0f2f5] dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors group-hover:bg-[#d8ff55] group-hover:text-slate-900">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#f0f2f5] dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors group-hover:bg-[#D1F366] group-hover:text-[#1C1C28]">
                           <Plus className="h-4 w-4" />
                         </span>
                       </div>
                     </div>
                   </button>
-                ))}
+                  )
+                })}
               </div>
 
               <div ref={loadMoreRef} className="flex justify-center py-6">

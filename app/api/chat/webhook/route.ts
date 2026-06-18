@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createNotification } from "@/lib/notifications"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
+import { isPromotionActive, promotionLabel, bestProductPromotion } from "@/lib/promotions"
 
 export async function POST(request: NextRequest) {
   try {
@@ -545,7 +546,6 @@ async function generateBotResponse(
     // Prepare the enhanced prompt with business information from user_profiles table
     let businessInfo = 'No hay información del negocio disponible.'
     let productsInfo = ''
-    let botCapabilities = ''
     let deliveryModesInfo = ''
     let formsInfo = ''
     
@@ -703,38 +703,8 @@ Las instrucciones sobre cuándo usar cada formulario están en la sección PERSO
 Al compartir un formulario, enviá el enlace directamente sin formatearlo como hipervínculo.`
       }
 
-      // Define bot capabilities based on features
-      const features = bot.features || []
-      if (features.includes('take_orders') || features.includes('take_reservations')) {
-        const capabilities = []
-        if (features.includes('take_orders')) capabilities.push('tomar pedidos de productos del catálogo')
-        if (features.includes('take_reservations')) capabilities.push('tomar reservas para mesas')
-        
-        botCapabilities = `
-FUNCIONALIDADES ESPECIALES DEL BOT:
-Estás habilitado para: ${capabilities.join(' y ')}.
-
-        ${features.includes('take_orders') ? `
-PEDIDOS: producto → modalidad → "PEDIDO CONFIRMADO"
-` : ''}${features.includes('take_reservations') ? `
-        ${features.includes('take_reservations') ? `
-RESERVAS: pedir fecha, hora, personas, nombre, teléfono → Confirmar con un mensaje natural que incluya la frase clave "RESERVA CONFIRMADA"
-- En el resumen, usa el nombre que te dio el cliente, no "Usuario de Prueba"
-- Acepta formatos naturales de fecha: "mañana", "el viernes", "15 de octubre"  
-- Acepta formatos naturales de hora: "7 pm", "19:00", "siete de la noche", "20 horas"
-
-MANEJO DE CONTEXTO - MUY IMPORTANTE:
-- Antes de hacer cualquier pregunta, LEE los mensajes anteriores de esta conversación
-- Si el cliente ya dijo fecha/hora/personas/nombre en mensajes anteriores, NO lo preguntes de nuevo
-- Ejemplo: Si en un mensaje anterior dijo "sábado 7pm para 4 personas", ya tienes fecha/hora/personas
-- SOLO pregunta la información que realmente te falta según el historial
-- Usa TODA la información acumulada de mensajes anteriores para decidir qué preguntar
-` : ''}
-` : ''}
-        `.trim()
-      }
     }
-    
+
     // Prepare client information
     const clientInfo = senderName || senderPhone || 'Cliente'
     const hasClientPhone = senderPhone && senderPhone !== 'test-user' && senderPhone !== conversation.client_phone
@@ -823,116 +793,150 @@ ${rewardsList ? `- Premios canjeables:\n${rewardsList}` : '- Todavía no hay pre
       }
     }
 
-    const systemPrompt = `Eres ${bot.name}, un asistente virtual amigable y profesional que representa a un negocio.
+    // ---- Prompts por función definidos por el negocio (bots.feature_config.prompts) ----
+    // Mecanismo (nuestro, fijo) + política (del cliente, opcional). El cliente NO puede
+    // romper las anclas técnicas: [HANDOVER], "PEDIDO CONFIRMADO", "RESERVA CONFIRMADA".
+    // Promociones activas (descuentos reales) para que el bot las ofrezca y aplique al tomar pedidos
+    let promotionsInfo = ''
+    try {
+      const { data: promos } = await supabase
+        .from('promotions')
+        .select('*')
+        .eq('user_id', bot.user_id)
+        .eq('is_active', true)
+      const activePromos = (promos || []).filter((p: any) => isPromotionActive(p))
+      if (activePromos.length > 0) {
+        let productNameById: Record<string, string> = {}
+        if (activePromos.some((p: any) => p.applies_to === 'products' && p.product_ids?.length)) {
+          const { data: prods } = await supabase.from('products').select('id, name').eq('user_id', bot.user_id)
+          for (const pr of prods || []) productNameById[pr.id] = pr.name
+        }
+        const lines = activePromos.map((p: any) => {
+          const label = promotionLabel(p)
+          let scope = 'en toda la compra'
+          if (p.applies_to === 'category' && p.category) scope = `en la categoría "${p.category}"`
+          else if (p.applies_to === 'products') {
+            const names = (p.product_ids || []).map((id: string) => productNameById[id]).filter(Boolean)
+            scope = names.length ? `en: ${names.join(', ')}` : 'en productos seleccionados'
+          }
+          const until = p.end_date ? ` (válida hasta ${new Date(p.end_date).toLocaleDateString('es-AR')})` : ''
+          const cap = p.max_discount_amount
+            ? ` — tope de $${p.max_discount_amount}${p.max_discount_scope === 'total' ? ' sobre el total de la compra' : ' por producto'}`
+            : ''
+          return `- ${p.name}: ${label} ${scope}${cap}${until}`
+        }).join('\n')
+        promotionsInfo = `${lines}\n- Ofrecé estas promociones cuando sean relevantes y aplicá el precio CON descuento al tomar el pedido. No inventes promociones que no estén en esta lista.`
+      }
+    } catch (e) {
+      console.error('Error building promotions info:', e)
+    }
 
-FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
+    const featurePrompts = (bot.feature_config && bot.feature_config.prompts) || {}
+    const orderRules = (featurePrompts.take_orders || '').trim()
+    const reservationRules = (featurePrompts.take_reservations || '').trim()
+    const loyaltyRules = (featurePrompts.loyalty_points || '').trim()
+    const handoverRules = (featurePrompts.handover || '').trim()
 
-INFORMACIÓN DEL NEGOCIO:
-${businessInfo}
-
-TUS CAPACIDADES Y SERVICIOS:
-${(() => {
-  const capabilities = []
-  if (features.includes('take_orders')) capabilities.push('✅ TOMAR PEDIDOS de productos del menú')
-  if (features.includes('take_reservations')) capabilities.push('✅ TOMAR RESERVAS de mesas')
-  if (features.includes('loyalty_points')) capabilities.push('✅ GESTIONAR PUNTOS de fidelidad')
-  
-  const result = capabilities.length > 0 
-    ? `Puedes hacer lo siguiente:\n${capabilities.join('\n')}\n\nSI te preguntan sobre estos servicios, responde con confianza que SÍ los ofreces.`
-    : 'Solo puedes brindar información general del negocio.'
-  
-  return result
-})()}
-
-${productsInfo}
-
-${deliveryModesInfo}
-
-${formsInfo ? formsInfo + '\n' : ''}
-${loyaltyInfo ? loyaltyInfo + '\n' : ''}
-INFORMACIÓN DEL CLIENTE ACTUAL:
-${(() => {
-  const currentPlatform = platform || conversation.platform
-  
-  if (currentPlatform === 'instagram') {
-    const instagramUsername = extractedClientData?.instagram_username || 
-      (senderName?.startsWith('@') && !senderName?.includes('instagram_') ? senderName : null)
-    
-    return `- Plataforma: Instagram
+    // Bloque: información del cliente actual
+    const clientInfoBlock = (() => {
+      const currentPlatform = platform || conversation.platform
+      if (currentPlatform === 'instagram') {
+        const instagramUsername = extractedClientData?.instagram_username ||
+          (senderName?.startsWith('@') && !senderName?.includes('instagram_') ? senderName : null)
+        return `- Plataforma: Instagram
 - Nombre: ${hasExtractedName ? extractedClientData.name : 'No proporcionado'}
 - Username: ${instagramUsername || 'No disponible'}
 - Instagram ID: ${senderInstagramId || 'No disponible'}
 - Estado de datos: ${hasExtractedName && instagramUsername ? 'COMPLETOS (Instagram)' : 'FALTA NOMBRE'}`
-  } else {
-    return `- Plataforma: WhatsApp
+      }
+      return `- Plataforma: WhatsApp
 - Nombre: ${hasExtractedName ? extractedClientData.name : clientInfo}
 - Teléfono: ${hasExtractedPhone ? extractedClientData.phone : (senderPhone || 'No disponible')}
 - Estado de datos: ${hasExtractedName && hasExtractedPhone ? 'COMPLETOS' : hasExtractedName ? 'FALTA TELÉFONO' : 'FALTA NOMBRE Y TELÉFONO'}`
-  }
-})()}
+    })()
 
-${botCapabilities}
+    // Lista de capacidades activas (solo las features habilitadas)
+    const capabilitiesList = (() => {
+      const caps: string[] = []
+      if (features.includes('take_orders')) caps.push('✅ Tomar PEDIDOS del catálogo')
+      if (features.includes('take_reservations')) caps.push('✅ Tomar RESERVAS')
+      if (features.includes('loyalty_points')) caps.push('✅ Gestionar FIDELIDAD (puntos/sellos)')
+      if (features.includes('register_clients')) caps.push('✅ Registrar datos de clientes')
+      return caps.length
+        ? `Estás habilitado para:\n${caps.join('\n')}\nSi te preguntan por estos servicios, confirmá con seguridad que SÍ los ofrecés.`
+        : 'Por ahora solo brindás información general del negocio.'
+    })()
 
-${features.includes('register_clients') ? `
-REGISTRO DE CLIENTES:
+    // Bloque PEDIDOS: mecánica fija + instrucciones del negocio
+    const ordersBlock = features.includes('take_orders')
+      ? `═══ PEDIDOS ═══
+Mecánica obligatoria: identificá producto(s) y cantidad(es) y confirmá la modalidad de entrega. El TEXTO de confirmación redactalo según tu personalidad y las instrucciones del negocio (el dueño puede definir ese mensaje). Al cerrar el pedido, agregá AL FINAL, en una línea aparte, la frase EXACTA "PEDIDO CONFIRMADO": es un marcador interno del sistema, el cliente NO la ve.
+${productsInfo ? productsInfo + '\n' : ''}${deliveryModesInfo ? deliveryModesInfo + '\n' : ''}${orderRules ? `Instrucciones del negocio para tomar pedidos (seguilas al pie de la letra):\n${orderRules}` : ''}`.trim()
+      : ''
+
+    // Bloque RESERVAS: mecánica fija + instrucciones del negocio
+    const reservationsBlock = features.includes('take_reservations')
+      ? `═══ RESERVAS ═══
+Mecánica obligatoria: pedí fecha, hora, cantidad de personas, nombre y teléfono. Aceptá formatos naturales ("mañana", "el viernes", "7 pm"). No repreguntes datos que el cliente ya dio. El TEXTO de confirmación redactalo según tu personalidad y las instrucciones del negocio. Al confirmar la reserva, agregá AL FINAL, en una línea aparte, la frase EXACTA "RESERVA CONFIRMADA": es un marcador interno del sistema, el cliente NO la ve.
+${reservationRules ? `Instrucciones del negocio para reservas (seguilas al pie de la letra):\n${reservationRules}` : ''}`.trim()
+      : ''
+
+    // Bloque FIDELIDAD
+    const loyaltyBlock = features.includes('loyalty_points') && loyaltyInfo
+      ? `═══ FIDELIDAD ═══
+${loyaltyInfo}${loyaltyRules ? `\nInstrucciones del negocio para fidelidad:\n${loyaltyRules}` : ''}`
+      : ''
+
+    // Bloque REGISTRO DE CLIENTES
+    const registerBlock = features.includes('register_clients')
+      ? `═══ REGISTRO DE CLIENTES ═══
 ${(() => {
-  const currentPlatform = platform || conversation.platform
-  const isNameMissing = !hasExtractedName || extractedClientData.name === 'Cliente sin nombre' || extractedClientData.name === 'Usuario de Prueba';
-  
-  if (currentPlatform === 'instagram') {
-    return `- Para Instagram: Si falta NOMBRE, pregunta de manera natural: "¿Cómo te llamas?" o "¿Cuál es tu nombre?"
-- Si ya tienes nombre: responde normal y usa el nombre en la conversación`
-  } else {
-    // WhatsApp logic
-    if (isNameMissing) {
-        return `- IMPORTANTE: El cliente NO tiene nombre registrado.
-- TU PRIMERA PRIORIDAD es preguntar su nombre de manera amable para poder atenderlo mejor.
-- Ejemplo: "¡Hola! Para poder atenderte mejor, ¿me podrías decir tu nombre?"
-- Una vez que te diga el nombre, continúa con la conversación normal.`
-    } else if (!hasExtractedPhone) {
-        return `- Para WhatsApp: Si FALTA TELÉFONO: "¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?"`
-    } else {
-        return `- Datos COMPLETOS: responde normal`
-    }
-  }
-})()}
-` : ''}
+        const currentPlatform = platform || conversation.platform
+        const isNameMissing = !hasExtractedName || extractedClientData.name === 'Cliente sin nombre' || extractedClientData.name === 'Usuario de Prueba'
+        if (currentPlatform === 'instagram') {
+          return `- Si falta el NOMBRE, pedilo de forma natural ("¿Cómo te llamás?"). Si ya lo tenés, usalo en la conversación.`
+        }
+        if (isNameMissing) {
+          return `- El cliente NO tiene nombre registrado: tu PRIMERA PRIORIDAD es pedirlo amablemente ("¡Hola! Para atenderte mejor, ¿me decís tu nombre?"). Después seguí normal.`
+        }
+        if (!hasExtractedPhone) {
+          return `- Falta el TELÉFONO: pedilo amablemente ("¡Hola ${hasExtractedName ? extractedClientData.name : 'cliente'}! ¿Me compartís tu teléfono?").`
+        }
+        return `- Datos completos: respondé normal.`
+      })()}`
+      : ''
 
-PERSONALIDAD:
-${bot.personality_prompt || 'Responde de manera útil, cortés y profesional. Siempre mantén un tono amigable y orientado al servicio al cliente.'}
+    const systemPrompt = `Eres ${bot.name}, el asistente virtual del negocio. Atendés a sus clientes por chat.
 
-INSTRUCCIONES:
-- LEE Y RECUERDA todo el historial de conversación antes de responder
-- Si ya tienes información de mensajes anteriores, úsala - NO la pidas otra vez
-- Responde como parte del equipo del negocio  
-- Usa información del negocio proporcionada
-- Respuestas cortas, naturales y amigables
-- Solo temas del negocio
-- Números = cantidades en pedidos
+FECHA Y HORA ACTUAL: ${new Date().toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}
 
-DETECCIÓN DE INTENCIONES:
-- PEDIDOS: Palabras clave como "quiero", "pedir", "ordenar", "llevar", "comprar", "me das", nombres de productos
-- RESERVAS: Palabras clave como "reservar", "mesa", "cita", "apartar", "agendar", "programar", fechas y horas
-- EXTRACCIÓN DE DATOS: Si el cliente menciona su nombre o teléfono, tómalo en cuenta para futuras referencias
-- DERIVACIÓN A HUMANO: Si el usuario solicita explícitamente hablar con una persona/humano/asesor, o si la consulta es una queja grave, o si no puedes resolverla (por ejemplo, piden productos que no tienes):
-  1. Tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]"
-  2. Luego escribe un mensaje amable confirmando que un asesor humano responderá en breve.
-  3. NO inventes soluciones si el usuario pide un humano.
-  4. IMPORTANTE: Si no tienes los productos que pide el cliente, DEBES usar [HANDOVER].
-- Responde proactivamente cuando detectes estas intenciones
-- Para pedidos: confirma productos, cantidades y modalidad de entrega
-- Para reservas: confirma fecha, hora, cantidad de personas y datos de contacto
-- Sé natural al preguntar datos faltantes, no como un formulario
+═══ INFORMACIÓN DEL NEGOCIO ═══
+${businessInfo}
 
-MENÚ/CARTA:
-- Si piden carta: saluda + contexto + enlace directo (no hipervínculo) + invitar preguntas
-- Tono entusiasta sobre productos
+═══ TU PERSONALIDAD (definida por el dueño — es TU identidad y tu forma de actuar; respetala SIEMPRE) ═══
+${bot.personality_prompt || 'Sé útil, cortés y profesional, con un tono amigable y orientado al servicio al cliente.'}
 
-REGLAS DE PRIORIDAD Y CONFLICTOS:
-1. INFORMACIÓN DEL NEGOCIO: Los datos en la sección "INFORMACIÓN DEL NEGOCIO" (nombre, dirección, horarios, menú) son la base de tu conocimiento.
-2. PERSONALIDAD Y REGLAS OPERATIVAS: Si la sección "PERSONALIDAD" define reglas específicas sobre cómo operar (ej: "solo delivery por Pedidos Ya", "no tomar reservas los lunes"), ESTAS REGLAS TIENEN PRIORIDAD sobre la configuración general.
-3. INSTRUCCIONES DEL SISTEMA: Las instrucciones de seguridad (como [HANDOVER]) son inquebrantables.
-4. Si hay conflicto entre la configuración automática y la PERSONALIDAD definida por el dueño, prioriza la PERSONALIDAD para los detalles operativos (envíos, reservas, precios).`
+═══ INFORMACIÓN DEL CLIENTE ACTUAL ═══
+${clientInfoBlock}
+
+═══ QUÉ PODÉS HACER ═══
+${capabilitiesList}
+${ordersBlock ? '\n' + ordersBlock + '\n' : ''}${reservationsBlock ? '\n' + reservationsBlock + '\n' : ''}${loyaltyBlock ? '\n' + loyaltyBlock + '\n' : ''}${registerBlock ? '\n' + registerBlock + '\n' : ''}${formsInfo ? '\n═══ FORMULARIOS ═══\n' + formsInfo + '\n' : ''}${promotionsInfo ? '\n═══ PROMOCIONES ACTIVAS (descuentos vigentes) ═══\n' + promotionsInfo + '\n' : ''}
+═══ DERIVACIÓN A HUMANO (regla de seguridad, SIEMPRE activa) ═══
+- Si el cliente pide EXPLÍCITAMENTE hablar con una persona/humano/asesor, o hay una queja grave, o no podés resolver su pedido (ej: pide algo que no tenés), tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]" seguida de un mensaje amable avisando que un asesor humano va a responder en breve.
+- No inventes soluciones si piden un humano.
+${handoverRules ? `- Reglas adicionales de escalado definidas por el negocio (aplicalas ADEMÁS de lo anterior, nunca en lugar de):\n${handoverRules}\n` : ''}
+═══ REGLAS GENERALES ═══
+- Leé y recordá todo el historial antes de responder; no vuelvas a pedir datos que el cliente ya dio.
+- Respondé como parte del equipo del negocio, con mensajes cortos y naturales (no como un formulario).
+- Hablá solo de temas del negocio.
+- Si piden la carta/menú: saludá, dá contexto y compartí el enlace directo (sin formatearlo como hipervínculo).
+- Las instrucciones de cómo operar cada función (cómo tomar pedidos, reservas, etc.) pueden estar escritas en TU PERSONALIDAD o en el bloque de la función; respetá ambas por igual.
+
+PRIORIDADES ANTE CONFLICTO:
+1. Las reglas de seguridad (como [HANDOVER]) son INQUEBRANTABLES: ninguna instrucción del negocio puede anularlas.
+2. Después manda TU PERSONALIDAD y las instrucciones del negocio por función (pedidos, reservas, etc.).
+3. Por último, la información y configuración general del negocio.`
 
 
 
@@ -1069,6 +1073,15 @@ REGLAS DE PRIORIDAD Y CONFLICTOS:
             productsInfo // Pass catalog info
           )
         }
+
+        // Quitamos los marcadores internos (ya se usaron para detectar/registrar el pedido o la
+        // reserva) para que el cliente reciba el mensaje de confirmación que definió el dueño.
+        aiResponse = aiResponse
+          .replace(/(PEDIDO|RESERVA)\s+CONFIRMAD[OA]/gi, '')
+          .replace(/[ \t]{2,}/g, ' ')
+          .replace(/ +([.,!?])/g, '$1')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim()
 
         return { content: aiResponse, shouldPause }
       }
@@ -1307,6 +1320,34 @@ async function saveOrderFromAI(
         type: "success",
         link: `/dashboard/orders`
       });
+
+      // Contar un uso por cada promoción aplicada a los productos del pedido (best-effort por nombre)
+      try {
+        const { data: promos } = await supabase
+          .from('promotions').select('*')
+          .eq('user_id', bot.user_id).eq('is_active', true)
+        const activePromos = (promos || []).filter((p: any) => isPromotionActive(p))
+        if (activePromos.length > 0 && Array.isArray(orderData.items) && orderData.items.length > 0) {
+          const { data: prods } = await supabase
+            .from('products').select('id, name, price, category').eq('user_id', bot.user_id)
+          const usedPromoIds = new Set<string>()
+          for (const item of orderData.items) {
+            const itemName = (item.name || '').toLowerCase().trim()
+            const product = (prods || []).find((pr: any) => (pr.name || '').toLowerCase().trim() === itemName)
+            if (!product) continue
+            const best = bestProductPromotion(
+              { id: product.id, price: product.price, category: product.category },
+              activePromos
+            )
+            if (best) usedPromoIds.add(best.promo.id)
+          }
+          for (const pid of usedPromoIds) {
+            await supabase.rpc('increment_promotion_use', { p_id: pid })
+          }
+        }
+      } catch (promoErr) {
+        console.error('Error counting promotion uses (bot):', promoErr)
+      }
     } else {
       console.error('❌ Error saving order:', error);
     }
@@ -2413,6 +2454,9 @@ async function classifyAndSaveLeadTag(
     const allowedTags: string[] = bot.allowed_tags || []
     if (!allowedTags.length) return
 
+    // Criterios de calificación definidos por el negocio (feature_config.prompts.lead_qualification)
+    const qualifyRules = (bot.feature_config?.prompts?.lead_qualification || '').trim()
+
     // Get recent conversation messages for context (last 8)
     const { data: messages } = await supabase
       .from("messages")
@@ -2434,7 +2478,7 @@ Conversación:
 ${historyText}
 
 Tags permitidos: ${allowedTags.map(t => `"${t}"`).join(', ')}
-
+${qualifyRules ? `\nCriterios del negocio para calificar (seguilos al pie de la letra):\n${qualifyRules}\n` : ''}
 Reglas:
 - Si hay información suficiente para clasificar al lead, elegí UNO de los tags exactos.
 - Si no hay información suficiente aún, respondé con null.

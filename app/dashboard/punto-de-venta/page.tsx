@@ -10,7 +10,7 @@ export default async function PuntoDeVentaPage() {
     redirect("/login")
   }
 
-  const [{ data: products }, { data: clients }] = await Promise.all([
+  const [{ data: products }, { data: clients }, { data: promotions }] = await Promise.all([
     supabase
       .from("products")
       .select("id, name, description, price, category, is_available, image_url, created_at")
@@ -24,6 +24,11 @@ export default async function PuntoDeVentaPage() {
       .eq("user_id", data.user.id)
       .order("created_at", { ascending: false })
       .limit(100),
+    supabase
+      .from("promotions")
+      .select("*")
+      .eq("user_id", data.user.id)
+      .eq("is_active", true),
   ])
 
   const { data: categoryRows } = await supabase
@@ -43,6 +48,7 @@ export default async function PuntoDeVentaPage() {
         products={products || []}
         categories={categories}
         clients={clients || []}
+        promotions={promotions || []}
       />
     </div>
   )

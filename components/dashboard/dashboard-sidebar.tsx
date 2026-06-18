@@ -258,7 +258,7 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
         "flex items-center justify-between pt-4 pb-2 border-t border-white/10 shrink-0",
         isCollapsed ? "flex-col gap-4" : ""
       )}>
-        {user && profile ? (
+        {user ? (
           <ProfileDropdown user={user} profile={profile} />
         ) : <div />}
         <div className="flex items-center gap-1">
@@ -288,7 +288,7 @@ export function MobileHeader({ user, profile }: MobileHeaderProps) {
         <span className="text-sm font-bold">UcoBot</span>
       </div>
       <div className="flex items-center gap-2">
-        {user && profile && <ProfileDropdown user={user} profile={profile} position="header" />}
+        {user && <ProfileDropdown user={user} profile={profile} position="header" />}
         <PushNotificationToggle />
         <NotificationsDropdown position="header" />
       </div>

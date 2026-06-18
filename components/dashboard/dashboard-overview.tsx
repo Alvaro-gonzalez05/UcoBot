@@ -8,7 +8,6 @@ import type { User } from "@supabase/supabase-js"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 import { startOfMonth, subMonths } from "date-fns"
-import { MultiStepBotCreation } from "./multi-step-bot-creation"
 import { MultiStepAutomationCreation } from "./multi-step-automation-creation"
 import { ClientCreationDialog } from "./client-creation-dialog"
 import { Area, AreaChart, Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts"
@@ -67,7 +66,6 @@ interface TopProduct {
 
 export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
   const router = useRouter()
-  const [isBotDialogOpen, setIsBotDialogOpen] = useState(false)
   const [isClientDialogOpen, setIsClientDialogOpen] = useState(false)
   const [isAutomationDialogOpen, setIsAutomationDialogOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -101,7 +99,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
-        case "F5": e.preventDefault(); setIsBotDialogOpen(true); break
+        case "F5": e.preventDefault(); router.push("/dashboard/bots"); break
         case "F6": e.preventDefault(); setIsClientDialogOpen(true); break
         case "F7": e.preventDefault(); setIsAutomationDialogOpen(true); break
         case "F8": e.preventDefault(); router.push("/dashboard/chat"); break
@@ -660,7 +658,6 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       </div>
 
       {/* Dialogs */}
-      <MultiStepBotCreation isOpen={isBotDialogOpen} onClose={() => setIsBotDialogOpen(false)} onBotCreated={() => { setIsBotDialogOpen(false); loadDashboardData() }} userId={user.id} />
       <ClientCreationDialog isOpen={isClientDialogOpen} onClose={() => setIsClientDialogOpen(false)} onClientCreated={() => { setIsClientDialogOpen(false); loadDashboardData() }} userId={user.id} />
       <MultiStepAutomationCreation isOpen={isAutomationDialogOpen} onClose={() => setIsAutomationDialogOpen(false)} onAutomationCreated={() => { setIsAutomationDialogOpen(false); loadDashboardData() }} userId={user.id} />
     </div>

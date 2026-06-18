@@ -22,7 +22,6 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
-import { MultiStepBotCreation } from "./multi-step-bot-creation"
 import { MetaConnectionCard } from "./meta-connection-card"
 import { WhatsAppTemplatesManager } from "./whatsapp-templates-manager"
 import {
@@ -57,6 +56,7 @@ interface BotData {
   platforms?: string[]
   personality_prompt?: string
   features: string[]
+  feature_config?: any
   allowed_tags?: string[]
   automations: string[]
   gemini_api_key?: string
@@ -93,6 +93,26 @@ const availableFeatures = [
   { id: "lead_qualification", label: "Calificación de leads", description: "La IA clasifica automáticamente los leads según las etiquetas configuradas." },
 ]
 
+// Funciones que admiten instrucciones personalizadas del negocio (se guardan en feature_config.prompts)
+const featurePromptConfig: Record<string, { label: string; placeholder: string }> = {
+  take_orders: {
+    label: "Instrucciones para tomar pedidos (opcional)",
+    placeholder: "Ej: Siempre preguntá si es retiro o envío. El envío cuesta $500 dentro del centro. No tomes pedidos después de las 23h.",
+  },
+  take_reservations: {
+    label: "Instrucciones para reservas (opcional)",
+    placeholder: "Ej: Reservas para mínimo 2 personas. Para grupos de +6 pedí una seña por transferencia.",
+  },
+  loyalty_points: {
+    label: "Instrucciones para fidelización (opcional)",
+    placeholder: "Ej: Aclará que los puntos se acreditan a las 24hs y se canjean solo en el local.",
+  },
+  lead_qualification: {
+    label: "Cómo calificar leads / cuándo aplicar cada etiqueta (opcional)",
+    placeholder: "Ej: Usá 'inversor' si preguntan por rentabilidad o montos grandes; 'comprador' si piden precio o disponibilidad; 'curioso' si solo consultan info general.",
+  },
+}
+
 function highlightPrompt(text: string): string {
   if (!text) return ''
   const inline = (s: string) => s
@@ -116,11 +136,60 @@ function highlightPrompt(text: string): string {
   }).join('\n')
 }
 
+type FormState = {
+  name: string
+  platform: "whatsapp" | "instagram" | "messenger" | "email" | ""
+  platforms: string[]
+  personality_prompt: string
+  features: string[]
+  feature_config: { prompts?: Record<string, string> }
+  allowed_tags: string[]
+  automations: string[]
+  gemini_api_key: string
+  is_active: boolean
+}
+
+const DEFAULT_FORM: FormState = {
+  name: "",
+  platform: "",
+  platforms: [],
+  personality_prompt: "",
+  features: [],
+  feature_config: {},
+  allowed_tags: [],
+  automations: [],
+  gemini_api_key: "",
+  is_active: false,
+}
+
+function botToFormData(bot: BotData): FormState {
+  return {
+    name: bot.name,
+    platform: bot.platform,
+    platforms: bot.platforms?.length ? bot.platforms : bot.platform ? [bot.platform] : [],
+    personality_prompt: bot.personality_prompt || "",
+    features: bot.features || [],
+    feature_config: (bot.feature_config as any) || {},
+    allowed_tags: bot.allowed_tags || [],
+    automations: bot.automations || [],
+    gemini_api_key: bot.gemini_api_key || "",
+    is_active: bot.is_active,
+  }
+}
+
+function botToTagsEnabled(bot: BotData): Record<string, boolean> {
+  const hasTags = (bot.allowed_tags?.length ?? 0) > 0
+  return {
+    take_orders: hasTags && (bot.features || []).includes("take_orders"),
+    take_reservations: hasTags && (bot.features || []).includes("take_reservations"),
+    lead_qualification: hasTags && (bot.features || []).includes("lead_qualification"),
+  }
+}
+
 export function BotsManagement({ initialBots, userId, demo = false }: BotsManagementProps) {
   const [bots, setBots] = useState<BotData[]>(initialBots)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [selectedBot, setSelectedBot] = useState<BotData | null>(null)
+  const [selectedBot, setSelectedBot] = useState<BotData | null>(() => (!demo && initialBots.length >= 1 ? initialBots[0] : null))
   const [isLoading, setIsLoading] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
   const supabase = createClient()
@@ -128,32 +197,24 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   const [userSubscription, setUserSubscription] = useState<any>(null)
   const [canCreateBot, setCanCreateBot] = useState(true)
   const [tagInput, setTagInput] = useState("")
-  const [editingBot, setEditingBot] = useState<BotData | null>(null)
+  const [editingBot, setEditingBot] = useState<BotData | null>(() => (!demo && initialBots.length >= 1 ? initialBots[0] : null))
   const [tagInputsByFeature, setTagInputsByFeature] = useState<Record<string, string>>({
     take_orders: "",
     take_reservations: "",
     lead_qualification: "",
   })
-  const [tagsEnabledByFeature, setTagsEnabledByFeature] = useState<Record<string, boolean>>({
-    take_orders: false,
-    take_reservations: false,
-    lead_qualification: false,
-  })
+  const [tagsEnabledByFeature, setTagsEnabledByFeature] = useState<Record<string, boolean>>(() =>
+    !demo && initialBots[0]
+      ? botToTagsEnabled(initialBots[0])
+      : { take_orders: false, take_reservations: false, lead_qualification: false }
+  )
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
   const promptOverlayRef = useRef<HTMLDivElement>(null)
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: "",
-    platform: "" as "whatsapp" | "instagram" | "messenger" | "email" | "",
-    platforms: [] as string[],
-    personality_prompt: "",
-    features: [] as string[],
-    allowed_tags: [] as string[],
-    automations: [] as string[],
-    gemini_api_key: "",
-    is_active: false,
-  })
+  // Form state — se inicializa con el bot existente para evitar flash al entrar
+  const [formData, setFormData] = useState<FormState>(() =>
+    !demo && initialBots[0] ? botToFormData(initialBots[0]) : DEFAULT_FORM
+  )
 
   const resetForm = () => {
     setFormData({
@@ -162,6 +223,7 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
       platforms: [],
       personality_prompt: "",
       features: [],
+      feature_config: {},
       allowed_tags: [],
       automations: [],
       gemini_api_key: "",
@@ -187,45 +249,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
       }
       return { ...prev, platforms: next, platform: (next[0] || "") as typeof prev.platform }
     })
-  }
-
-  const handleCreateBot = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-
-    try {
-      const { data, error } = await supabase
-        .from("bots")
-        .insert([
-          {
-            ...formData,
-            user_id: userId,
-          },
-        ])
-        .select()
-        .single()
-
-      if (error) throw error
-
-      setBots([data, ...bots])
-      setIsCreateDialogOpen(false)
-      resetForm()
-      
-      // Emit custom event to update sidebar navigation
-      window.dispatchEvent(new CustomEvent('botCreated', { detail: data }))
-      
-      toast.success("Bot creado exitosamente", {
-        description: `${formData.name} ha sido configurado y está listo para usar.`,
-        duration: 4000,
-      })
-    } catch (error) {
-      toast.error("Error al crear bot", {
-        description: "No se pudo crear el bot. Inténtalo de nuevo.",
-        duration: 4000,
-      })
-    } finally {
-      setIsLoading(false)
-    }
   }
 
   const handleEditBot = async (e?: React.FormEvent) => {
@@ -316,25 +339,49 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
 
   const openEditDialog = (bot: BotData) => {
     setSelectedBot(bot)
-    setFormData({
-      name: bot.name,
-      platform: bot.platform,
-      platforms: bot.platforms?.length ? bot.platforms : bot.platform ? [bot.platform] : [],
-      personality_prompt: bot.personality_prompt || "",
-      features: bot.features || [],
-      allowed_tags: bot.allowed_tags || [],
-      automations: bot.automations || [],
-      gemini_api_key: bot.gemini_api_key || "",
-      is_active: bot.is_active,
-    })
+    setFormData(botToFormData(bot))
     setTagInputsByFeature({ take_orders: "", take_reservations: "", lead_qualification: "" })
-    const hasTags = (bot.allowed_tags?.length ?? 0) > 0
-    setTagsEnabledByFeature({
-      take_orders: hasTags && (bot.features || []).includes("take_orders"),
-      take_reservations: hasTags && (bot.features || []).includes("take_reservations"),
-      lead_qualification: hasTags && (bot.features || []).includes("lead_qualification"),
-    })
+    setTagsEnabledByFeature(botToTagsEnabled(bot))
     setEditingBot(bot)
+  }
+
+  // Creación: 1 bot por cuenta. Inserta un bot mínimo válido y lo abre en edición
+  // para que el cliente lo configure y conecte sus integraciones.
+  const handleStartCreate = async () => {
+    if (demo) return
+    if (bots.length >= 1) {
+      toast.info("Solo se permite un bot por cuenta", {
+        description: "Editá el bot que ya tenés.",
+      })
+      return
+    }
+    try {
+      const { data, error } = await supabase
+        .from("bots")
+        .insert([
+          {
+            name: "Mi Bot",
+            platform: "whatsapp",
+            platforms: [],
+            features: [],
+            personality_prompt: "",
+            is_active: false,
+            user_id: userId,
+          },
+        ])
+        .select()
+        .single()
+
+      if (error) throw error
+
+      setBots([data, ...bots])
+      window.dispatchEvent(new CustomEvent("botCreated", { detail: data }))
+      openEditDialog(data)
+    } catch (error) {
+      toast.error("Error al crear el bot", {
+        description: "No se pudo crear el bot. Inténtalo de nuevo.",
+      })
+    }
   }
 
   const handleFeatureChange = (featureId: string, checked: boolean) => {
@@ -349,10 +396,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
     return new Date(dateString).toLocaleDateString("es-ES")
   }
 
-  const handleBotCreated = (newBot: BotData) => {
-    setBots([newBot, ...bots])
-  }
-
   useEffect(() => {
     fetchUserSubscription()
   }, [userId])
@@ -360,6 +403,7 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   useEffect(() => {
     checkBotLimits()
   }, [bots, userSubscription])
+
 
   const fetchUserSubscription = async () => {
     try {
@@ -404,14 +448,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1 pt-2">
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => { setEditingBot(null); setSelectedBot(null); resetForm() }}
-              className="p-2 rounded-xl hover:bg-muted transition-colors text-muted-foreground hover:text-foreground flex-shrink-0"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
             <div className="min-w-0">
-              <h2 className="text-xl sm:text-3xl font-bold dark:text-white truncate">Editar Bot</h2>
+              <h2 className="text-xl sm:text-3xl font-bold dark:text-white truncate">UcoBot</h2>
               <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
                 {formData.is_active
                   ? <span className="text-green-500 font-semibold">● Activo</span>
@@ -437,24 +475,26 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
         {/* Grid plano — cada card va directo al grid para alineación real entre columnas */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-5 items-start">
 
-          {/* Columna izquierda: Información General + Personalidad + IA */}
-          <div className="lg:col-span-2 space-y-3 sm:space-y-5">
-
-          <div className="executive-card space-y-4">
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Información General</p>
-            <div className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="edit-page-name" className="input-label font-medium">Nombre del Bot *</Label>
+          {/* Card destacada: nombre editable del bot + activar/desactivar */}
+          <div className="lg:col-span-3 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 bg-[#D1F366] text-[#1C1C28] shadow-lg">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="h-12 w-12 rounded-xl bg-[#1C1C28]/10 flex items-center justify-center flex-shrink-0">
+                <Bot className="h-6 w-6 text-[#1C1C28]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-[#1C1C28]/60">Nombre del bot</p>
                 <Input
-                  id="edit-page-name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input-field"
-                  required
+                  placeholder="Nombre del bot"
+                  className="bg-transparent border-0 border-b border-[#1C1C28]/20 rounded-none px-0 h-auto py-0.5 text-lg sm:text-xl font-bold text-[#1C1C28] placeholder:text-[#1C1C28]/40 focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-[#1C1C28]"
                 />
               </div>
             </div>
           </div>
+
+          {/* Columna izquierda: Personalidad + IA */}
+          <div className="lg:col-span-2 space-y-3 sm:space-y-5">
 
           <div className="executive-card space-y-4">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Personalidad del Bot</p>
@@ -520,68 +560,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             </div>
           </div>
 
-          </div>
-
-          {/* Columna derecha: Estado + conexiones con Meta + guardar */}
-          <div className="space-y-3 sm:space-y-5">
-            <div className="executive-card space-y-4">
-              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Estado</p>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="edit-page-is_active" className="font-medium cursor-pointer">Bot activo</Label>
-                <Switch
-                  id="edit-page-is_active"
-                  checked={formData.is_active}
-                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
-                />
-              </div>
-              <div className="pt-2 border-t border-border/50 space-y-3">
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <span className="text-muted-foreground">Canales</span>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    {formData.platforms.length > 0 ? (
-                      formData.platforms.filter(Boolean).map((p) => (
-                        <Badge key={p} variant="outline" className="text-[10px]">
-                          {platformLabels[p as keyof typeof platformLabels] || p}
-                        </Badge>
-                      ))
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Sin conectar</span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Funcionalidades</span>
-                  <span className="text-xs font-medium">{formData.features.length} activas</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Creado</span>
-                  <span className="text-xs">{formatDate(editingBot.created_at)}</span>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground pt-1">
-                Los canales se activan automáticamente al conectar cada plataforma acá abajo.
-              </p>
-            </div>
-
-            {(["whatsapp", "instagram", "messenger"] as const).map((p) => (
-              <MetaConnectionCard key={p} platform={p} onStatusChange={handleConnectionStatus} />
-            ))}
-
-            <div className="executive-card">
-              <Button
-                onClick={() => handleEditBot()}
-                disabled={isLoading || !formData.name.trim()}
-                className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2 py-5"
-              >
-                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                Guardar Cambios
-              </Button>
-              <p className="text-xs text-muted-foreground text-center mt-3">Los cambios se aplican inmediatamente</p>
-            </div>
-          </div>
-
-          {/* Funcionalidades — col-span-3, tag input en col 3 de cada fila */}
-          <div className="lg:col-span-3 executive-card space-y-2">
+          {/* Funcionalidades — dentro de la columna izquierda (llena el espacio bajo la API key) */}
+          <div className="executive-card space-y-2">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">Funcionalidades</p>
             {availableFeatures.map((feature) => {
               const isEnabled = formData.features.includes(feature.id)
@@ -593,7 +573,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                 lead_qualification: "Ej: inversor, comprador",
               }
               return (
-                <div key={feature.id} className="grid grid-cols-3 gap-4 items-center p-3 rounded-xl hover:bg-muted/50 transition-colors">
+                <div key={feature.id} className="p-3 rounded-xl hover:bg-muted/50 transition-colors">
+                  <div className="grid grid-cols-3 gap-4 items-center">
                   {/* Cols 1-2: feature + "Asignar tags" check */}
                   <div
                     className="col-span-2 flex items-start gap-3 cursor-pointer"
@@ -609,9 +590,6 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                     <div className="flex-1 min-w-0">
                       <Label htmlFor={`edit-page-feat-${feature.id}`} className="cursor-pointer font-medium">
                         {feature.label}
-                        {feature.id === "lead_qualification" && (
-                          <Badge variant="outline" className="ml-2 text-xs text-[#D1F366] border-[#D1F366]/40">IA</Badge>
-                        )}
                       </Label>
                       <p className="text-xs text-muted-foreground mt-0.5">{feature.description}</p>
                     </div>
@@ -683,9 +661,60 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                       )}
                     </AnimatePresence>
                   </div>
+                  </div>
+
+                  {isEnabled && featurePromptConfig[feature.id] && (
+                    <div className="pt-3 mt-1">
+                      <Label className="text-xs text-muted-foreground">
+                        {featurePromptConfig[feature.id].label}
+                      </Label>
+                      <Textarea
+                        value={formData.feature_config?.prompts?.[feature.id] ?? ""}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            feature_config: {
+                              ...prev.feature_config,
+                              prompts: {
+                                ...(prev.feature_config?.prompts ?? {}),
+                                [feature.id]: e.target.value,
+                              },
+                            },
+                          }))
+                        }
+                        placeholder={featurePromptConfig[feature.id].placeholder}
+                        className="input-field text-sm mt-1 min-h-[70px]"
+                      />
+                    </div>
+                  )}
                 </div>
               )
             })}
+
+            {/* Reglas de escalado a humano (handover) — la función está siempre activa */}
+            <div className="pt-3 border-t border-border/30">
+              <Label className="text-xs text-muted-foreground">Reglas de escalado a humano (handover)</Label>
+              <p className="text-[11px] text-muted-foreground/80 mb-1">
+                El bot SIEMPRE deriva si el cliente pide explícitamente un humano. Acá agregás tus propias reglas (cuándo escalar o no).
+              </p>
+              <Textarea
+                value={formData.feature_config?.prompts?.handover ?? ""}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    feature_config: {
+                      ...prev.feature_config,
+                      prompts: {
+                        ...(prev.feature_config?.prompts ?? {}),
+                        handover: e.target.value,
+                      },
+                    },
+                  }))
+                }
+                placeholder="Ej: Escalá también si hay un reclamo por un cobro o si piden hablar con el dueño. No escales por consultas de horarios."
+                className="input-field text-sm mt-1 min-h-[70px]"
+              />
+            </div>
             {/* Pool de tags al fondo de la card */}
             <AnimatePresence>
               {formData.allowed_tags.length > 0 && (
@@ -720,6 +749,66 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
               )}
             </AnimatePresence>
           </div>
+          </div>
+
+          {/* Columna derecha: Estado + conexiones con Meta + guardar */}
+          <div className="space-y-3 sm:space-y-5">
+            <div className="executive-card space-y-4">
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Estado</p>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="edit-page-is_active" className="font-medium cursor-pointer">Bot activo</Label>
+                <Switch
+                  id="edit-page-is_active"
+                  checked={formData.is_active}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                />
+              </div>
+              <div className="pt-2 border-t border-border/50 space-y-3">
+                <div className="flex items-center justify-between text-sm gap-2">
+                  <span className="text-muted-foreground">Canales</span>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    {formData.platforms.length > 0 ? (
+                      formData.platforms.filter(Boolean).map((p) => (
+                        <Badge key={p} variant="outline" className="text-[10px]">
+                          {platformLabels[p as keyof typeof platformLabels] || p}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sin conectar</span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Funcionalidades</span>
+                  <span className="text-xs font-medium">{formData.features.length} activas</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Creado</span>
+                  <span className="text-xs">{formatDate(editingBot.created_at)}</span>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground pt-1">
+                Los canales se activan automáticamente al conectar cada plataforma acá abajo.
+              </p>
+            </div>
+
+            {(["whatsapp", "instagram", "messenger"] as const).map((p) => (
+              <MetaConnectionCard key={p} platform={p} onStatusChange={handleConnectionStatus} />
+            ))}
+
+            <div className="executive-card">
+              <Button
+                onClick={() => handleEditBot()}
+                disabled={isLoading || !formData.name.trim()}
+                className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2 py-5"
+              >
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Guardar Cambios
+              </Button>
+              <p className="text-xs text-muted-foreground text-center mt-3">Los cambios se aplican inmediatamente</p>
+            </div>
+          </div>
+
 
           {/* Plantillas de WhatsApp — bento grid full width */}
           {formData.platforms.includes("whatsapp") && (
@@ -734,250 +823,18 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <ScrollSlideUp>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold">Configuración de Bots</h1>
-            <p className="text-sm sm:text-base text-muted-foreground">Crea y gestiona tus chatbots con IA</p>
-          </div>
-        </ScrollSlideUp>
-        <ScrollFadeIn delay={0.2}>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            {!canCreateBot && (
-              <Badge variant="outline" className="text-amber-600 border-amber-600 text-xs">
-                Límite alcanzado
-              </Badge>
-            )}
-            <motion.div
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              className="flex-1 sm:flex-initial"
-            >
-              <Button
-                onClick={demo ? undefined : () => setIsCreateDialogOpen(true)}
-                disabled={demo || !canCreateBot}
-                title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
-                className="w-full sm:w-auto"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Crear Bot</span>
-                <span className="sm:hidden">Nuevo Bot</span>
-              </Button>
-            </motion.div>
-          </div>
-        </ScrollFadeIn>
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+      <div className="bg-muted/50 p-6 rounded-full mb-4">
+        <Bot className="h-12 w-12 text-muted-foreground" />
       </div>
-
-
-      {/* Stats */}
-      <ScrollStaggeredChildren className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
-        <ScrollStaggerChild>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Total Bots</CardTitle>
-              <Bot className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <ScrollScaleIn delay={0.3}>
-                <div className="text-xl sm:text-2xl font-bold">{bots.length}</div>
-              </ScrollScaleIn>
-              <p className="text-xs text-muted-foreground">Bots configurados</p>
-            </CardContent>
-          </Card>
-        </ScrollStaggerChild>
-
-        <ScrollStaggerChild>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Bots Activos</CardTitle>
-              <Play className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <ScrollScaleIn delay={0.4}>
-                <div className="text-xl sm:text-2xl font-bold">{bots.filter((bot) => bot.is_active).length}</div>
-              </ScrollScaleIn>
-              <p className="text-xs text-muted-foreground">En funcionamiento</p>
-            </CardContent>
-          </Card>
-        </ScrollStaggerChild>
-
-        <ScrollStaggerChild>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-              <CardTitle className="text-xs sm:text-sm font-medium">Plataformas</CardTitle>
-              <Zap className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent className="px-3 sm:px-6 pb-3 sm:pb-6">
-              <ScrollScaleIn delay={0.5}>
-                <div className="text-xl sm:text-2xl font-bold">{new Set(bots.map((bot) => bot.platform)).size}</div>
-              </ScrollScaleIn>
-              <p className="text-xs text-muted-foreground">Conectadas</p>
-            </CardContent>
-          </Card>
-        </ScrollStaggerChild>
-      </ScrollStaggeredChildren>
-
-      {/* Bots Grid */}
-      <ScrollStaggeredChildren className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {bots.length === 0 ? (
-          <ScrollStaggerChild>
-            <Card className="col-span-full">
-              <CardContent className="flex flex-col items-center justify-center py-8 sm:py-12 px-4 sm:px-6">
-                <Bot className="h-10 w-10 sm:h-12 sm:w-12 text-muted-foreground mb-4" />
-                <h3 className="text-base sm:text-lg font-medium mb-2 text-center">No tienes bots aún</h3>
-                <p className="text-sm sm:text-base text-muted-foreground text-center mb-4">
-                  Crea tu primer chatbot para comenzar a automatizar la atención al cliente
-                </p>
-                <motion.div
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  <Button
-                    onClick={demo ? undefined : () => setIsCreateDialogOpen(true)}
-                    disabled={demo}
-                    title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
-                    className="w-full sm:w-auto"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    <span className="hidden sm:inline">Crear mi primer bot</span>
-                    <span className="sm:hidden">Crear bot</span>
-                  </Button>
-                </motion.div>
-              </CardContent>
-            </Card>
-          </ScrollStaggerChild>
-        ) : (
-          bots.map((bot) => {
-            const PlatformIcon = platformIcons[bot.platform]
-            return (
-              <ScrollStaggerChild key={bot.id}>
-                <motion.div
-                  whileHover={{ scale: 1.02, y: -4 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Card className="hover:shadow-md transition-shadow">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-3 sm:px-6 pt-3 sm:pt-6">
-                  <div className="flex items-center space-x-2 min-w-0 flex-1">
-                    <PlatformIcon className="h-4 w-4 sm:h-5 sm:w-5 text-primary flex-shrink-0" />
-                    <CardTitle className="text-sm sm:text-lg truncate">{bot.name}</CardTitle>
-                  </div>
-                  <DropdownMenu modal={false}>
-                    <DropdownMenuTrigger asChild>
-                      <motion.div
-                        whileHover={{ scale: 1.1 }}
-                        whileTap={{ scale: 0.9 }}
-                      >
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </motion.div>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={demo ? undefined : () => openEditDialog(bot)}
-                        disabled={demo}
-                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
-                      >
-                        <Edit className="mr-2 h-4 w-4" />
-                        Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={demo ? undefined : () => handleToggleBot(bot.id, !bot.is_active)}
-                        disabled={demo}
-                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
-                      >
-                        {bot.is_active ? (
-                          <>
-                            <Pause className="mr-2 h-4 w-4" />
-                            Desactivar
-                          </>
-                        ) : (
-                          <>
-                            <Play className="mr-2 h-4 w-4" />
-                            Activar
-                          </>
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={demo ? undefined : () => handleDeleteBot(bot.id)}
-                        disabled={demo}
-                        title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
-                        className="text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Eliminar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </CardHeader>
-                <CardContent className="space-y-3 sm:space-y-4 px-3 sm:px-6 pb-3 sm:pb-6">
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge variant={bot.is_active ? "default" : "secondary"} className="text-xs">
-                      {bot.is_active ? "Activo" : "Inactivo"}
-                    </Badge>
-                    {(bot.platforms?.length ? bot.platforms : [bot.platform]).map((p) => (
-                      <Badge key={p} variant="outline" className="text-xs">
-                        {platformLabels[p as keyof typeof platformLabels] || p}
-                      </Badge>
-                    ))}
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="text-xs sm:text-sm">
-                      <span className="font-medium">Funcionalidades:</span>
-                      <div className="mt-1">
-                        {bot.features.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {bot.features.slice(0, 2).map((featureId) => {
-                              const feature = availableFeatures.find((f) => f.id === featureId)
-                              return (
-                                <Badge key={featureId} variant="outline" className="text-xs">
-                                  {feature?.label}
-                                </Badge>
-                              )
-                            })}
-                            {bot.features.length > 2 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{bot.features.length - 2} más
-                              </Badge>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">Sin funcionalidades</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="text-sm">
-                      <span className="font-medium">IA:</span>
-                      <span
-                        className={`ml-2 text-xs ${bot.gemini_api_key ? "text-green-600" : "text-muted-foreground"}`}
-                      >
-                        {bot.gemini_api_key ? "Configurada" : "No configurada"}
-                      </span>
-                    </div>
-
-                    <div className="text-xs text-muted-foreground">Creado el {formatDate(bot.created_at)}</div>
-                  </div>
-                  </CardContent>
-                  </Card>
-                </motion.div>
-              </ScrollStaggerChild>
-            )
-          })
-        )}
-      </ScrollStaggeredChildren>
-
-      {/* Multi-step Bot Creation Dialog */}
-      <MultiStepBotCreation
-        isOpen={isCreateDialogOpen}
-        onClose={() => setIsCreateDialogOpen(false)}
-        onBotCreated={handleBotCreated}
-        userId={userId}
-      />
-
+      <h2 className="text-xl font-bold mb-2">Creá tu bot</h2>
+      <p className="text-sm text-muted-foreground mb-4 max-w-xs">
+        Configurá tu asistente de IA y conectá tus integraciones de WhatsApp, Instagram y Messenger.
+      </p>
+      <Button onClick={demo ? undefined : handleStartCreate} disabled={demo}>
+        <Plus className="h-4 w-4 mr-2" />
+        Crear mi bot
+      </Button>
     </div>
   )
 }

@@ -19,5 +19,12 @@ export default async function PublicFormPage({ params }: PageProps) {
 
   if (error || !form || !form.is_active) notFound()
 
-  return <PublicFormRenderer form={form} />
+  // Promociones activas del negocio dueño del formulario (para mostrar descuentos en el selector)
+  const { data: promotions } = await supabase
+    .from("promotions")
+    .select("*")
+    .eq("user_id", form.user_id)
+    .eq("is_active", true)
+
+  return <PublicFormRenderer form={form} promotions={promotions || []} />
 }
