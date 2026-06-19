@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialog"
@@ -135,6 +135,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tip, setTip] = useState(0)
   const [amountPaid, setAmountPaid] = useState("")
+  const [clientPopoverOpen, setClientPopoverOpen] = useState(false)
 
   const isStampsMode = loyaltySettings?.card_type === "stamps"
 
@@ -676,11 +677,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       <div className="mx-auto flex h-full max-w-[1500px] gap-4 rounded-[2rem] bg-transparent">
         <section
           className={cn(
-            "min-w-0 flex-1 rounded-[2rem] bg-white dark:bg-card p-4 transition-all duration-500 sm:p-5 shadow-[0_12px_34px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_12px_34px_-12px_rgba(0,0,0,0.9)]",
+            "flex min-w-0 flex-1 flex-col overflow-hidden rounded-[2rem] bg-white dark:bg-card p-4 transition-all duration-500 sm:p-5 shadow-[0_12px_34px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_12px_34px_-12px_rgba(0,0,0,0.9)]",
             isCartOpen ? "lg:mr-0" : ""
           )}
         >
-          <div className="mb-4 flex items-center gap-3 rounded-[1.6rem] bg-white dark:bg-muted px-4 py-3 shadow-[0_16px_40px_-8px_rgba(17,24,39,0.45)] dark:shadow-[0_16px_40px_-8px_rgba(0,0,0,0.85)]">
+          <div className="mb-4 flex flex-shrink-0 items-center gap-3 rounded-[1.6rem] bg-white dark:bg-muted px-4 py-3 shadow-[0_16px_40px_-8px_rgba(17,24,39,0.45)] dark:shadow-[0_16px_40px_-8px_rgba(0,0,0,0.85)]">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <Input
               value={productSearch}
@@ -690,7 +691,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             />
           </div>
 
-          <div className="mb-4 -mx-2.5 flex gap-2 overflow-x-auto px-2.5 py-3.5">
+          <div className="mb-4 -mx-2.5 flex flex-shrink-0 gap-2 overflow-x-auto px-2.5 py-3.5">
             {categories.map((category) => (
               <button
                 key={category}
@@ -708,6 +709,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             ))}
           </div>
 
+          <div className="flex-1 overflow-y-auto -mx-1 px-1 pb-2 custom-scrollbar">
           {isRefetching ? (
             <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] 2xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               {Array.from({ length: PRODUCTS_PAGE_SIZE }).map((_, i) => (
@@ -818,113 +820,153 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               </div>
             </>
           )}
+          </div>
         </section>
 
         <aside
           className={cn(
-            "fixed inset-y-0 right-0 z-40 w-full max-w-[420px] transform bg-white dark:bg-card p-4 shadow-2xl transition-transform duration-500 ease-out lg:static lg:h-auto lg:w-[420px] lg:shrink-0 lg:rounded-[2rem] lg:p-4 lg:shadow-none",
-            isCartOpen ? "translate-x-0" : "translate-x-full lg:w-0 lg:max-w-0 lg:p-0 lg:opacity-0"
+            "fixed inset-y-0 right-0 z-40 w-full max-w-[440px] transform bg-white dark:bg-card shadow-2xl transition-transform duration-500 ease-out lg:static lg:h-full lg:w-[420px] lg:shrink-0 lg:rounded-[2rem] lg:shadow-none",
+            isCartOpen ? "translate-x-0" : "translate-x-full lg:w-0 lg:max-w-0 lg:opacity-0"
           )}
         >
-          <div className={cn("flex h-full w-full flex-col overflow-hidden rounded-[2rem] bg-white dark:bg-card", !isCartOpen && "lg:hidden")}>
-            {/* Cliente — fijo arriba */}
-            <div className="flex-shrink-0 p-3 sm:p-4 pb-2 text-left">
-                <div className="w-full rounded-[1.5rem] bg-[#1f2030] p-3.5 text-white">
-                  <div className="mb-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#d8ff55]">Cliente</p>
-                    </div>
-                    <div className="flex items-center gap-2">
+          <div className={cn("flex h-full w-full flex-col overflow-hidden bg-white dark:bg-card lg:rounded-[2rem]", !isCartOpen && "lg:hidden")}>
+            {/* Header — fijo arriba: título + cliente (círculo) + ajustes + cerrar */}
+            <div className="flex-shrink-0 flex items-center justify-between gap-2 p-3 sm:p-4 pb-2 text-left">
+              <p className="text-sm font-bold dark:text-white">Carrito</p>
+              <div className="flex items-center gap-2">
+                <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    {selectedClient ? (
                       <button
                         type="button"
-                        onClick={() => setScannerOpen(true)}
-                        className="flex items-center gap-1.5 rounded-full bg-[#d8ff55]/15 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#d8ff55] transition-colors hover:bg-[#d8ff55]/25"
+                        onMouseEnter={() => setClientPopoverOpen(true)}
+                        title={selectedClient.name}
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1f2030] text-[11px] font-black text-[#d8ff55] ring-2 ring-[#d8ff55] transition-transform hover:scale-105"
                       >
-                        <QrCode className="h-3.5 w-3.5" />
-                        Escanear
+                        {getInitials(selectedClient.name)}
                       </button>
-                      <Link href="/dashboard/clientes" className="hidden sm:inline text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60 hover:text-white transition-colors">
-                        Crear nuevo
-                      </Link>
+                    ) : (
                       <button
                         type="button"
-                        onClick={() => setSettingsOpen(true)}
-                        title="Configuración del punto de venta"
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
+                        title="Asignar cliente"
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md transition-transform hover:scale-105"
                       >
-                        <Settings className="h-4 w-4" />
+                        <UserRound className="h-4 w-4" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => setIsCartOpen(false)}
-                        className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="relative mb-3">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40" />
-                    <Input
-                      value={clientSearch}
-                      onChange={(event) => setClientSearch(event.target.value)}
-                      placeholder="Buscar cliente..."
-                      className="border-white/10 bg-white/10 pl-10 text-white placeholder:text-white/35"
-                    />
-                  </div>
-
-                  {selectedClient ? (
-                    <div className="flex items-center gap-3 rounded-[1.25rem] border border-white/10 bg-white/5 p-3">
-                      <Avatar className="h-11 w-11 border border-white/15">
-                        <AvatarFallback className="bg-[#d8ff55] text-sm font-bold text-slate-900">
-                          {getInitials(selectedClient.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{selectedClient.name}</p>
-                        <p className="truncate text-xs text-white/55">
-                          {getClientHandle(selectedClient)} ·{" "}
-                          {isStampsMode
-                            ? `🔘 ${selectedClient.stamps || 0}/${loyaltySettings?.stamps_required || 10} sellos`
-                            : `⭐ ${selectedClient.points || 0} pts`}
-                        </p>
-                      </div>
-                      <button type="button" onClick={() => { setSelectedClient(null); setRedeemedReward(null) }}>
-                        <X className="h-4 w-4 text-white/45" />
-                      </button>
-                    </div>
-                  ) : filteredClients.length > 0 ? (
-                    <div className="space-y-2">
-                      {filteredClients.map((client) => (
-                        <button
-                          key={client.id}
-                          type="button"
-                          onClick={() => setSelectedClient(client)}
-                          className="flex w-full items-center gap-3 rounded-[1.25rem] border border-white/10 bg-white/5 p-3 text-left transition-colors hover:bg-white/10"
-                        >
-                          <Avatar className="h-10 w-10 border border-white/10">
-                            <AvatarFallback className="bg-white text-xs font-bold text-slate-900">
-                              {getInitials(client.name)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium">{client.name}</p>
-                            <p className="truncate text-xs text-white/55">{getClientHandle(client)}</p>
+                    )}
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align="end"
+                    className="w-72 p-0 overflow-hidden"
+                    onMouseLeave={() => { if (selectedClient) setClientPopoverOpen(false) }}
+                  >
+                    {selectedClient ? (
+                      <div className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[#1f2030] text-sm font-black text-[#d8ff55]">
+                            {getInitials(selectedClient.name)}
                           </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold">{selectedClient.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">{getClientHandle(selectedClient)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2 rounded-xl bg-muted/50 p-2.5 text-sm">
+                          {isStampsMode ? (
+                            <>
+                              <Stamp className="h-4 w-4 text-[#1C1C28] dark:text-[#D1F366]" />
+                              <span className="font-bold">{selectedClient.stamps || 0}/{loyaltySettings?.stamps_required || 10}</span>
+                              <span className="text-muted-foreground">visitas</span>
+                            </>
+                          ) : (
+                            <>
+                              <Star className="h-4 w-4 text-amber-500" />
+                              <span className="font-bold">{(selectedClient.points || 0).toLocaleString("es-AR")}</span>
+                              <span className="text-muted-foreground">puntos</span>
+                            </>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedClient(null); setRedeemedReward(null); setRedeemStampGift(false); setClientPopoverOpen(false) }}
+                          className="mt-3 w-full rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted"
+                        >
+                          Quitar cliente
                         </button>
-                      ))}
-                    </div>
-                  ) : clientSearch.trim() ? (
-                    <div className="rounded-[1.25rem] border border-dashed border-white/15 bg-white/5 p-4 text-center text-sm text-white/55">
-                      No encontramos clientes con esa busqueda.
-                    </div>
-                  ) : (
-                    <div className="rounded-[1.25rem] border border-dashed border-white/15 bg-white/5 p-4 text-center text-sm text-white/55">
-                      Escribe para buscar y asignar un cliente a la venta.
-                    </div>
-                  )}
-                </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 p-3">
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            value={clientSearch}
+                            onChange={(e) => setClientSearch(e.target.value)}
+                            placeholder="Buscar cliente..."
+                            className="h-9 pl-9"
+                            autoFocus
+                          />
+                        </div>
+                        <div className="max-h-52 space-y-1 overflow-y-auto">
+                          {filteredClients.length > 0 ? (
+                            filteredClients.map((client) => (
+                              <button
+                                key={client.id}
+                                type="button"
+                                onClick={() => { setSelectedClient(client); setClientSearch(""); setClientPopoverOpen(false) }}
+                                className="flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition-colors hover:bg-muted"
+                              >
+                                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold">
+                                  {getInitials(client.name)}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-medium">{client.name}</p>
+                                  <p className="truncate text-xs text-muted-foreground">{getClientHandle(client)}</p>
+                                </div>
+                              </button>
+                            ))
+                          ) : clientSearch.trim() ? (
+                            <p className="py-3 text-center text-xs text-muted-foreground">Sin resultados.</p>
+                          ) : (
+                            <p className="py-3 text-center text-xs text-muted-foreground">Escribí para buscar un cliente.</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 border-t border-border pt-3">
+                          <button
+                            type="button"
+                            onClick={() => { setClientPopoverOpen(false); setScannerOpen(true) }}
+                            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#1f2030] py-2 text-xs font-semibold text-[#d8ff55] transition-colors hover:bg-[#1f2030]/90"
+                          >
+                            <QrCode className="h-3.5 w-3.5" />
+                            Escanear
+                          </button>
+                          <Link
+                            href="/dashboard/clientes"
+                            className="flex-1 rounded-xl border border-border py-2 text-center text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted"
+                          >
+                            Crear nuevo
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  title="Configuración del punto de venta"
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/70"
+                >
+                  <Settings className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCartOpen(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/70 lg:hidden"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {/* Carrito + fidelización — única zona scrolleable */}
@@ -1080,7 +1122,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             </div>
 
             {/* Pago + factura — fijo abajo */}
-            <div className="flex-shrink-0 px-3 sm:px-4 pt-3 pb-3 sm:pb-4 space-y-3 border-t border-slate-100 dark:border-border text-left">
+            <div
+              className="flex-shrink-0 px-3 sm:px-4 pt-3 pb-3 sm:pb-4 space-y-3 border-t border-slate-100 dark:border-border text-left"
+              style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+            >
                 <div className="w-full rounded-[1.5rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-3">
                   <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
                   <div className="grid grid-cols-2 gap-2">

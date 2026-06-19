@@ -42,7 +42,7 @@ export default async function PuntoDeVentaPage() {
   ) as string[]
 
   return (
-    <div className="-m-4 -mb-28 lg:m-0 min-h-[calc(100dvh-5rem)] lg:min-h-[calc(100vh-2rem)]">
+    <div className="-m-4 -mb-28 lg:m-0 h-[calc(100dvh-4rem)] lg:h-[calc(100vh-2rem)] overflow-hidden">
       <PuntoDeVentaView
         userId={data.user.id}
         products={products || []}

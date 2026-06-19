@@ -239,6 +239,48 @@ export function ClientsManagement({
 
       if (error) throw error
 
+      // Propagar el nombre nuevo a las conversaciones del chat (el bot las guardó
+      // con el nombre/placeholder viejo). Se vincula por client_id, teléfono o IG.
+      try {
+        const newName = data.name as string
+        const updates: PromiseLike<unknown>[] = [
+          supabase
+            .from("conversations")
+            .update({ client_name: newName })
+            .eq("user_id", userId)
+            .eq("client_id", selectedClient.id),
+        ]
+
+        const phone = String(data.phone || "").replace(/\D/g, "")
+        if (phone) {
+          const variations = [phone]
+          if (phone.startsWith("549")) {
+            variations.push(phone.slice(3), "54" + phone.slice(3))
+          } else if (phone.startsWith("54")) {
+            variations.push(phone.slice(2), "549" + phone.slice(2))
+          }
+          updates.push(
+            supabase
+              .from("conversations")
+              .update({ client_name: newName, client_id: selectedClient.id })
+              .eq("user_id", userId)
+              .in("client_phone", variations)
+          )
+        }
+        if (data.instagram) {
+          updates.push(
+            supabase
+              .from("conversations")
+              .update({ client_name: newName, client_id: selectedClient.id })
+              .eq("user_id", userId)
+              .eq("client_instagram_id", data.instagram)
+          )
+        }
+        await Promise.allSettled(updates)
+      } catch (syncError) {
+        console.error("Error syncing client name to conversations:", syncError)
+      }
+
       setClients(clients.map((client) => (client.id === selectedClient.id ? data : client)))
       setIsEditDialogOpen(false)
       setSelectedClient(null)
