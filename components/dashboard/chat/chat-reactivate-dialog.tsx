@@ -14,6 +14,13 @@ import {
 import { Loader2, Send, MessageSquareText, ChevronLeft, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import {
+  getBodyText,
+  getTemplateSlots,
+  buildTemplateComponents,
+  renderBodyPreview,
+  type TemplateComponent,
+} from "@/lib/whatsapp-template"
 
 interface MetaTemplate {
   id: string
@@ -21,21 +28,11 @@ interface MetaTemplate {
   status: string
   language: string
   category: string
-  components: any[]
+  components: TemplateComponent[]
 }
 
-function bodyText(t: MetaTemplate): string {
-  return t.components?.find((c) => c.type === "BODY")?.text || ""
-}
-function varCount(text: string): number {
-  return new Set(text.match(/\{\{\d+\}\}/g) || []).size
-}
-function prettify(name: string) {
-  return name.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase())
-}
-function render(text: string, vars: string[]): string {
-  return text.replace(/\{\{(\d+)\}\}/g, (_, n) => vars[parseInt(n, 10) - 1] || `{{${n}}}`)
-}
+const prettify = (name: string) => name.replaceAll("_", " ").replace(/^\w/, (c) => c.toUpperCase())
+const groupLabel: Record<string, string> = { header: "Encabezado", body: "Mensaje", button: "Botón" }
 
 export function ChatReactivateDialog({
   open,
@@ -54,7 +51,7 @@ export function ChatReactivateDialog({
   const [notConnected, setNotConnected] = useState(false)
   const [templates, setTemplates] = useState<MetaTemplate[]>([])
   const [selected, setSelected] = useState<MetaTemplate | null>(null)
-  const [vars, setVars] = useState<string[]>([])
+  const [values, setValues] = useState<Record<string, string>>({})
   const [sending, setSending] = useState(false)
 
   useEffect(() => {
@@ -69,23 +66,27 @@ export function ChatReactivateDialog({
           setTemplates([])
           return
         }
-        // Solo plantillas aprobadas se pueden enviar
         setTemplates((j.templates || []).filter((t: MetaTemplate) => t.status === "APPROVED"))
       })
       .catch(() => setTemplates([]))
       .finally(() => setLoading(false))
   }, [open])
 
+  const slots = selected ? getTemplateSlots(selected.components) : []
+
   const pickTemplate = (t: MetaTemplate) => {
     setSelected(t)
-    const count = varCount(bodyText(t))
-    // Pre-cargar la primera variable con el nombre del cliente (suele ser el saludo)
-    const initial = Array.from({ length: count }, (_, i) => (i === 0 ? clientName : ""))
-    setVars(initial)
+    const s = getTemplateSlots(t.components)
+    const firstText = s.find((x) => x.kind === "text")
+    setValues(firstText ? { [firstText.key]: clientName } : {})
   }
 
   const handleSend = async () => {
     if (!selected) return
+    if (slots.some((s) => !values[s.key]?.trim())) {
+      toast.error("Completá todos los campos de la plantilla")
+      return
+    }
     setSending(true)
     try {
       const res = await fetch("/api/chat/send-template", {
@@ -95,8 +96,8 @@ export function ChatReactivateDialog({
           conversationId,
           template_name: selected.name,
           language: selected.language,
-          variables: vars,
-          rendered_text: render(bodyText(selected), vars),
+          components: buildTemplateComponents(selected.components, values),
+          rendered_text: renderBodyPreview(selected.components, values),
         }),
       })
       const j = await res.json()
@@ -113,8 +114,6 @@ export function ChatReactivateDialog({
       setSending(false)
     }
   }
-
-  const count = selected ? varCount(bodyText(selected)) : 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -154,7 +153,7 @@ export function ChatReactivateDialog({
                 <MessageSquareText className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#D1F366]" />
                 <div className="min-w-0">
                   <p className="text-sm font-semibold">{prettify(t.name)}</p>
-                  <p className="line-clamp-2 text-xs text-muted-foreground">{bodyText(t)}</p>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">{getBodyText(t.components)}</p>
                 </div>
               </button>
             ))}
@@ -176,25 +175,23 @@ export function ChatReactivateDialog({
             >
               <div className="max-w-[90%] rounded-xl rounded-tl-sm bg-[#1f2c33] p-3">
                 <p className="whitespace-pre-line break-words text-sm text-[#e9edef]">
-                  {render(bodyText(selected), vars)}
+                  {renderBodyPreview(selected.components, values)}
                 </p>
               </div>
             </div>
 
-            {count > 0 && (
+            {slots.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground">Completá las variables:</p>
-                {Array.from({ length: count }, (_, i) => (
-                  <div key={i} className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{`Variable {{${i + 1}}}`}</Label>
+                <p className="text-xs font-semibold text-muted-foreground">Completá los datos:</p>
+                {slots.map((slot) => (
+                  <div key={slot.key} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">
+                      <span className="font-semibold">{groupLabel[slot.group]}:</span> {slot.label}
+                    </Label>
                     <Input
-                      value={vars[i] || ""}
-                      onChange={(e) => {
-                        const next = [...vars]
-                        next[i] = e.target.value
-                        setVars(next)
-                      }}
-                      placeholder={i === 0 ? "Ej: nombre del cliente" : "Valor"}
+                      value={values[slot.key] || ""}
+                      onChange={(e) => setValues((v) => ({ ...v, [slot.key]: e.target.value }))}
+                      placeholder={slot.placeholder || (slot.group === "body" ? "Valor" : "")}
                       className="h-9"
                     />
                   </div>
@@ -204,7 +201,7 @@ export function ChatReactivateDialog({
 
             <Button
               onClick={handleSend}
-              disabled={sending}
+              disabled={sending || slots.some((s) => !values[s.key]?.trim())}
               className={cn("w-full gap-2 bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold")}
             >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

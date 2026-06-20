@@ -20,6 +20,9 @@ export async function POST(request: NextRequest) {
     const templateName = String(body.template_name || "")
     const language = String(body.language || "es_AR")
     const variables: string[] = Array.isArray(body.variables) ? body.variables.map((v: any) => String(v ?? "")) : []
+    // `components` ya viene armado desde el front (soporta header/body/botones).
+    // Si no viene, se arma uno básico de body con `variables` (compat hacia atrás).
+    const prebuiltComponents: any[] | null = Array.isArray(body.components) ? body.components : null
     const renderedText = String(body.rendered_text || "")
 
     if (!conversationId || !templateName) {
@@ -62,10 +65,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "WhatsApp no está configurado correctamente" }, { status: 400 })
     }
 
-    // Componentes: solo el body con sus variables (si tiene)
-    const components = variables.length > 0
-      ? [{ type: "body", parameters: variables.map((text) => ({ type: "text", text })) }]
-      : []
+    // Componentes: los que mandó el front (header/body/botones) o, si no, body simple
+    const components = prebuiltComponents
+      ? prebuiltComponents
+      : variables.length > 0
+        ? [{ type: "body", parameters: variables.map((text) => ({ type: "text", text })) }]
+        : []
 
     const graphVersion = getGraphVersion()
     const res = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
