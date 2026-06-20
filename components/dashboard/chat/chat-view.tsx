@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2 } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -1231,6 +1231,59 @@ export function ChatView({ userId }: ChatViewProps) {
     }
   }
 
+  // Marcar la conversación como NO LEÍDA → se ve azul en la lista.
+  // Pausa la IA (el destaque azul/rojo es para conversaciones que maneja un humano)
+  // y deja el último mensaje del cliente como no leído. Al terminar, vuelve a la lista.
+  const handleMarkUnread = async () => {
+    if (!selectedConversation) return
+    const convId = selectedConversation.id
+    try {
+      await supabase.from("conversations").update({ status: "paused", paused_until: null }).eq("id", convId)
+      const { data: lastClient } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", convId)
+        .eq("sender_type", "client")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (lastClient) {
+        await supabase.from("messages").update({ is_read: false }).eq("id", lastClient.id)
+      }
+      setConversations(prev => prev.map(c =>
+        c.id === convId ? { ...c, status: "paused", unread_count: Math.max(1, c.unread_count || 0) } : c
+      ))
+      setSelectedConversation(null)
+      toast.success("Conversación marcada como no leída")
+    } catch {
+      toast.error("No se pudo marcar como no leída")
+    }
+  }
+
+  // Marcar la conversación como AYUDA → se ve roja en la lista (igual que un handover).
+  // Activa needs_attention y pausa la IA para que la atienda un humano.
+  const handleMarkHelp = async () => {
+    if (!selectedConversation) return
+    const convId = selectedConversation.id
+    const isHelp = selectedConversation.needs_attention && selectedConversation.status === "paused"
+    try {
+      if (isHelp) {
+        // Quitar el estado de AYUDA
+        await supabase.from("conversations").update({ needs_attention: false }).eq("id", convId)
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, needs_attention: false } : c))
+        setSelectedConversation(prev => prev ? { ...prev, needs_attention: false } : prev)
+        toast.success("Se quitó el estado de AYUDA")
+      } else {
+        await supabase.from("conversations").update({ needs_attention: true, status: "paused", paused_until: null }).eq("id", convId)
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, needs_attention: true, status: "paused" } : c))
+        setSelectedConversation(prev => prev ? { ...prev, needs_attention: true, status: "paused" } : prev)
+        toast.success("Conversación marcada como AYUDA")
+      }
+    } catch {
+      toast.error("No se pudo actualizar el estado")
+    }
+  }
+
   // Handle pending pause after dialog closes to prevent UI locking
   useEffect(() => {
     if (!isPauseDialogOpen && pendingPause) {
@@ -1831,6 +1884,16 @@ export function ChatView({ userId }: ChatViewProps) {
                           Pausar IA (Intervenir)
                         </>
                       )}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleMarkUnread}>
+                      <Mail className="mr-2 h-4 w-4 text-blue-500" />
+                      Marcar como no leída
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleMarkHelp}>
+                      <CircleAlert className="mr-2 h-4 w-4 text-red-500" />
+                      {selectedConversation.needs_attention && selectedConversation.status === 'paused'
+                        ? 'Quitar AYUDA'
+                        : 'Marcar como AYUDA'}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
