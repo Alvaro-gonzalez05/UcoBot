@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2 } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
+import { ChatTemplatePopover } from "./chat-template-popover"
 import { cn } from "@/lib/utils"
 import { format, isToday, isYesterday, isSameDay } from "date-fns"
 import { es } from "date-fns/locale"
@@ -56,6 +57,7 @@ interface Conversation {
   client_messenger_id?: string
   platform: string
   last_message_at: string
+  last_client_message_at?: string | null
   status: string
   bot_id: string
   client_id?: string
@@ -1625,7 +1627,13 @@ export function ChatView({ userId }: ChatViewProps) {
 
   // Ventana de 24 hs de WhatsApp: si el último mensaje del cliente fue hace más
   // de 24 hs, Meta no permite mensajes libres → solo plantilla de reactivación.
-  const lastClientMs = latestClientMessage ? new Date(latestClientMessage.created_at).getTime() : 0
+  // Fuente principal: el campo last_client_message_at de la conversación (exacto,
+  // lo setea el webhook). Fallback: el último mensaje de cliente cargado.
+  const lastClientMs = selectedConversation?.last_client_message_at
+    ? new Date(selectedConversation.last_client_message_at).getTime()
+    : latestClientMessage
+      ? new Date(latestClientMessage.created_at).getTime()
+      : 0
   const whatsappWindowClosed =
     selectedConversation?.platform === "whatsapp" &&
     lastClientMs > 0 &&
@@ -2051,6 +2059,13 @@ export function ChatView({ userId }: ChatViewProps) {
                 <Button variant="ghost" size="icon" className="text-muted-foreground hidden md:flex">
                   <Smile className="h-5 w-5" />
                 </Button>
+                {selectedConversation.platform === 'whatsapp' && (
+                  <ChatTemplatePopover
+                    conversationId={selectedConversation.id}
+                    clientName={clientDisplayName}
+                    onSent={() => { setRefreshKey((k) => k + 1); fetchConversations(0) }}
+                  />
+                )}
                 <Popover open={isStickerPickerOpen} onOpenChange={setIsStickerPickerOpen}>
                   <PopoverTrigger asChild>
                     <Button

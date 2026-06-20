@@ -412,6 +412,12 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         continue
       }
 
+      // Marca el último mensaje entrante del cliente: define la ventana de 24 hs
+      await supabase
+        .from('conversations')
+        .update({ last_client_message_at: new Date().toISOString(), last_message_at: new Date().toISOString() })
+        .eq('id', conversationId)
+
       console.log('✅ Message stored successfully')
 
       // Only process AI response for text messages (for now)

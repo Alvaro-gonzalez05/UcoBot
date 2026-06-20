@@ -411,6 +411,12 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         continue
       }
 
+      // Marca el último mensaje entrante del cliente (ventana de 24 hs)
+      await supabase
+        .from('conversations')
+        .update({ last_client_message_at: new Date().toISOString() })
+        .eq('id', conversation.id)
+
       // Generate AI response if bot is active
       if (bot.is_active && textContent.trim()) {
         // Check if conversation is paused
