@@ -849,7 +849,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       <button
                         type="button"
                         title="Asignar cliente"
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white shadow-md transition-transform hover:scale-105"
+                        className="flex h-9 w-9 items-center justify-center rounded-full bg-[#d8ff55] text-[#1C1C28] shadow-md transition-transform hover:scale-105"
                       >
                         <UserRound className="h-4 w-4" />
                       </button>
@@ -970,7 +970,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             </div>
 
             {/* Carrito + fidelización — única zona scrolleable */}
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 sm:px-4 space-y-3 text-left">
+            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 sm:px-4 pt-1 pb-1 space-y-3 text-left">
                 <div className="w-full rounded-[1.5rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-3.5">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -1126,8 +1126,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               className="flex-shrink-0 px-3 sm:px-4 pt-3 pb-3 sm:pb-4 space-y-3 border-t border-slate-100 dark:border-border text-left"
               style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
             >
-                <div className="w-full rounded-[1.5rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
+                <div>
+                  <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
                   <div className="grid grid-cols-2 gap-2">
                     {enabledPaymentOptions.map((option) => {
                       const Icon = option.icon
@@ -1138,14 +1138,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                           type="button"
                           onClick={() => setPaymentMethod(option.id)}
                           className={cn(
-                            "rounded-[1.15rem] border p-2.5 text-center transition-all",
+                            "flex items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-semibold transition-all",
                             isActive
-                              ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-lg"
-                              : "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-400 hover:border-slate-300 hover:text-slate-700 dark:hover:text-foreground"
+                              ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-md"
+                              : "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-500 dark:text-muted-foreground hover:border-slate-300 hover:text-slate-700 dark:hover:text-foreground"
                           )}
                         >
-                          <Icon className="mx-auto mb-1 h-5 w-5" />
-                          <span className="text-xs font-semibold">{option.label}</span>
+                          <Icon className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{option.label}</span>
                         </button>
                       )
                     })}

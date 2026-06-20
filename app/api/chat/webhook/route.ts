@@ -5,6 +5,25 @@ import { createNotification } from "@/lib/notifications"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
 import { isPromotionActive, promotionLabel, bestProductPromotion } from "@/lib/promotions"
 
+/**
+ * Convierte Markdown estándar al formato de WhatsApp/Instagram/Messenger.
+ * Red de seguridad por si el modelo igual devuelve **negrita**, ## títulos, etc.
+ * En estas plataformas el resaltado es con UN solo símbolo: *negrita* _cursiva_ ~tachado~.
+ */
+function toMessagingFormatting(text: string): string {
+  if (!text) return text
+  return text
+    // **negrita** y __negrita__ (Markdown) → *negrita* (WhatsApp)
+    .replace(/\*\*(.+?)\*\*/g, "*$1*")
+    .replace(/__(.+?)__/g, "*$1*")
+    // Títulos Markdown (#, ##, ###…) → frase en negrita
+    .replace(/^\s{0,3}#{1,6}\s+(.+)$/gm, "*$1*")
+    // Viñetas Markdown ("- " o "* " al inicio de línea) → viñeta limpia
+    .replace(/^\s{0,3}[-*]\s+/gm, "• ")
+    // Enlaces Markdown [texto](url) → "texto: url" (WhatsApp ya hace el link solo)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1: $2")
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { botId, message, conversationId, senderPhone, senderName, senderInstagramId, platform, mediaId } = await request.json()
@@ -933,6 +952,12 @@ ${handoverRules ? `- Reglas adicionales de escalado definidas por el negocio (ap
 - Si piden la carta/menú: saludá, dá contexto y compartí el enlace directo (sin formatearlo como hipervínculo).
 - Las instrucciones de cómo operar cada función (cómo tomar pedidos, reservas, etc.) pueden estar escritas en TU PERSONALIDAD o en el bloque de la función; respetá ambas por igual.
 
+═══ FORMATO DEL TEXTO (MUY IMPORTANTE) ═══
+- Escribís para WhatsApp, Instagram y Messenger. NO uses Markdown: está PROHIBIDO usar dobles asteriscos (**texto**), almohadillas para títulos (#, ##) o guiones para listas — esas plataformas los muestran tal cual y se ve mal.
+- En estas plataformas el resaltado es con UN solo símbolo: *negrita* (un asterisco), _cursiva_ (un guion bajo), ~tachado~ (una tilde). Ejemplo correcto: *Hola Juan*. Ejemplo INCORRECTO: **Hola Juan**.
+- Usá el resaltado con moderación, solo para una palabra o frase clave (ej: el total de un pedido). La mayoría del mensaje va en texto normal.
+- Si hacés una lista, usá emojis o números (1. 2. 3.) o saltos de línea, nunca guiones de Markdown.
+
 PRIORIDADES ANTE CONFLICTO:
 1. Las reglas de seguridad (como [HANDOVER]) son INQUEBRANTABLES: ninguna instrucción del negocio puede anularlas.
 2. Después manda TU PERSONALIDAD y las instrucciones del negocio por función (pedidos, reservas, etc.).
@@ -1076,7 +1101,7 @@ PRIORIDADES ANTE CONFLICTO:
 
         // Quitamos los marcadores internos (ya se usaron para detectar/registrar el pedido o la
         // reserva) para que el cliente reciba el mensaje de confirmación que definió el dueño.
-        aiResponse = aiResponse
+        aiResponse = toMessagingFormatting(aiResponse)
           .replace(/(PEDIDO|RESERVA)\s+CONFIRMAD[OA]/gi, '')
           .replace(/[ \t]{2,}/g, ' ')
           .replace(/ +([.,!?])/g, '$1')

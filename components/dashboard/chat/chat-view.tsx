@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2 } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
+import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { cn } from "@/lib/utils"
 import { format, isToday, isYesterday, isSameDay } from "date-fns"
 import { es } from "date-fns/locale"
@@ -443,6 +444,7 @@ export function ChatView({ userId }: ChatViewProps) {
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false)
   const [pauseDuration, setPauseDuration] = useState("indefinite")
   const [isSending, setIsSending] = useState(false)
+  const [reactivateOpen, setReactivateOpen] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState<string>("")
   const [pendingPause, setPendingPause] = useState<{ duration: string | null } | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -1621,6 +1623,14 @@ export function ChatView({ userId }: ChatViewProps) {
     ? `\"${latestClientMessage.content.slice(0, 120)}${latestClientMessage.content.length > 120 ? "..." : ""}\"`
     : "\"Sin nota interna para este cliente.\""
 
+  // Ventana de 24 hs de WhatsApp: si el último mensaje del cliente fue hace más
+  // de 24 hs, Meta no permite mensajes libres → solo plantilla de reactivación.
+  const lastClientMs = latestClientMessage ? new Date(latestClientMessage.created_at).getTime() : 0
+  const whatsappWindowClosed =
+    selectedConversation?.platform === "whatsapp" &&
+    lastClientMs > 0 &&
+    Date.now() - lastClientMs > 24 * 60 * 60 * 1000
+
   return (
     <div className="flex h-full md:gap-4 bg-background relative overflow-hidden md:overflow-visible">
       {/* Sidebar - Conversation List */}
@@ -1998,6 +2008,25 @@ export function ChatView({ userId }: ChatViewProps) {
 
             {/* Input Area (Read Only for now or Mock) */}
             <div className="p-2 border-t bg-background">
+              {whatsappWindowClosed ? (
+                <div className="flex flex-col gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+                    <span className="material-symbols-outlined text-base leading-none">schedule</span>
+                    <span>
+                      Pasaron más de 24 hs desde el último mensaje del cliente. WhatsApp solo permite
+                      reanudar con una plantilla aprobada.
+                    </span>
+                  </div>
+                  <Button
+                    onClick={() => setReactivateOpen(true)}
+                    className="flex-shrink-0 gap-2 bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold"
+                  >
+                    <Send className="h-4 w-4" />
+                    Reactivar conversación
+                  </Button>
+                </div>
+              ) : (
+              <>
               {replyingTo && (
                 <div className="flex items-center justify-between bg-muted/50 p-2 rounded-md mb-2 border-l-4 border-primary">
                   <div className="flex flex-col text-sm">
@@ -2128,6 +2157,8 @@ export function ChatView({ userId }: ChatViewProps) {
                   </>
                 )}
               </div>
+              </>
+              )}
             </div>
           </>
         ) : (
@@ -2359,6 +2390,16 @@ export function ChatView({ userId }: ChatViewProps) {
         onOpenChange={setIsImportOpen}
         onImported={() => fetchConversations(0)}
       />
+
+      {selectedConversation && (
+        <ChatReactivateDialog
+          open={reactivateOpen}
+          onOpenChange={setReactivateOpen}
+          conversationId={selectedConversation.id}
+          clientName={clientDisplayName}
+          onSent={() => { setRefreshKey((k) => k + 1); fetchConversations(0) }}
+        />
+      )}
 
       <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
         <DialogContent>
