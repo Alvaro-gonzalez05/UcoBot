@@ -1700,11 +1700,17 @@ export function ChatView({ userId }: ChatViewProps) {
   // de 24 hs, Meta no permite mensajes libres → solo plantilla de reactivación.
   // Fuente principal: el campo last_client_message_at de la conversación (exacto,
   // lo setea el webhook). Fallback: el último mensaje de cliente cargado.
-  const lastClientMs = selectedConversation?.last_client_message_at
+  // Tomamos el MÁS RECIENTE entre el campo de la conversación y el último mensaje
+  // de cliente ya cargado. Así, si el cliente responde estando adentro del chat
+  // (el mensaje llega por realtime y se agrega a `messages`), la ventana se reabre
+  // al instante sin necesidad de refrescar la pantalla.
+  const convLastClientMs = selectedConversation?.last_client_message_at
     ? new Date(selectedConversation.last_client_message_at).getTime()
-    : latestClientMessage
-      ? new Date(latestClientMessage.created_at).getTime()
-      : 0
+    : 0
+  const loadedLastClientMs = latestClientMessage
+    ? new Date(latestClientMessage.created_at).getTime()
+    : 0
+  const lastClientMs = Math.max(convLastClientMs, loadedLastClientMs)
   const whatsappWindowClosed =
     selectedConversation?.platform === "whatsapp" &&
     lastClientMs > 0 &&
