@@ -262,6 +262,14 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
              textContent = '[Interactive Message]'
           }
           break
+        case 'reaction':
+          // WhatsApp manda las reacciones (emoji a un mensaje) como un mensaje aparte.
+          // Guardamos el emoji y a qué mensaje reaccionó; lo mostramos legible.
+          messageContent = { ...messageContent, reaction: message.reaction }
+          textContent = message.reaction?.emoji
+            ? `Reaccionó con ${message.reaction.emoji}`
+            : 'Quitó su reacción'
+          break
         default:
           textContent = `[${messageType} message]`
       }
