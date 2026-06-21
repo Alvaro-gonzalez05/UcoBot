@@ -352,7 +352,7 @@ async function processPromotionBroadcast(automation: any) {
       title: "Promoción en curso",
       message: `Se han programado ${totalQueued} mensajes para tu promoción`,
       type: "success",
-      link: `/dashboard/automations`
+      link: `/dashboard/automatizaciones`
     })
 
     console.log(`✅ Broadcast completed: ${totalQueued} messages queued`)

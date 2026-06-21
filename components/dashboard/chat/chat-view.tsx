@@ -617,22 +617,40 @@ export function ChatView({ userId }: ChatViewProps) {
               .single()
               
             if (!error && data) {
+              const sortedMessages = data.messages?.sort((a: any, b: any) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              )
               const processedConv = {
                 ...data,
-                last_message: "Nuevo chat", // Simplified
-                unread_count: 0
+                last_message: sortedMessages?.[0]?.content || "Nuevo chat",
+                unread_count: data.messages?.filter((m: any) =>
+                  m.sender_type === 'client' && m.is_read === false
+                ).length || 0,
               }
-              
+
               setConversations(prev => [processedConv, ...prev])
             }
           } else if (payload.eventType === 'UPDATE') {
+            // payload.new es la fila cruda de `conversations`: NO trae el campo virtual
+            // `last_message`. Traemos el último mensaje real para que la previsualización
+            // no quede con el texto viejo.
+            const { data: lastMsgRows } = await supabase
+              .from("messages")
+              .select("content, created_at")
+              .eq("conversation_id", payload.new.id)
+              .order("created_at", { ascending: false })
+              .limit(1)
+            const lastContent = lastMsgRows?.[0]?.content
+
             setConversations(prev => {
-              const updatedList = prev.map(c => 
-                c.id === payload.new.id ? { ...c, ...payload.new } : c
+              const updatedList = prev.map(c =>
+                c.id === payload.new.id
+                  ? { ...c, ...payload.new, last_message: lastContent ?? c.last_message }
+                  : c
               )
-              
+
               // If last_message_at changed, re-sort
-              return updatedList.sort((a, b) => 
+              return updatedList.sort((a, b) =>
                 new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
               )
             })

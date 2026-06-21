@@ -890,6 +890,7 @@ ${rewardsList ? `- Premios canjeables:\n${rewardsList}` : '- Todavía no hay pre
     const ordersBlock = features.includes('take_orders')
       ? `═══ PEDIDOS ═══
 Mecánica obligatoria: identificá producto(s) y cantidad(es) y confirmá la modalidad de entrega. El TEXTO de confirmación redactalo según tu personalidad y las instrucciones del negocio (el dueño puede definir ese mensaje). Al cerrar el pedido, agregá AL FINAL, en una línea aparte, la frase EXACTA "PEDIDO CONFIRMADO": es un marcador interno del sistema, el cliente NO la ve.
+IMPORTANTE — cuándo agregar el marcador: SOLO cuando el cliente confirmó el pedido de verdad y ya están claros los productos, las cantidades y la modalidad de entrega. Mientras el cliente todavía consulta, pregunta precios, compara o duda, NO agregues el marcador: es solo charla. Ante la duda, NO lo pongas.
 ${productsInfo ? productsInfo + '\n' : ''}${deliveryModesInfo ? deliveryModesInfo + '\n' : ''}${orderRules ? `Instrucciones del negocio para tomar pedidos (seguilas al pie de la letra):\n${orderRules}` : ''}`.trim()
       : ''
 
@@ -897,6 +898,7 @@ ${productsInfo ? productsInfo + '\n' : ''}${deliveryModesInfo ? deliveryModesInf
     const reservationsBlock = features.includes('take_reservations')
       ? `═══ RESERVAS ═══
 Mecánica obligatoria: pedí fecha, hora, cantidad de personas, nombre y teléfono. Aceptá formatos naturales ("mañana", "el viernes", "7 pm"). No repreguntes datos que el cliente ya dio. El TEXTO de confirmación redactalo según tu personalidad y las instrucciones del negocio. Al confirmar la reserva, agregá AL FINAL, en una línea aparte, la frase EXACTA "RESERVA CONFIRMADA": es un marcador interno del sistema, el cliente NO la ve.
+IMPORTANTE — cuándo agregar el marcador: SOLO cuando ya tenés TODOS los datos (fecha, hora, personas, nombre y teléfono) y el cliente confirmó. Si todavía falta algún dato o el cliente solo está consultando disponibilidad, NO agregues el marcador. Ante la duda, NO lo pongas.
 ${reservationRules ? `Instrucciones del negocio para reservas (seguilas al pie de la letra):\n${reservationRules}` : ''}`.trim()
       : ''
 
@@ -942,12 +944,15 @@ ${clientInfoBlock}
 ${capabilitiesList}
 ${ordersBlock ? '\n' + ordersBlock + '\n' : ''}${reservationsBlock ? '\n' + reservationsBlock + '\n' : ''}${loyaltyBlock ? '\n' + loyaltyBlock + '\n' : ''}${registerBlock ? '\n' + registerBlock + '\n' : ''}${formsInfo ? '\n═══ FORMULARIOS ═══\n' + formsInfo + '\n' : ''}${promotionsInfo ? '\n═══ PROMOCIONES ACTIVAS (descuentos vigentes) ═══\n' + promotionsInfo + '\n' : ''}
 ═══ DERIVACIÓN A HUMANO (regla de seguridad, SIEMPRE activa) ═══
-- Si el cliente pide EXPLÍCITAMENTE hablar con una persona/humano/asesor, o hay una queja grave, o no podés resolver su pedido (ej: pide algo que no tenés), tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]" seguida de un mensaje amable avisando que un asesor humano va a responder en breve.
+- Derivá SOLO en estos casos: (a) el cliente pide EXPLÍCITAMENTE hablar con una persona/humano/asesor, (b) hay una queja grave, o (c) no podés resolver su pedido con la info que tenés. En esos casos tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]" seguida de un mensaje amable avisando que un asesor humano va a responder en breve.
+- NO derives solo porque el cliente muestre interés, pregunte precios, planes o disponibilidad, o quiera avanzar con una compra/contratación: eso lo atendés VOS, dando la info y guiando el siguiente paso. El interés NO es motivo de derivación. Derivá recién si el cliente lo pide o si ya hiciste tu parte y hace falta una persona para cerrar.
 - No inventes soluciones si piden un humano.
 ${handoverRules ? `- Reglas adicionales de escalado definidas por el negocio (aplicalas ADEMÁS de lo anterior, nunca en lugar de):\n${handoverRules}\n` : ''}
 ═══ REGLAS GENERALES ═══
-- Leé y recordá todo el historial antes de responder; no vuelvas a pedir datos que el cliente ya dio.
+- SALUDO: saludá (o presentate) UNA SOLA VEZ, en tu primer mensaje de la conversación. Si en el HISTORIAL ya hay mensajes tuyos, la conversación YA empezó: NO vuelvas a decir "Hola", ni a saludar, ni a repetir el nombre del cliente al inicio. Continuá la charla de forma directa y natural, como una persona real que ya está hablando con el cliente.
+- MEMORIA Y RUMBO: antes de responder, leé todo el historial para saber EN QUÉ PUNTO está la conversación y qué se dijo. No reinicies ni repreguntes datos que el cliente ya dio. Cada respuesta tiene que HACER AVANZAR la charla hacia el objetivo (resolver la consulta, cerrar el pedido/turno/venta): retomá lo último que dijo el cliente y dá el siguiente paso concreto, no des vueltas ni repitas lo ya dicho.
 - Respondé como parte del equipo del negocio, con mensajes cortos y naturales (no como un formulario).
+- No abuses de las preguntas: cerrá con una pregunta solo cuando realmente necesitás un dato o una decisión para avanzar; no termines TODOS los mensajes con una pregunta.
 - Hablá solo de temas del negocio.
 - Si piden la carta/menú: saludá, dá contexto y compartí el enlace directo (sin formatearlo como hipervínculo).
 - Las instrucciones de cómo operar cada función (cómo tomar pedidos, reservas, etc.) pueden estar escritas en TU PERSONALIDAD o en el bloque de la función; respetá ambas por igual.
@@ -1081,15 +1086,24 @@ PRIORIDADES ANTE CONFLICTO:
         const featuresCheck = bot.features || []
         const takeOrders = featuresCheck.includes('take_orders')
         const takeReservations = featuresCheck.includes('take_reservations')
-        if (takeOrders || takeReservations) {
+
+        // El pedido/reserva se registra SOLO si el bot escribió de verdad su marcador interno
+        // ("PEDIDO CONFIRMADO" / "RESERVA CONFIRMADA"), que únicamente agrega cuando el cliente
+        // confirmó en serio. Así evitamos pedidos/reservas falsos durante la simple charla.
+        const hasOrderMarker = /PEDIDO\s+CONFIRMAD[OA]/i.test(aiResponse)
+        const hasReservationMarker = /RESERVA\s+CONFIRMAD[OA]/i.test(aiResponse)
+        const shouldProcessOrder = takeOrders && hasOrderMarker
+        const shouldProcessReservation = takeReservations && hasReservationMarker
+
+        if (shouldProcessOrder || shouldProcessReservation) {
           await processOrdersAndReservations(
-            supabase, 
-            bot, 
-            conversation, 
-            finalUserMessage, 
-            aiResponse, 
-            takeOrders, 
-            takeReservations,
+            supabase,
+            bot,
+            conversation,
+            finalUserMessage,
+            aiResponse,
+            shouldProcessOrder,
+            shouldProcessReservation,
             senderName,
             senderPhone,
             extractedClientData,
@@ -1312,7 +1326,7 @@ async function saveOrderFromAI(
             title: "Nuevo cliente registrado",
             message: `${newClient.name} se ha registrado automáticamente`,
             type: "success",
-            link: `/dashboard/clients?id=${newClient.id}`
+            link: `/dashboard/clientes?id=${newClient.id}`
           });
           await supabase.from("conversations").update({ client_id: clientId, client_name: newClient.name }).eq("id", conversation.id);
         }
@@ -1343,7 +1357,7 @@ async function saveOrderFromAI(
         title: "Nuevo pedido recibido",
         message: `Pedido de $${orderData.total} recibido vía WhatsApp`,
         type: "success",
-        link: `/dashboard/orders`
+        link: `/dashboard/pedidos`
       });
 
       // Contar un uso por cada promoción aplicada a los productos del pedido (best-effort por nombre)
@@ -1453,7 +1467,7 @@ async function saveReservationFromAI(
         title: "Nueva reserva confirmada",
         message: `Reserva para ${reservationData.partySize} personas el ${reservationData.reservationDate} a las ${reservationData.reservationTime}`,
         type: "success",
-        link: `/dashboard/reservations`
+        link: `/dashboard/reservas`
       });
     } else {
       console.error('❌ Error saving reservation:', error);
@@ -1848,7 +1862,7 @@ Si NO hay reserva completa, responde: NO_RESERVATION
                 title: "Nueva reserva confirmada",
                 message: `Reserva para ${reservationData.partySize} personas el ${reservationData.reservationDate} a las ${reservationData.reservationTime}`,
                 type: "success",
-                link: `/dashboard/reservations`
+                link: `/dashboard/reservas`
               });
             } else if (error) {
               console.error('❌ Error saving reservation to database:', error)

@@ -268,11 +268,12 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
       if (error) throw error
 
       setBots(bots.map((bot) => (bot.id === selectedBot.id ? data : bot)))
-      setEditingBot(null)
+      // Nos quedamos en el formulario de edición con los datos ya guardados
+      // (antes se hacía setEditingBot(null), que tiraba al estado vacío "Creá tu bot").
+      setSelectedBot(data)
+      setEditingBot(data)
       setIsEditDialogOpen(false)
-      setSelectedBot(null)
-      resetForm()
-      
+
       // Emit custom event to update sidebar navigation
       window.dispatchEvent(new CustomEvent('botUpdated', { detail: data }))
       

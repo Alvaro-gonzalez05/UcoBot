@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
                 title: "Error en automatización",
                 message: `Fallo al enviar a ${message.recipient_name || message.recipient_phone}: ${errorMessage}`,
                 type: "error",
-                link: `/dashboard/automations`
+                link: `/dashboard/automatizaciones`
               });
 
               // Actualizar estado a fallido (NO BORRAR)
