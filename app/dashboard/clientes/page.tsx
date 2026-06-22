@@ -79,7 +79,7 @@ export default async function ClientsPage({ searchParams }: ClientsPageProps) {
         client_name,
         client_phone,
         platform,
-        lead_tag,
+        lead_tags,
         last_message_at,
         created_at,
         client:client_id(id, name, phone, email),

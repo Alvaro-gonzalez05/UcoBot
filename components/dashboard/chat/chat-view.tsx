@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -70,7 +70,8 @@ interface Conversation {
   last_message?: string // Virtual field
   paused_until?: string | null
   needs_attention?: boolean
-  lead_tag?: string | null
+  in_review?: boolean
+  lead_tags?: string[] | null
 }
 
 interface Message {
@@ -454,6 +455,7 @@ export function ChatView({ userId }: ChatViewProps) {
   const [filterPaused, setFilterPaused] = useState(false)
   const [filterUnread, setFilterUnread] = useState(false)
   const [filterHelp, setFilterHelp] = useState(false)
+  const [filterReview, setFilterReview] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [newMessage, setNewMessage] = useState("")
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
@@ -1128,7 +1130,7 @@ export function ChatView({ userId }: ChatViewProps) {
   }, [selectedConversation])
 
   const activeFilterCount =
-    filterTags.length + (filterPaused ? 1 : 0) + (filterUnread ? 1 : 0) + (filterHelp ? 1 : 0)
+    filterTags.length + (filterPaused ? 1 : 0) + (filterUnread ? 1 : 0) + (filterHelp ? 1 : 0) + (filterReview ? 1 : 0)
 
   const filteredConversations = conversations.filter(c => {
     // Búsqueda por texto
@@ -1138,14 +1140,16 @@ export function ChatView({ userId }: ChatViewProps) {
       c.client_phone?.includes(searchTerm)
     if (!matchesSearch) return false
 
-    // Filtro por etiqueta de lead (cualquiera de las seleccionadas)
-    if (filterTags.length > 0 && !(c.lead_tag && filterTags.includes(c.lead_tag))) return false
+    // Filtro por etiqueta de lead (cualquiera de las seleccionadas presente en el array)
+    if (filterTags.length > 0 && !(c.lead_tags?.some((t) => filterTags.includes(t)))) return false
     // Filtro: IA pausada
     if (filterPaused && c.status !== "paused") return false
     // Filtro: no leída (igual criterio que el badge azul de la lista)
     if (filterUnread && !((c.unread_count || 0) > 0 && c.status === "paused")) return false
     // Filtro: marcada como AYUDA
     if (filterHelp && !(c.needs_attention && c.status === "paused")) return false
+    // Filtro: marcada EN REVISIÓN
+    if (filterReview && !(c.in_review && c.status === "paused")) return false
 
     return true
   })
@@ -1155,6 +1159,7 @@ export function ChatView({ userId }: ChatViewProps) {
     setFilterPaused(false)
     setFilterUnread(false)
     setFilterHelp(false)
+    setFilterReview(false)
   }
 
   const handleSendMessage = async () => {
@@ -1359,20 +1364,46 @@ export function ChatView({ userId }: ChatViewProps) {
     }
   }
 
+  // Marcar la conversación EN REVISIÓN → se ve ámbar en la lista.
+  // Activa in_review y pausa la IA mientras un humano la revisa.
+  const handleMarkReview = async () => {
+    if (!selectedConversation) return
+    const convId = selectedConversation.id
+    const isReview = selectedConversation.in_review && selectedConversation.status === "paused"
+    try {
+      if (isReview) {
+        // Quitar el estado de EN REVISIÓN
+        await supabase.from("conversations").update({ in_review: false }).eq("id", convId)
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, in_review: false } : c))
+        setSelectedConversation(prev => prev ? { ...prev, in_review: false } : prev)
+        toast.success("Se quitó el estado EN REVISIÓN")
+      } else {
+        await supabase.from("conversations").update({ in_review: true, status: "paused", paused_until: null }).eq("id", convId)
+        setConversations(prev => prev.map(c => c.id === convId ? { ...c, in_review: true, status: "paused" } : c))
+        setSelectedConversation(prev => prev ? { ...prev, in_review: true, status: "paused" } : prev)
+        toast.success("Conversación marcada EN REVISIÓN")
+      }
+    } catch {
+      toast.error("No se pudo actualizar el estado")
+    }
+  }
+
   // Asignar / quitar una etiqueta de lead MANUALMENTE. Es solo clasificación:
   // NO pausa la IA ni cambia el estado de la conversación. Si la etiqueta ya está
   // puesta, al volver a tocarla se quita (toggle).
   const handleSetLeadTag = async (tag: string) => {
     if (!selectedConversation) return
     const convId = selectedConversation.id
-    const newTag = selectedConversation.lead_tag === tag ? null : tag
+    const current = selectedConversation.lead_tags || []
+    const has = current.includes(tag)
+    const newTags = has ? current.filter((t) => t !== tag) : [...current, tag]
     try {
-      await supabase.from("conversations").update({ lead_tag: newTag }).eq("id", convId)
-      setConversations(prev => prev.map(c => c.id === convId ? { ...c, lead_tag: newTag } : c))
-      setSelectedConversation(prev => prev ? { ...prev, lead_tag: newTag } : prev)
-      toast.success(newTag ? `Etiqueta: ${newTag}` : "Etiqueta quitada")
+      await supabase.from("conversations").update({ lead_tags: newTags }).eq("id", convId)
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, lead_tags: newTags } : c))
+      setSelectedConversation(prev => prev ? { ...prev, lead_tags: newTags } : prev)
+      toast.success(has ? `Etiqueta quitada: ${tag}` : `Etiqueta agregada: ${tag}`)
     } catch {
-      toast.error("No se pudo asignar la etiqueta")
+      toast.error("No se pudo actualizar la etiqueta")
     }
   }
 
@@ -1845,6 +1876,10 @@ export function ChatView({ userId }: ChatViewProps) {
                     <CircleAlert className="h-3.5 w-3.5 text-red-500" /> Con AYUDA
                   </label>
                   <label className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
+                    <input type="checkbox" checked={filterReview} onChange={(e) => setFilterReview(e.target.checked)} className="accent-amber-500" />
+                    <Eye className="h-3.5 w-3.5 text-amber-500" /> En revisión
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
                     <input type="checkbox" checked={filterPaused} onChange={(e) => setFilterPaused(e.target.checked)} className="accent-yellow-500" />
                     <PauseCircle className="h-3.5 w-3.5 text-yellow-600" /> IA pausada
                   </label>
@@ -1897,7 +1932,8 @@ export function ChatView({ userId }: ChatViewProps) {
               filteredConversations.map((conv) => {
                 const showUnread = (conv.unread_count || 0) > 0 && conv.status === 'paused'
                 const needsAttention = conv.needs_attention && conv.status === 'paused'
-                
+                const inReview = conv.in_review && conv.status === 'paused'
+
                 return (
                 <button
                   key={conv.id}
@@ -1906,7 +1942,8 @@ export function ChatView({ userId }: ChatViewProps) {
                     "flex items-start gap-3 p-4 text-left transition-colors hover:bg-muted/50 border-b last:border-0 relative",
                     selectedConversation?.id === conv.id && "bg-muted",
                     showUnread && !needsAttention && "bg-blue-50 dark:bg-blue-950/20",
-                    needsAttention && "bg-red-50 dark:bg-red-950/20"
+                    needsAttention && "bg-red-50 dark:bg-red-950/20",
+                    inReview && !needsAttention && !showUnread && "bg-amber-50 dark:bg-amber-950/20"
                   )}
                 >
                   {showUnread && !needsAttention && (
@@ -1914,6 +1951,9 @@ export function ChatView({ userId }: ChatViewProps) {
                   )}
                   {needsAttention && (
                     <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500" />
+                  )}
+                  {inReview && !needsAttention && !showUnread && (
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500" />
                   )}
                   
                   <Avatar>
@@ -1952,14 +1992,19 @@ export function ChatView({ userId }: ChatViewProps) {
                           IA Pausada
                         </Badge>
                       )}
-                      {conv.lead_tag && (
-                        <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-violet-100 text-violet-800 hover:bg-violet-200 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800 max-w-[110px] truncate inline-block">
-                          {conv.lead_tag}
+                      {conv.lead_tags?.map((t) => (
+                        <Badge key={t} variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-violet-100 text-violet-800 hover:bg-violet-200 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800 max-w-[110px] truncate inline-block">
+                          {t}
                         </Badge>
-                      )}
+                      ))}
                       {needsAttention && (
                         <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">
                           Ayuda
+                        </Badge>
+                      )}
+                      {inReview && (
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800">
+                          En revisión
                         </Badge>
                       )}
                     </div>
@@ -2021,12 +2066,12 @@ export function ChatView({ userId }: ChatViewProps) {
                 </div>
               </div>
               <div className="flex items-center gap-1 md:gap-2">
-                {selectedConversation.lead_tag && (
-                  <Badge variant="secondary" className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-violet-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5 max-w-[120px]">
+                {selectedConversation.lead_tags?.map((t) => (
+                  <Badge key={t} variant="secondary" className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-violet-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5 max-w-[120px]">
                     <Tag className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{selectedConversation.lead_tag}</span>
+                    <span className="truncate">{t}</span>
                   </Badge>
-                )}
+                ))}
                 {selectedConversation.status === 'paused' && (
                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5">
                     <PauseCircle className="h-3 w-3" />
@@ -2074,23 +2119,36 @@ export function ChatView({ userId }: ChatViewProps) {
                         ? 'Quitar AYUDA'
                         : 'Marcar como AYUDA'}
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleMarkReview}>
+                      <Eye className="mr-2 h-4 w-4 text-amber-500" />
+                      {selectedConversation.in_review && selectedConversation.status === 'paused'
+                        ? 'Quitar EN REVISIÓN'
+                        : 'Marcar EN REVISIÓN'}
+                    </DropdownMenuItem>
                     {availableTags.length > 0 && (
                       <>
                         <DropdownMenuSeparator />
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>
                             <Tag className="mr-2 h-4 w-4 text-violet-500" />
-                            {selectedConversation.lead_tag
-                              ? `Etiqueta: ${selectedConversation.lead_tag}`
-                              : 'Asignar etiqueta'}
+                            {(selectedConversation.lead_tags?.length ?? 0) > 0
+                              ? `Etiquetas (${selectedConversation.lead_tags!.length})`
+                              : 'Asignar etiquetas'}
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent>
+                            <DropdownMenuLabel className="text-xs text-muted-foreground">
+                              Tocá para agregar o quitar
+                            </DropdownMenuLabel>
                             {availableTags.map((tag) => (
-                              <DropdownMenuItem key={tag} onClick={() => handleSetLeadTag(tag)}>
+                              <DropdownMenuItem
+                                key={tag}
+                                onClick={() => handleSetLeadTag(tag)}
+                                onSelect={(e) => e.preventDefault()}
+                              >
                                 <Check
                                   className={cn(
                                     "mr-2 h-4 w-4",
-                                    selectedConversation.lead_tag === tag ? "opacity-100 text-violet-500" : "opacity-0"
+                                    selectedConversation.lead_tags?.includes(tag) ? "opacity-100 text-violet-500" : "opacity-0"
                                   )}
                                 />
                                 {tag}

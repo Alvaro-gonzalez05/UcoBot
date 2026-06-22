@@ -54,7 +54,7 @@ interface Lead {
   client_name?: string
   client_phone?: string
   platform: string
-  lead_tag?: string | null
+  lead_tags?: string[] | null
   last_message_at: string
   created_at: string
   client?: { id: string; name: string; phone?: string; email?: string } | null
@@ -826,7 +826,7 @@ export function ClientsManagement({
                     const hot = isHot(lead.last_message_at)
                     const displayName = lead.client?.name || lead.client_name || "Sin nombre"
                     const displayPhone = lead.client?.phone || lead.client_phone
-                    const tagColors = lead.lead_tag ? getTagColors(lead.lead_tag) : null
+                    const leadTags = lead.lead_tags || []
 
                     // Producto de interés: primer item del pedido más reciente
                     const latestOrder = lead.orders?.sort(
@@ -863,13 +863,18 @@ export function ClientsManagement({
                               <LeadTempBadge hot={hot} />
                             </div>
 
-                            {/* Badges: tag + sin clasificar */}
+                            {/* Badges: tags + sin clasificar */}
                             <div className="flex flex-wrap gap-1.5">
-                              {lead.lead_tag && tagColors ? (
-                                <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${tagColors.bg} ${tagColors.text} ${tagColors.border}`}>
-                                  <Tag className="h-2.5 w-2.5" />
-                                  {lead.lead_tag}
-                                </span>
+                              {leadTags.length > 0 ? (
+                                leadTags.map((t) => {
+                                  const tc = getTagColors(t)
+                                  return (
+                                    <span key={t} className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium ${tc.bg} ${tc.text} ${tc.border}`}>
+                                      <Tag className="h-2.5 w-2.5" />
+                                      {t}
+                                    </span>
+                                  )
+                                })
                               ) : (
                                 <span className="text-xs text-muted-foreground italic">Sin clasificar aún</span>
                               )}

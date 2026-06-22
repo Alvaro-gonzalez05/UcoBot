@@ -2493,15 +2493,15 @@ async function classifyAndSaveLeadTag(
     const allowedTags: string[] = bot.allowed_tags || []
     if (!allowedTags.length) return
 
-    // No sobrescribir una etiqueta ya asignada (ni la que puso la IA antes, ni la que
+    // No sobrescribir etiquetas ya asignadas (ni las que puso la IA antes, ni las que
     // asignó el dueño a mano desde el chat). Una vez etiquetada, la conversación queda fija.
     const { data: convRow } = await supabase
       .from('conversations')
-      .select('lead_tag')
+      .select('lead_tags')
       .eq('id', conversationId)
       .maybeSingle()
-    if (convRow?.lead_tag) {
-      console.log(`[lead] conversación ${conversationId} ya tiene etiqueta "${convRow.lead_tag}", no se sobrescribe`)
+    if (convRow?.lead_tags && convRow.lead_tags.length > 0) {
+      console.log(`[lead] conversación ${conversationId} ya tiene etiquetas [${convRow.lead_tags.join(', ')}], no se sobrescribe`)
       return
     }
 
@@ -2554,7 +2554,7 @@ Respondé SOLO con JSON: {"lead_tag": "TagExacto"} o {"lead_tag": null}`
     if (result.lead_tag && allowedTags.includes(result.lead_tag)) {
       await supabase
         .from('conversations')
-        .update({ lead_tag: result.lead_tag })
+        .update({ lead_tags: [result.lead_tag] })
         .eq('id', conversationId)
       console.log(`[lead] classified as "${result.lead_tag}" for conversation ${conversationId}`)
     }
