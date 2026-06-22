@@ -241,10 +241,19 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
           messageContent = { ...messageContent, video }
           textContent = video?.caption || '[Video]'
           break
-        case 'location':
+        case 'location': {
           messageContent = { ...messageContent, location }
-          textContent = location.name || location.address ? `📍 ${location.name || ''} ${location.address || ''}`.trim() : '📍 Ubicación compartida'
+          // Texto descriptivo para que la IA ENTIENDA que el cliente compartió una
+          // ubicación (puede ser la suya o cualquier otra) y pueda usar la dirección
+          // según el contexto (además del render del mapa en el chat).
+          const locPlace = [location?.name, location?.address].filter(Boolean).join(' - ')
+          const locCoords =
+            location?.latitude != null && location?.longitude != null
+              ? ` (lat: ${location.latitude}, long: ${location.longitude})`
+              : ''
+          textContent = `📍 El cliente compartió una ubicación${locPlace ? `: ${locPlace}` : ''}${locCoords}`
           break
+        }
         case 'button':
           // Handle button replies (Quick Replies)
           messageContent = { ...messageContent, button: message.button }

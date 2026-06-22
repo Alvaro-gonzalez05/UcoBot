@@ -2328,28 +2328,30 @@ export function ChatView({ userId }: ChatViewProps) {
                             platform={selectedConversation?.platform}
                           />
                         ) : msg.message_type === 'location' && msg.metadata?.location ? (
-                          <div className="min-w-[200px]">
-                            <a 
+                          <div className="min-w-[220px]">
+                            {/* Mapa real (OpenStreetMap embed, sin API key) como vista previa */}
+                            <div className="relative w-full h-36 rounded-md overflow-hidden border border-border/40 bg-slate-200">
+                              <iframe
+                                title="Ubicación compartida"
+                                loading="lazy"
+                                className="w-full h-full pointer-events-none"
+                                src={`https://www.openstreetmap.org/export/embed.html?bbox=${msg.metadata.location.longitude - 0.004}%2C${msg.metadata.location.latitude - 0.003}%2C${msg.metadata.location.longitude + 0.004}%2C${msg.metadata.location.latitude + 0.003}&layer=mapnik&marker=${msg.metadata.location.latitude}%2C${msg.metadata.location.longitude}`}
+                              />
+                            </div>
+                            <div className="flex items-start gap-2 mt-2">
+                              <MapPin className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+                              <div className="text-sm min-w-0">
+                                <p className="font-medium truncate">{msg.metadata.location.name || 'Ubicación compartida'}</p>
+                                <p className="text-xs opacity-80 break-words">{msg.metadata.location.address || `${msg.metadata.location.latitude}, ${msg.metadata.location.longitude}`}</p>
+                              </div>
+                            </div>
+                            <a
                               href={`https://www.google.com/maps/search/?api=1&query=${msg.metadata.location.latitude},${msg.metadata.location.longitude}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex flex-col gap-2 hover:opacity-90 transition-opacity"
+                              className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
                             >
-                              <div className="relative w-full h-32 bg-slate-200 rounded-md overflow-hidden flex items-center justify-center">
-                                {/* Static map placeholder or actual map if API key available */}
-                                <div className="absolute inset-0 bg-slate-300 flex items-center justify-center">
-                                  <MapPin className="h-8 w-8 text-red-500" />
-                                </div>
-                                {/* Optional: Use Google Static Maps API if you have a key */}
-                                {/* <img src={`https://maps.googleapis.com/maps/api/staticmap?center=${msg.metadata.location.latitude},${msg.metadata.location.longitude}&zoom=15&size=400x200&markers=color:red%7C${msg.metadata.location.latitude},${msg.metadata.location.longitude}&key=YOUR_KEY`} alt="Mapa" className="w-full h-full object-cover" /> */}
-                              </div>
-                              <div className="flex items-start gap-2">
-                                <MapPin className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
-                                <div className="text-sm">
-                                  <p className="font-medium">{msg.metadata.location.name || 'Ubicación'}</p>
-                                  <p className="text-xs opacity-80">{msg.metadata.location.address || `${msg.metadata.location.latitude}, ${msg.metadata.location.longitude}`}</p>
-                                </div>
-                              </div>
+                              <MapPin className="h-3 w-3" /> Abrir en Google Maps
                             </a>
                           </div>
                         ) : (
