@@ -2493,6 +2493,18 @@ async function classifyAndSaveLeadTag(
     const allowedTags: string[] = bot.allowed_tags || []
     if (!allowedTags.length) return
 
+    // No sobrescribir una etiqueta ya asignada (ni la que puso la IA antes, ni la que
+    // asignó el dueño a mano desde el chat). Una vez etiquetada, la conversación queda fija.
+    const { data: convRow } = await supabase
+      .from('conversations')
+      .select('lead_tag')
+      .eq('id', conversationId)
+      .maybeSingle()
+    if (convRow?.lead_tag) {
+      console.log(`[lead] conversación ${conversationId} ya tiene etiqueta "${convRow.lead_tag}", no se sobrescribe`)
+      return
+    }
+
     // Criterios de calificación definidos por el negocio (feature_config.prompts.lead_qualification)
     const qualifyRules = (bot.feature_config?.prompts?.lead_qualification || '').trim()
 

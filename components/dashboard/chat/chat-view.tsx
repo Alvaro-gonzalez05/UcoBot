@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -24,6 +24,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu"
 import {
   Dialog,
@@ -65,6 +70,7 @@ interface Conversation {
   last_message?: string // Virtual field
   paused_until?: string | null
   needs_attention?: boolean
+  lead_tag?: string | null
 }
 
 interface Message {
@@ -441,6 +447,14 @@ export function ChatView({ userId }: ChatViewProps) {
   const previousScrollHeightRef = useRef(0)
 
   const [searchTerm, setSearchTerm] = useState("")
+  // Etiquetas de lead configuradas por el dueño en el bot (allowed_tags)
+  const [availableTags, setAvailableTags] = useState<string[]>([])
+  // Filtros de la lista de conversaciones
+  const [filterTags, setFilterTags] = useState<string[]>([])
+  const [filterPaused, setFilterPaused] = useState(false)
+  const [filterUnread, setFilterUnread] = useState(false)
+  const [filterHelp, setFilterHelp] = useState(false)
+  const [isFilterOpen, setIsFilterOpen] = useState(false)
   const [newMessage, setNewMessage] = useState("")
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false)
@@ -587,6 +601,24 @@ export function ChatView({ userId }: ChatViewProps) {
   // Initial fetch
   useEffect(() => {
     fetchConversations(0)
+  }, [userId])
+
+  // Traemos las etiquetas de lead que configuró el dueño en el bot (allowed_tags).
+  // Sirven para asignarlas manualmente y para filtrar la lista de conversaciones.
+  useEffect(() => {
+    if (!userId) return
+    const fetchTags = async () => {
+      const { data } = await supabase
+        .from("bots")
+        .select("allowed_tags")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle()
+      if (data?.allowed_tags && Array.isArray(data.allowed_tags)) {
+        setAvailableTags(data.allowed_tags)
+      }
+    }
+    fetchTags()
   }, [userId])
 
   // Load more on scroll
@@ -1095,10 +1127,35 @@ export function ChatView({ userId }: ChatViewProps) {
     return () => clearInterval(interval)
   }, [selectedConversation])
 
-  const filteredConversations = conversations.filter(c => 
-    c.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.client_phone?.includes(searchTerm)
-  )
+  const activeFilterCount =
+    filterTags.length + (filterPaused ? 1 : 0) + (filterUnread ? 1 : 0) + (filterHelp ? 1 : 0)
+
+  const filteredConversations = conversations.filter(c => {
+    // Búsqueda por texto
+    const matchesSearch =
+      !searchTerm ||
+      c.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.client_phone?.includes(searchTerm)
+    if (!matchesSearch) return false
+
+    // Filtro por etiqueta de lead (cualquiera de las seleccionadas)
+    if (filterTags.length > 0 && !(c.lead_tag && filterTags.includes(c.lead_tag))) return false
+    // Filtro: IA pausada
+    if (filterPaused && c.status !== "paused") return false
+    // Filtro: no leída (igual criterio que el badge azul de la lista)
+    if (filterUnread && !((c.unread_count || 0) > 0 && c.status === "paused")) return false
+    // Filtro: marcada como AYUDA
+    if (filterHelp && !(c.needs_attention && c.status === "paused")) return false
+
+    return true
+  })
+
+  const clearFilters = () => {
+    setFilterTags([])
+    setFilterPaused(false)
+    setFilterUnread(false)
+    setFilterHelp(false)
+  }
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation) return
@@ -1299,6 +1356,23 @@ export function ChatView({ userId }: ChatViewProps) {
       }
     } catch {
       toast.error("No se pudo actualizar el estado")
+    }
+  }
+
+  // Asignar / quitar una etiqueta de lead MANUALMENTE. Es solo clasificación:
+  // NO pausa la IA ni cambia el estado de la conversación. Si la etiqueta ya está
+  // puesta, al volver a tocarla se quita (toggle).
+  const handleSetLeadTag = async (tag: string) => {
+    if (!selectedConversation) return
+    const convId = selectedConversation.id
+    const newTag = selectedConversation.lead_tag === tag ? null : tag
+    try {
+      await supabase.from("conversations").update({ lead_tag: newTag }).eq("id", convId)
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, lead_tag: newTag } : c))
+      setSelectedConversation(prev => prev ? { ...prev, lead_tag: newTag } : prev)
+      toast.success(newTag ? `Etiqueta: ${newTag}` : "Etiqueta quitada")
+    } catch {
+      toast.error("No se pudo asignar la etiqueta")
     }
   }
 
@@ -1731,6 +1805,76 @@ export function ChatView({ userId }: ChatViewProps) {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <Popover open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="flex-shrink-0 relative"
+                  title="Filtrar conversaciones"
+                >
+                  <Filter className="h-4 w-4" />
+                  {activeFilterCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-violet-500 text-white text-[10px] flex items-center justify-center font-bold">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-64 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-semibold">Filtros</p>
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={clearFilters}
+                      className="text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground">Estado</p>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
+                    <input type="checkbox" checked={filterUnread} onChange={(e) => setFilterUnread(e.target.checked)} className="accent-blue-500" />
+                    <Mail className="h-3.5 w-3.5 text-blue-500" /> No leídas
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
+                    <input type="checkbox" checked={filterHelp} onChange={(e) => setFilterHelp(e.target.checked)} className="accent-red-500" />
+                    <CircleAlert className="h-3.5 w-3.5 text-red-500" /> Con AYUDA
+                  </label>
+                  <label className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
+                    <input type="checkbox" checked={filterPaused} onChange={(e) => setFilterPaused(e.target.checked)} className="accent-yellow-500" />
+                    <PauseCircle className="h-3.5 w-3.5 text-yellow-600" /> IA pausada
+                  </label>
+                </div>
+
+                {availableTags.length > 0 && (
+                  <div className="space-y-1.5 mt-3 pt-3 border-t">
+                    <p className="text-xs font-medium text-muted-foreground">Etiquetas</p>
+                    <div className="max-h-40 overflow-y-auto space-y-1">
+                      {availableTags.map((tag) => (
+                        <label key={tag} className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
+                          <input
+                            type="checkbox"
+                            checked={filterTags.includes(tag)}
+                            onChange={(e) =>
+                              setFilterTags((prev) =>
+                                e.target.checked ? [...prev, tag] : prev.filter((t) => t !== tag)
+                              )
+                            }
+                            className="accent-violet-500"
+                          />
+                          <Tag className="h-3.5 w-3.5 text-violet-500 flex-shrink-0" />
+                          <span className="truncate">{tag}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
             <Button
               variant="outline"
               size="icon"
@@ -1808,6 +1952,11 @@ export function ChatView({ userId }: ChatViewProps) {
                           IA Pausada
                         </Badge>
                       )}
+                      {conv.lead_tag && (
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-violet-100 text-violet-800 hover:bg-violet-200 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800 max-w-[110px] truncate inline-block">
+                          {conv.lead_tag}
+                        </Badge>
+                      )}
                       {needsAttention && (
                         <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">
                           Ayuda
@@ -1872,6 +2021,12 @@ export function ChatView({ userId }: ChatViewProps) {
                 </div>
               </div>
               <div className="flex items-center gap-1 md:gap-2">
+                {selectedConversation.lead_tag && (
+                  <Badge variant="secondary" className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-violet-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5 max-w-[120px]">
+                    <Tag className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{selectedConversation.lead_tag}</span>
+                  </Badge>
+                )}
                 {selectedConversation.status === 'paused' && (
                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5">
                     <PauseCircle className="h-3 w-3" />
@@ -1919,6 +2074,32 @@ export function ChatView({ userId }: ChatViewProps) {
                         ? 'Quitar AYUDA'
                         : 'Marcar como AYUDA'}
                     </DropdownMenuItem>
+                    {availableTags.length > 0 && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <Tag className="mr-2 h-4 w-4 text-violet-500" />
+                            {selectedConversation.lead_tag
+                              ? `Etiqueta: ${selectedConversation.lead_tag}`
+                              : 'Asignar etiqueta'}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            {availableTags.map((tag) => (
+                              <DropdownMenuItem key={tag} onClick={() => handleSetLeadTag(tag)}>
+                                <Check
+                                  className={cn(
+                                    "mr-2 h-4 w-4",
+                                    selectedConversation.lead_tag === tag ? "opacity-100 text-violet-500" : "opacity-0"
+                                  )}
+                                />
+                                {tag}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

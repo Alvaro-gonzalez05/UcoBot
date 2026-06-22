@@ -90,7 +90,7 @@ const availableFeatures = [
   { id: "take_reservations", label: "Tomar reservas", description: "El bot gestiona reservas de mesas o turnos." },
   { id: "register_clients", label: "Registro de clientes", description: "Identifica y registra clientes nuevos automáticamente." },
   { id: "loyalty_points", label: "Puntos de fidelización", description: "Los clientes pueden consultar su saldo de puntos de fidelidad." },
-  { id: "lead_qualification", label: "Calificación de leads", description: "La IA clasifica automáticamente los leads según las etiquetas configuradas." },
+  { id: "lead_qualification", label: "Calificación de leads", description: "Definí etiquetas para clasificar tus conversaciones. La IA las aplica automáticamente y vos también podés asignarlas a mano desde el chat." },
 ]
 
 // Funciones que admiten instrucciones personalizadas del negocio (se guardan en feature_config.prompts)
