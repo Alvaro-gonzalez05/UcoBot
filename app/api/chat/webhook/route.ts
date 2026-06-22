@@ -2493,17 +2493,15 @@ async function classifyAndSaveLeadTag(
     const allowedTags: string[] = bot.allowed_tags || []
     if (!allowedTags.length) return
 
-    // No sobrescribir etiquetas ya asignadas (ni las que puso la IA antes, ni las que
-    // asignó el dueño a mano desde el chat). Una vez etiquetada, la conversación queda fija.
+    // Tags actuales: lead_tags = conjunto completo; manual_tags = los que puso un humano.
+    // La IA puede REEMPLAZAR sus propios tags, pero NUNCA toca los manuales.
     const { data: convRow } = await supabase
       .from('conversations')
-      .select('lead_tags')
+      .select('lead_tags, manual_tags')
       .eq('id', conversationId)
       .maybeSingle()
-    if (convRow?.lead_tags && convRow.lead_tags.length > 0) {
-      console.log(`[lead] conversación ${conversationId} ya tiene etiquetas [${convRow.lead_tags.join(', ')}], no se sobrescribe`)
-      return
-    }
+    const existingTags: string[] = convRow?.lead_tags || []
+    const manualTags: string[] = convRow?.manual_tags || []
 
     // Criterios de calificación definidos por el negocio (feature_config.prompts.lead_qualification)
     const qualifyRules = (bot.feature_config?.prompts?.lead_qualification || '').trim()
@@ -2523,19 +2521,19 @@ async function classifyAndSaveLeadTag(
       .map((m: any) => `${m.sender_type === 'client' ? 'Cliente' : 'Bot'}: ${m.content}`)
       .join('\n')
 
-    const prompt = `Leé esta conversación y elegí el tag de lead más apropiado de la lista dada.
+    const prompt = `Leé esta conversación y elegí TODAS las etiquetas de la lista que apliquen claramente al lead.
 
 Conversación:
 ${historyText}
 
 Tags permitidos: ${allowedTags.map(t => `"${t}"`).join(', ')}
-${qualifyRules ? `\nCriterios del negocio para calificar (seguilos al pie de la letra):\n${qualifyRules}\n` : ''}
+${existingTags.length > 0 ? `\nEtiquetas que la conversación YA tiene (no hace falta repetirlas, pero podés sumar otras nuevas que apliquen):\n${existingTags.join(', ')}\n` : ''}${qualifyRules ? `\nCriterios del negocio para calificar (seguilos al pie de la letra):\n${qualifyRules}\n` : ''}
 Reglas:
-- Si hay información suficiente para clasificar al lead, elegí UNO de los tags exactos.
-- Si no hay información suficiente aún, respondé con null.
+- Elegí solo etiquetas EXACTAS de la lista que apliquen con claridad. Pueden ser 0, 1 o varias.
+- Si ninguna aplica todavía, devolvé una lista vacía.
 - NO inventes tags. Solo usá los de la lista.
 
-Respondé SOLO con JSON: {"lead_tag": "TagExacto"} o {"lead_tag": null}`
+Respondé SOLO con JSON: {"lead_tags": ["TagExacto", ...]} (lista vacía si ninguna aplica)`
 
     const response = await callGeminiWithFallback(geminiApiKey, {
       contents: [{ parts: [{ text: prompt }] }],
@@ -2551,12 +2549,29 @@ Respondé SOLO con JSON: {"lead_tag": "TagExacto"} o {"lead_tag": null}`
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim()
     const result = JSON.parse(jsonStr)
 
-    if (result.lead_tag && allowedTags.includes(result.lead_tag)) {
+    // Solo etiquetas válidas (de la lista permitida)
+    const aiTags: string[] = Array.isArray(result.lead_tags)
+      ? result.lead_tags.filter((t: string) => allowedTags.includes(t))
+      : []
+
+    // Si la IA no detecta nada claro, no tocamos nada (no borramos los tags que ya hay).
+    if (aiTags.length === 0) return
+
+    // Nuevo conjunto = tags MANUALES (intocables) + clasificación FRESCA de la IA.
+    // Esto REEMPLAZA los tags que la IA había puesto antes (no se acumulan), pero
+    // conserva siempre los que asignó un humano a mano.
+    const merged = Array.from(new Set([...manualTags, ...aiTags]))
+
+    // Solo escribimos si cambió algo (evita updates innecesarios).
+    const changed =
+      merged.length !== existingTags.length ||
+      merged.some((t) => !existingTags.includes(t))
+    if (changed) {
       await supabase
         .from('conversations')
-        .update({ lead_tags: [result.lead_tag] })
+        .update({ lead_tags: merged })
         .eq('id', conversationId)
-      console.log(`[lead] classified as "${result.lead_tag}" for conversation ${conversationId}`)
+      console.log(`[lead] tags de conversación ${conversationId}: [${merged.join(', ')}]`)
     }
   } catch (err) {
     // Silent — classification is non-critical

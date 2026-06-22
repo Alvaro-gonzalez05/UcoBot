@@ -51,8 +51,54 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
+
+// Muestra hasta `max` etiquetas y, si hay más, un "+N" que al pasar el mouse
+// despliega un HoverCard (en portal, no lo recorta el scroll) con TODAS las etiquetas.
+function LeadTagBadges({ tags, max = 2 }: { tags: string[]; max?: number }) {
+  if (!tags || tags.length === 0) return null
+  const visible = tags.slice(0, max)
+  const hiddenCount = tags.length - visible.length
+  const badgeCls =
+    "text-[10px] h-4 px-1 py-0 bg-violet-100 text-violet-800 hover:bg-violet-200 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800 max-w-[90px] truncate inline-block"
+  return (
+    <>
+      {visible.map((t) => (
+        <Badge key={t} variant="secondary" className={badgeCls}>
+          {t}
+        </Badge>
+      ))}
+      {hiddenCount > 0 && (
+        <HoverCard openDelay={80} closeDelay={80}>
+          <HoverCardTrigger asChild>
+            <span
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] h-4 px-1.5 inline-flex items-center rounded-full border font-semibold cursor-default bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800"
+            >
+              +{hiddenCount}
+            </span>
+          </HoverCardTrigger>
+          <HoverCardContent align="start" className="w-auto max-w-[220px] p-2">
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">Etiquetas</p>
+            <div className="flex flex-wrap gap-1">
+              {tags.map((t) => (
+                <span
+                  key={t}
+                  className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 border border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800"
+                >
+                  <Tag className="h-2.5 w-2.5" />
+                  {t}
+                </span>
+              ))}
+            </div>
+          </HoverCardContent>
+        </HoverCard>
+      )}
+    </>
+  )
+}
 
 interface Conversation {
   id: string
@@ -72,6 +118,7 @@ interface Conversation {
   needs_attention?: boolean
   in_review?: boolean
   lead_tags?: string[] | null
+  manual_tags?: string[] | null
 }
 
 interface Message {
@@ -1394,13 +1441,17 @@ export function ChatView({ userId }: ChatViewProps) {
   const handleSetLeadTag = async (tag: string) => {
     if (!selectedConversation) return
     const convId = selectedConversation.id
-    const current = selectedConversation.lead_tags || []
-    const has = current.includes(tag)
-    const newTags = has ? current.filter((t) => t !== tag) : [...current, tag]
+    const currentLead = selectedConversation.lead_tags || []
+    const currentManual = selectedConversation.manual_tags || []
+    const has = currentLead.includes(tag)
+    // Mantenemos manual_tags en sincronía: lo que asignás a mano queda marcado como
+    // manual para que la IA nunca lo sobrescriba ni lo borre.
+    const newLead = has ? currentLead.filter((t) => t !== tag) : [...currentLead, tag]
+    const newManual = has ? currentManual.filter((t) => t !== tag) : Array.from(new Set([...currentManual, tag]))
     try {
-      await supabase.from("conversations").update({ lead_tags: newTags }).eq("id", convId)
-      setConversations(prev => prev.map(c => c.id === convId ? { ...c, lead_tags: newTags } : c))
-      setSelectedConversation(prev => prev ? { ...prev, lead_tags: newTags } : prev)
+      await supabase.from("conversations").update({ lead_tags: newLead, manual_tags: newManual }).eq("id", convId)
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, lead_tags: newLead, manual_tags: newManual } : c))
+      setSelectedConversation(prev => prev ? { ...prev, lead_tags: newLead, manual_tags: newManual } : prev)
       toast.success(has ? `Etiqueta quitada: ${tag}` : `Etiqueta agregada: ${tag}`)
     } catch {
       toast.error("No se pudo actualizar la etiqueta")
@@ -1992,11 +2043,7 @@ export function ChatView({ userId }: ChatViewProps) {
                           IA Pausada
                         </Badge>
                       )}
-                      {conv.lead_tags?.map((t) => (
-                        <Badge key={t} variant="secondary" className="text-[10px] h-4 px-1 py-0 bg-violet-100 text-violet-800 hover:bg-violet-200 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-800 max-w-[110px] truncate inline-block">
-                          {t}
-                        </Badge>
-                      ))}
+                      <LeadTagBadges tags={conv.lead_tags || []} max={2} />
                       {needsAttention && (
                         <Badge variant="destructive" className="text-[10px] h-4 px-1 py-0">
                           Ayuda
@@ -2066,12 +2113,7 @@ export function ChatView({ userId }: ChatViewProps) {
                 </div>
               </div>
               <div className="flex items-center gap-1 md:gap-2">
-                {selectedConversation.lead_tags?.map((t) => (
-                  <Badge key={t} variant="secondary" className="bg-violet-100 text-violet-800 hover:bg-violet-100 border-violet-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5 max-w-[120px]">
-                    <Tag className="h-3 w-3 flex-shrink-0" />
-                    <span className="truncate">{t}</span>
-                  </Badge>
-                ))}
+                <LeadTagBadges tags={selectedConversation.lead_tags || []} max={2} />
                 {selectedConversation.status === 'paused' && (
                   <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 border-yellow-200 flex gap-1 whitespace-nowrap px-1.5 md:px-2.5">
                     <PauseCircle className="h-3 w-3" />
