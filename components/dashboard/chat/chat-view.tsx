@@ -1,7 +1,14 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, Fragment } from "react"
+import dynamic from "next/dynamic"
 import { createClient } from "@/lib/supabase/client"
+
+// MapLibre necesita window: lo cargamos solo en cliente.
+const LocationMap = dynamic(
+  () => import("@/components/ui/location-map").then((m) => m.LocationMap),
+  { ssr: false }
+)
 import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
@@ -504,6 +511,8 @@ export function ChatView({ userId }: ChatViewProps) {
   const [filterHelp, setFilterHelp] = useState(false)
   const [filterReview, setFilterReview] = useState(false)
   const [isFilterOpen, setIsFilterOpen] = useState(false)
+  // Ubicación abierta en el diálogo del mapa (mapcn/MapLibre + CARTO)
+  const [mapLocation, setMapLocation] = useState<{ lat: number; lng: number; name?: string; address?: string } | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false)
@@ -2329,15 +2338,30 @@ export function ChatView({ userId }: ChatViewProps) {
                           />
                         ) : msg.message_type === 'location' && msg.metadata?.location ? (
                           <div className="min-w-[220px]">
-                            {/* Mapa real (OpenStreetMap embed, sin API key) como vista previa */}
-                            <div className="relative w-full h-36 rounded-md overflow-hidden border border-border/40 bg-slate-200">
+                            {/* Preview liviano (iframe OSM). Al hacer clic abre el mapa lindo de CARTO. */}
+                            <button
+                              type="button"
+                              onClick={() => setMapLocation({
+                                lat: msg.metadata.location.latitude,
+                                lng: msg.metadata.location.longitude,
+                                name: msg.metadata.location.name,
+                                address: msg.metadata.location.address,
+                              })}
+                              className="group relative block w-full h-36 rounded-md overflow-hidden border border-border/40 bg-slate-200"
+                              title="Ver mapa"
+                            >
                               <iframe
                                 title="Ubicación compartida"
                                 loading="lazy"
                                 className="w-full h-full pointer-events-none"
                                 src={`https://www.openstreetmap.org/export/embed.html?bbox=${msg.metadata.location.longitude - 0.004}%2C${msg.metadata.location.latitude - 0.003}%2C${msg.metadata.location.longitude + 0.004}%2C${msg.metadata.location.latitude + 0.003}&layer=mapnik&marker=${msg.metadata.location.latitude}%2C${msg.metadata.location.longitude}`}
                               />
-                            </div>
+                              <span className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
+                                <span className="opacity-0 group-hover:opacity-100 transition-opacity text-xs font-medium bg-background/90 text-foreground px-2 py-1 rounded-full shadow">
+                                  Ver mapa
+                                </span>
+                              </span>
+                            </button>
                             <div className="flex items-start gap-2 mt-2">
                               <MapPin className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
                               <div className="text-sm min-w-0">
@@ -2785,6 +2809,41 @@ export function ChatView({ userId }: ChatViewProps) {
           onSent={() => { setRefreshKey((k) => k + 1); fetchConversations(0) }}
         />
       )}
+
+      {/* Diálogo del mapa: se abre al tocar el preview de una ubicación */}
+      <Dialog open={!!mapLocation} onOpenChange={(o) => !o && setMapLocation(null)}>
+        <DialogContent className="max-w-2xl p-0 overflow-hidden">
+          <DialogHeader className="p-4 pb-2">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <MapPin className="h-4 w-4 text-red-500" />
+              {mapLocation?.name || "Ubicación compartida"}
+            </DialogTitle>
+            {mapLocation?.address && (
+              <DialogDescription className="text-left">{mapLocation.address}</DialogDescription>
+            )}
+          </DialogHeader>
+          {mapLocation && (
+            <>
+              <LocationMap
+                latitude={mapLocation.lat}
+                longitude={mapLocation.lng}
+                label={mapLocation.name || mapLocation.address}
+                className="w-full h-[60vh]"
+              />
+              <div className="p-3">
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${mapLocation.lat},${mapLocation.lng}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:underline"
+                >
+                  <MapPin className="h-4 w-4" /> Abrir en Google Maps
+                </a>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={isPauseDialogOpen} onOpenChange={setIsPauseDialogOpen}>
         <DialogContent>
