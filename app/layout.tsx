@@ -7,11 +7,26 @@ import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://chatbot-sass-eight.vercel.app'),
   title: 'UcoBot - ChatBot Para Negocios',
   description: 'Plataforma argentina para crear chatbots inteligentes. Desde Mendoza para todo el país.',
   generator: 'Next.js',
   manifest: '/manifest.json',
   themeColor: '#D1F366',
+  openGraph: {
+    type: 'website',
+    siteName: 'UcoBot',
+    title: 'UcoBot - ChatBot Para Negocios',
+    description: 'Plataforma argentina para crear chatbots inteligentes. Desde Mendoza para todo el país.',
+    url: 'https://chatbot-sass-eight.vercel.app',
+    locale: 'es_AR',
+    images: [
+      {
+        url: '/ucobot-logo.png',
+        alt: 'UcoBot',
+      },
+    ],
+  },
   other: {
     'mobile-web-app-capable': 'yes',
   },
