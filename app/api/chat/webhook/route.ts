@@ -24,6 +24,59 @@ function toMessagingFormatting(text: string): string {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1: $2")
 }
 
+// Modelos de Gemini en orden de preferencia. Si el primero está saturado (503) o
+// sin cupo (429), probamos el siguiente automáticamente. Cada modelo tiene su propio
+// pool de capacidad en Google, así no dependemos de que UNO solo esté disponible.
+const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
+
+/**
+ * Llama a Gemini probando varios modelos en cascada. Para cada modelo reintenta una
+ * vez ante errores transitorios (503/429/5xx o fallo de red); si igual falla, pasa al
+ * siguiente modelo. Devuelve la primera Response OK, o la última Response fallida.
+ */
+async function callGeminiWithFallback(apiKey: string, body: any): Promise<Response | null> {
+  const payload = JSON.stringify(body)
+  let lastResponse: Response | null = null
+
+  for (const model of GEMINI_MODELS) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+          { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }
+        )
+
+        if (res.ok) {
+          if (model !== GEMINI_MODELS[0]) console.log(`✅ Gemini respondió con modelo de respaldo: ${model}`)
+          return res
+        }
+
+        lastResponse = res
+        const errText = await res.text().catch(() => "")
+        console.error(`Gemini error [${model}] intento ${attempt}: ${res.status} ${errText.substring(0, 150)}`)
+
+        // 503 (saturado), 429 (sin cupo) o 5xx → reintentar este modelo y, si no, pasar al siguiente
+        const transient = res.status === 503 || res.status === 429 || res.status >= 500
+        if (transient && attempt < 2) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt))
+          continue
+        }
+        if (transient) break // probar el siguiente modelo
+        return res // error NO transitorio (4xx): cambiar de modelo no ayuda
+      } catch (e) {
+        console.error(`Gemini fetch error [${model}] intento ${attempt}:`, e)
+        if (attempt < 2) {
+          await new Promise((r) => setTimeout(r, 1500 * attempt))
+          continue
+        }
+        // fallo de red persistente con este modelo → probar el siguiente
+      }
+    }
+  }
+
+  return lastResponse
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { botId, message, conversationId, senderPhone, senderName, senderInstagramId, platform, mediaId } = await request.json()
@@ -981,69 +1034,28 @@ PRIORIDADES ANTE CONFLICTO:
       return { content: "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente (Falta API Key).", shouldPause: false }
     }
 
-    // Generate response using Gemini 1.5 Flash model with retry logic
-    const maxAttempts = 3
-    let attempt = 0
-    let response: any = null
-    
-    while (attempt < maxAttempts) {
-      attempt++
-      
-      try {
-        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  {
-                    text: `${systemPrompt}\n\n=== HISTORIAL DE LA CONVERSACIÓN ===\n${conversationHistory.map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Bot'}: ${m.content}`).join('\n')}\n\n=== NUEVO MENSAJE ===\nCliente: ${finalUserMessage}\n\nBot: `
-                  },
-                  ...(mediaPart ? [mediaPart] : [])
-                ]
-              }
-            ],
-            generationConfig: {
-              temperature: 0.3,
-              topK: 20,
-              topP: 0.8,
-            }
-          })
-        })
-
-        if (response.ok) {
-          break // Success, exit retry loop
-        } else {
-          const errorData = await response.text()
-          console.error(`Gemini API error (attempt ${attempt}):`, response.status, errorData.substring(0, 200))
-          
-          // If it's a 503 error (overloaded) and we have more attempts, retry
-          if (response.status === 503 && attempt < maxAttempts) {
-            const backoff = 2000 * Math.pow(2, attempt - 1)
-            console.log(`🔄 Retrying Gemini API in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`)
-            await new Promise(resolve => setTimeout(resolve, backoff))
-            continue
-          }
-          
-          // For other errors or if this is the last attempt, break
-          break
+    // Generamos la respuesta con cadena de fallback de modelos (si uno está saturado,
+    // prueba el siguiente automáticamente — ver callGeminiWithFallback).
+    const response = await callGeminiWithFallback(geminiApiKey, {
+      contents: [
+        {
+          parts: [
+            {
+              text: `${systemPrompt}\n\n=== HISTORIAL DE LA CONVERSACIÓN ===\n${conversationHistory.map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Bot'}: ${m.content}`).join('\n')}\n\n=== NUEVO MENSAJE ===\nCliente: ${finalUserMessage}\n\nBot: `
+            },
+            ...(mediaPart ? [mediaPart] : [])
+          ]
         }
-      } catch (fetchError) {
-        console.error(`Gemini API fetch error (attempt ${attempt}):`, fetchError)
-        if (attempt < maxAttempts) {
-          const backoff = 2000 * Math.pow(2, attempt - 1)
-          console.log(`🔄 Retrying Gemini API in ${backoff}ms (attempt ${attempt}/${maxAttempts})...`)
-          await new Promise(resolve => setTimeout(resolve, backoff))
-          continue
-        }
+      ],
+      generationConfig: {
+        temperature: 0.3,
+        topK: 20,
+        topP: 0.8,
       }
-    }
+    })
 
     if (!response || !response.ok) {
-      console.error('Gemini API failed after all retry attempts')
+      console.error('Gemini API failed after all models/retries')
       return { content: "Disculpa, tengo problemas técnicos. Intenta nuevamente en un momento.", shouldPause: false }
     }
 
@@ -1229,17 +1241,13 @@ Si NO hay confirmación explícita (solo charla/preguntas):
 Responde SOLO con el JSON.
 `;
 
-    // Call Gemini
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: analysisPrompt }] }],
-        generationConfig: { temperature: 0.1 }
-      })
+    // Call Gemini (con cadena de fallback de modelos)
+    const response = await callGeminiWithFallback(geminiApiKey, {
+      contents: [{ parts: [{ text: analysisPrompt }] }],
+      generationConfig: { temperature: 0.1 }
     });
 
-    if (!response.ok) return;
+    if (!response || !response.ok) return;
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) return;
@@ -1584,18 +1592,14 @@ Si hay un pedido completo, responde con este formato JSON:
 Si no hay pedido completo, responde: NO_ORDER
 `
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: extractionPrompt }] }],
-        generationConfig: { temperature: 0.1 }
-      })
+    const response = await callGeminiWithFallback(geminiApiKey, {
+      contents: [{ parts: [{ text: extractionPrompt }] }],
+      generationConfig: { temperature: 0.1 }
     })
 
-    if (response.ok) {
+    if (response && response.ok) {
       const data = await response.json()
-      
+
       if (!data.candidates || !data.candidates[0]) {
         console.error('Invalid Gemini response for order extraction:', data)
         return
@@ -1718,21 +1722,17 @@ Si NO hay reserva completa, responde: NO_RESERVATION
 `
 
     console.log('🤖 Calling Gemini AI for reservation extraction...')
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: extractionPrompt }] }],
-        generationConfig: { 
-          temperature: 0.1, 
-          topP: 0.8,
-          topK: 40
-        }
-      })
+    const response = await callGeminiWithFallback(geminiApiKey, {
+      contents: [{ parts: [{ text: extractionPrompt }] }],
+      generationConfig: {
+        temperature: 0.1,
+        topP: 0.8,
+        topK: 40
+      }
     })
 
-    console.log('🤖 Gemini response status:', response.status)
-    if (response.ok) {
+    console.log('🤖 Gemini response status:', response?.status)
+    if (response && response.ok) {
       const data = await response.json()
       console.log('🤖 Gemini response data:', JSON.stringify(data, null, 2))
       
@@ -2525,19 +2525,12 @@ Reglas:
 
 Respondé SOLO con JSON: {"lead_tag": "TagExacto"} o {"lead_tag": null}`
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1 }
-        })
-      }
-    )
+    const response = await callGeminiWithFallback(geminiApiKey, {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.1 }
+    })
 
-    if (!response.ok) return
+    if (!response || !response.ok) return
 
     const data = await response.json()
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
