@@ -24,15 +24,23 @@ function toMessagingFormatting(text: string): string {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1: $2")
 }
 
-// Modelos de Gemini en orden de preferencia. Si el primero está saturado (503) o
-// sin cupo (429), probamos el siguiente automáticamente. Cada modelo tiene su propio
-// pool de capacidad en Google, así no dependemos de que UNO solo esté disponible.
-const GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]
+// Modelos de Gemini en orden de preferencia. Si uno está saturado (503), sin cupo (429),
+// o no está disponible para esta API key (404), probamos el siguiente automáticamente.
+// Cada modelo tiene su propio pool de capacidad en Google, así no dependemos de UNO solo.
+// Incluye familia 2.x y, como respaldo, familia 3.x.
+const GEMINI_MODELS = [
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.0-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash",
+]
 
 /**
- * Llama a Gemini probando varios modelos en cascada. Para cada modelo reintenta una
- * vez ante errores transitorios (503/429/5xx o fallo de red); si igual falla, pasa al
- * siguiente modelo. Devuelve la primera Response OK, o la última Response fallida.
+ * Llama a Gemini probando varios modelos en cascada. Para cada modelo reintenta una vez
+ * ante errores transitorios (503/429/5xx o fallo de red). Ante CUALQUIER otra falla
+ * (incluido 404 "modelo no disponible" o 4xx) pasa al siguiente modelo en vez de cortar.
+ * Devuelve la primera Response OK, o la última Response fallida si ninguno funcionó.
  */
 async function callGeminiWithFallback(apiKey: string, body: any): Promise<Response | null> {
   const payload = JSON.stringify(body)
@@ -55,14 +63,14 @@ async function callGeminiWithFallback(apiKey: string, body: any): Promise<Respon
         const errText = await res.text().catch(() => "")
         console.error(`Gemini error [${model}] intento ${attempt}: ${res.status} ${errText.substring(0, 150)}`)
 
-        // 503 (saturado), 429 (sin cupo) o 5xx → reintentar este modelo y, si no, pasar al siguiente
+        // 503 (saturado), 429 (sin cupo) o 5xx → reintentar este mismo modelo una vez.
         const transient = res.status === 503 || res.status === 429 || res.status >= 500
         if (transient && attempt < 2) {
           await new Promise((r) => setTimeout(r, 1500 * attempt))
           continue
         }
-        if (transient) break // probar el siguiente modelo
-        return res // error NO transitorio (4xx): cambiar de modelo no ayuda
+        // Agotados los reintentos (o error no transitorio como 404/400): probamos el SIGUIENTE modelo.
+        break
       } catch (e) {
         console.error(`Gemini fetch error [${model}] intento ${attempt}:`, e)
         if (attempt < 2) {
@@ -74,6 +82,9 @@ async function callGeminiWithFallback(apiKey: string, body: any): Promise<Respon
     }
   }
 
+  if (!lastResponse || !lastResponse.ok) {
+    console.error(`❌ Gemini falló en TODOS los modelos: [${GEMINI_MODELS.join(", ")}]`)
+  }
   return lastResponse
 }
 
