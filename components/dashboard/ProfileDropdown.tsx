@@ -9,6 +9,10 @@ import {
   DoorOpen,
   Sun,
   Moon,
+  Handshake,
+  Loader2,
+  CheckCircle2,
+  Plug,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import Image from "next/image";
@@ -18,6 +22,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import LogoutAnimation from "@/components/ui/logout-animation";
 import { useLogoutAnimation } from "@/hooks/use-logout-animation";
+import { isSubscriptionActive, trialDaysLeft } from "@/lib/subscription";
 
 interface ProfileDropdownProps {
   user: User;
@@ -32,8 +37,47 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [mpConnected, setMpConnected] = useState<boolean | null>(null);
+  const [subLoading, setSubLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
+
+  // Estado de la suscripción (mismo criterio que el bloqueo)
+  const alDia = isSubscriptionActive(profile);
+  const daysLeft = trialDaysLeft(profile);
+  const isExempt = !!profile?.billing_exempt;
+  const isActivePaid = profile?.subscription_status === "active";
+  const needsSub = !isExempt && !isActivePaid; // mostrar acción de suscribir
+
+  // Texto/acción del item de suscripción según el estado
+  const subItemLabel = isExempt
+    ? "Plan activo (pago manual)"
+    : isActivePaid
+      ? "Suscripción activa"
+      : profile?.subscription_status === "past_due"
+        ? "Reactivar abono"
+        : daysLeft !== null
+          ? `Prueba — ${daysLeft} día${daysLeft !== 1 ? "s" : ""}`
+          : "Suscribirme";
+
+  // Inicia la adhesión al débito automático y redirige a Mercado Pago
+  const handleSubscribe = async () => {
+    if (subLoading) return;
+    setSubLoading(true);
+    try {
+      const res = await fetch("/api/mp/subscribe", { method: "POST" });
+      const j = await res.json();
+      if (res.ok && j.init_point) {
+        window.location.href = j.init_point;
+        return;
+      }
+      router.push("/dashboard/configuracion");
+    } catch {
+      router.push("/dashboard/configuracion");
+    } finally {
+      setSubLoading(false);
+    }
+  };
 
   // Hook para manejar logout con animación
   const { logout, animationProps } = useLogoutAnimation({
@@ -45,6 +89,15 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Estado de conexión de Mercado Pago (para la sección Integraciones)
+  useEffect(() => {
+    if (!isOpen || mpConnected !== null) return;
+    fetch("/api/mp/oauth/status")
+      .then((r) => r.json())
+      .then((j) => setMpConnected(!!j.connected))
+      .catch(() => setMpConnected(false));
+  }, [isOpen, mpConnected]);
 
   if (!mounted) {
     return null;
@@ -65,17 +118,10 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
   };
 
   const menuItems = [
-    { 
-      icon: <Settings className="w-5 h-5" />, 
-      label: "Configuración",
-      onClick: () => router.push("/dashboard/configuracion")
-    },
     {
-      icon: <Crown className="w-5 h-5" />,
-      label: "Upgrade to Pro",
-      action: true,
-      actionLabel: "Upgrade",
-      onClick: () => console.log("Upgrade clicked")
+      icon: <Settings className="w-5 h-5" />,
+      label: "Configuración",
+      onClick: () => { setIsOpen(false); router.push("/dashboard/configuracion"); }
     },
     {
       icon: <DoorOpen className="w-5 h-5" />,
@@ -178,68 +224,58 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
                 </div>
               </motion.div>
 
-              {/* Card Section */}
+              {/* Card Section — Mercado Pago */}
               <div className="p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700">
                 <motion.div
-                  className="rounded-xl p-5 overflow-hidden relative transition-transform duration-300 hover:scale-[1.02]"
-                  style={{
-                    background:
-                      theme === "light"
-                        ? "linear-gradient(to right, #f0f9ff, #e0f2fe, #bae6fd, #7dd3fc)"
-                        : "linear-gradient(to bottom, #525252, #262626, #171717, #000000)",
-                  }}
+                  onClick={needsSub ? handleSubscribe : undefined}
+                  className={`rounded-2xl p-5 overflow-hidden relative text-white transition-transform duration-300 hover:scale-[1.02] ${needsSub ? "cursor-pointer" : ""}`}
+                  style={{ background: "linear-gradient(135deg, #2D9BF0 0%, #009EE3 55%, #0077C8 100%)" }}
                   transition={{ type: "spring", stiffness: 300, damping: 15 }}
                 >
-                  <div className="flex justify-between mb-16">
-                    <div
-                      className={
-                        theme === "light" ? "text-neutral-800" : "text-white"
-                      }
-                    >
-                      <svg
-                        fill="currentColor"
-                        width="30px"
-                        height="30px"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z"/>
-                      </svg>
+                  {/* brillo decorativo */}
+                  <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/15 blur-xl" />
+
+                  {/* Top: logo + wordmark */}
+                  <div className="flex items-center justify-between mb-8 relative z-10">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white">
+                        <Handshake className="h-5 w-5" style={{ color: "#009EE3" }} />
+                      </div>
+                      <span className="font-bold tracking-tight text-[15px]">Mercado Pago</span>
                     </div>
-                    <div
-                      className={
-                        theme === "light" ? "text-neutral-800" : "text-white"
-                      }
-                    >
-                      <svg
-                        fill="currentColor"
-                        width="50px"
-                        height="50px"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path d="M16.539 9.186a4.155 4.155 0 0 0-1.451-.251c-1.6 0-2.73.806-2.738 1.963-.01.85.803 1.329 1.418 1.613.631.292.842.476.84.737-.004.397-.504.577-.969.577-.639 0-.988-.089-1.525-.312l-.199-.093-.227 1.332c.389.162 1.09.301 1.814.313 1.701 0 2.813-.801 2.826-2.032.014-.679-.426-1.192-1.352-1.616-.563-.275-.912-.459-.912-.738 0-.247.299-.511.924-.511a2.95 2.95 0 0 1 1.213.229l.15.067.227-1.287-.039.009zm4.152-.143h-1.25c-.389 0-.682.107-.852.493l-2.404 5.446h1.701l.34-.893 2.076.002c.049.209.199.891.199.891h1.5l-1.31-5.939zm-10.642-.05h1.621l-1.014 5.942H9.037l1.012-5.944v.002zm-4.115 3.275.168.825 1.584-4.05h1.717l-2.551 5.931H5.139l-1.4-5.022a.339.339 0 0 0-.149-.199 6.948 6.948 0 0 0-1.592-.589l.022-.125h2.609c.354.014.639.125.734.503l.57 2.729v-.003zm12.757.606.646-1.662c-.008.018.133-.343.215-.566l.111.513.375 1.714H18.69v.001h.001z" />
-                      </svg>
-                    </div>
+                    {subLoading && <Loader2 className="h-4 w-4 animate-spin text-white/80" />}
                   </div>
 
-                  <div className="flex items-center mb-4">
-                    <div
-                      className={`font-mono ${theme === "light" ? "text-neutral-800" : "text-white"}`}
-                    >
-                      {profile?.business_name || "Usuario"}
-                    </div>
-                    <div
-                      className={`ml-auto font-mono ${theme === "light" ? "text-neutral-800" : "text-white"}`}
-                    >
-                      {new Date().toLocaleDateString('es', { month: '2-digit', year: '2-digit' })}
-                    </div>
-                  </div>
+                  {/* Negocio */}
+                  <p className="relative z-10 text-xs text-white/70 mb-0.5">Suscripción UcoBot</p>
+                  <p className="relative z-10 font-semibold text-lg leading-tight mb-3">
+                    {profile?.business_name || "Mi Negocio"}
+                  </p>
 
-                  <div
-                    className={`font-mono text-xl tracking-widest ${theme === "light" ? "text-neutral-800" : "text-white"}`}
-                  >
-                    •••• •••• •••• {user.id?.slice(-4) || "0000"}
+                  {/* Estado + precio */}
+                  <div className="relative z-10 flex items-end justify-between">
+                    <div>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm">
+                        {isExempt ? (
+                          <>Pago manual</>
+                        ) : isActivePaid ? (
+                          <><CheckCircle2 className="h-3 w-3" /> Activa</>
+                        ) : profile?.subscription_status === "past_due" ? (
+                          <>Pago vencido</>
+                        ) : daysLeft !== null ? (
+                          <>Prueba · {daysLeft} día{daysLeft !== 1 ? "s" : ""}</>
+                        ) : (
+                          <>Sin abono</>
+                        )}
+                      </span>
+                      {needsSub && (
+                        <p className="mt-1.5 text-[11px] text-white/80">Tocá para suscribirte →</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-base font-black leading-none">$90.000</p>
+                      <p className="text-[10px] text-white/70">ARS/mes</p>
+                    </div>
                   </div>
                 </motion.div>
               </div>
@@ -304,6 +340,68 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
                 </div>
               </div>
 
+              {/* Suscripción */}
+              <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
+                <div
+                  className={`flex items-center justify-between p-2 rounded-lg ${needsSub ? "cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700/50" : ""}`}
+                  onClick={needsSub ? handleSubscribe : undefined}
+                >
+                  <div className="flex items-center text-neutral-700 dark:text-neutral-300">
+                    <Crown className="w-5 h-5 mr-3 text-amber-500" />
+                    <span>{subItemLabel}</span>
+                  </div>
+                  {needsSub ? (
+                    <motion.button
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      disabled={subLoading}
+                      onClick={(e) => { e.stopPropagation(); handleSubscribe(); }}
+                      className="px-4 py-1.5 rounded-lg bg-[#009EE3] text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-60"
+                    >
+                      {subLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {profile?.subscription_status === "past_due" ? "Reactivar" : "Suscribirme"}
+                    </motion.button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4" /> Activa
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Integraciones */}
+              <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
+                <p className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3 flex items-center gap-1.5">
+                  <Plug className="h-3.5 w-3.5" /> Integraciones
+                </p>
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    if (mpConnected) router.push("/dashboard/configuracion");
+                    else window.location.href = "/api/mp/oauth/start";
+                  }}
+                  className="group relative w-32 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-3 text-left hover:border-[#009EE3] hover:shadow-md transition-all bg-white/60 dark:bg-neutral-800/40"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl mb-2" style={{ backgroundColor: "#009EE3" }}>
+                    <Handshake className="h-5 w-5 text-white" />
+                  </div>
+                  <p className="text-sm font-semibold text-neutral-800 dark:text-white leading-tight">Mercado Pago</p>
+                  {mpConnected === null ? (
+                    <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-neutral-400">
+                      <Loader2 className="h-3 w-3 animate-spin" /> ...
+                    </span>
+                  ) : mpConnected ? (
+                    <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Conectado
+                    </span>
+                  ) : (
+                    <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold text-neutral-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-neutral-300 dark:bg-neutral-600" /> Desconectado
+                    </span>
+                  )}
+                </button>
+              </div>
+
               {/* Menu Items */}
               <div className="p-4 space-y-2 border-b border-neutral-200 dark:border-neutral-700">
                 {menuItems.map((item, index) => (
@@ -322,19 +420,6 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
                       <span className="mr-3">{item.icon}</span>
                       <span>{item.label}</span>
                     </div>
-                    {item.action && (
-                      <motion.button
-                        className="px-4 py-1 rounded-md bg-gradient-to-r from-blue-200 via-pink-200 to-yellow-200 dark:bg-[linear-gradient(to_right,_#B2D0F9,_#F08878,_#FDC3B6,_#FFDB9A)] text-black font-medium text-sm"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          item.onClick?.();
-                        }}
-                      >
-                        {item.actionLabel}
-                      </motion.button>
-                    )}
                   </motion.div>
                 ))}
               </div>
