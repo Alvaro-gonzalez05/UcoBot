@@ -143,7 +143,7 @@ export default function RegisterPage() {
                     Crear cuenta
                   </h1>
                   <p className="text-gray-600 dark:text-gray-300 text-lg">
-                    Comienza tu prueba gratuita de 15 días y automatiza tu negocio
+                    Comienza tu prueba gratuita de 14 días y automatiza tu negocio
                   </p>
                 </motion.div>
 
@@ -155,7 +155,7 @@ export default function RegisterPage() {
                   <ul className="text-sm text-gray-600 dark:text-gray-300 space-y-3">
                     <li className="flex items-center">
                       <Check className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
-                      15 días de acceso completo
+                      14 días de acceso completo
                     </li>
                     <li className="flex items-center">
                       <Check className="h-5 w-5 text-green-500 mr-3 flex-shrink-0" />
@@ -170,6 +170,9 @@ export default function RegisterPage() {
                       Soporte por email
                     </li>
                   </ul>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-4">
+                    Después de los 14 días: $90.000 ARS/mes por débito automático con Mercado Pago. Cancelás cuando quieras.
+                  </p>
                 </motion.div>
 
                 <motion.div variants={itemVariants} className="text-center">

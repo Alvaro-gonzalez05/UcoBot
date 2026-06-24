@@ -1071,11 +1071,18 @@ export function NuevaLanding() {
                     ARS/mes
                   </span>
                 </div>
+                <div
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-1 mb-4 text-xs font-black uppercase tracking-wider"
+                  style={{ backgroundColor: "#D1F36622", color: "#76a609", border: "1px solid #D1F36655" }}
+                >
+                  <span className="material-symbols-outlined text-sm">bolt</span>
+                  14 días gratis
+                </div>
                 <p
                   className="text-xs font-medium mb-8 leading-relaxed"
                   style={{ color: T.pCard1Meta, transition: "color 0.35s ease" }}
                 >
-                  Acceso total al sistema. Gestioná tu negocio desde un solo lugar, sin costos ocultos.
+                  Empezá con 14 días de prueba gratis. Después, $90.000 ARS/mes por débito automático. Sin costos ocultos, cancelás cuando quieras.
                 </p>
                 <ul className="space-y-5 mb-10">
                   {[
@@ -1109,7 +1116,7 @@ export function NuevaLanding() {
                     gsap.to(e.currentTarget, { backgroundColor: T.pCard1BtnBg, color: T.pCard1BtnTxt, duration: 0.25 })
                   }
                 >
-                  Comenzar Ahora
+                  Empezar 14 días gratis
                 </button>
               </Link>
             </div>

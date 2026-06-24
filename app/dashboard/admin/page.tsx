@@ -66,35 +66,19 @@ export default async function AdminDashboard() {
     .order("created_at", { ascending: false })
     .limit(6)
 
-  const { data: allUsers } = await supabase
-    .from("user_profiles")
-    .select("plan_type")
-
-  const planRevenue =
-    allUsers?.reduce((acc, user) => {
-      if (user.plan_type !== "trial" && user.plan_type !== "free") {
-        return acc + 69
-      }
-      return acc
-    }, 0) || 0
-
   const startOfMonth = new Date()
   startOfMonth.setDate(1)
   startOfMonth.setHours(0, 0, 0, 0)
 
-  const { data: usageLogs } = await supabase
-    .from("usage_logs")
+  // Ingresos reales del mes: cobros aprobados de suscripción (Mercado Pago)
+  const { data: monthPayments } = await supabase
+    .from("subscription_payments")
     .select("amount")
-    .eq("type", "mass_message")
-    .gte("created_at", startOfMonth.toISOString())
+    .eq("status", "approved")
+    .gte("paid_at", startOfMonth.toISOString())
 
-  const usageRevenue =
-    usageLogs?.reduce(
-      (acc, log) => acc + (Number(log.amount) || 0) * 0.1,
-      0
-    ) || 0
-
-  const totalRevenue = planRevenue + usageRevenue
+  const totalRevenue =
+    monthPayments?.reduce((acc, p) => acc + (Number(p.amount) || 0), 0) || 0
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,10 +128,10 @@ export default async function AdminDashboard() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">
-              Ingresos est.
+              Ingresos (mes)
             </p>
             <p className="text-2xl font-bold dark:text-white">
-              ${totalRevenue.toFixed(0)}
+              {new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 }).format(totalRevenue)}
             </p>
           </div>
         </div>

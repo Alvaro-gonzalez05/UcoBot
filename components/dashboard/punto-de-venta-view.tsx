@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import QRCode from "react-qr-code"
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialog"
@@ -117,6 +119,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [clientSearch, setClientSearch] = useState("")
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [paymentMethod, setPaymentMethod] = useState("cash")
+  const [mpQr, setMpQr] = useState<string | null>(null)
+  const [mpQrLoading, setMpQrLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Fidelización
@@ -670,6 +674,32 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   }
 
   const finalizeSale = () => submitSale("completed")
+
+  // Genera un QR de cobro con Mercado Pago por el total del carrito.
+  const generateMpQr = async () => {
+    if (total <= 0) {
+      toast.error("El carrito está vacío")
+      return
+    }
+    setMpQrLoading(true)
+    try {
+      const res = await fetch("/api/mp/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: Number(total.toFixed(2)), title: "Venta en punto de venta" }),
+      })
+      const j = await res.json()
+      if (!res.ok || !j.init_point) {
+        toast.error(j.error || "No se pudo generar el QR")
+        return
+      }
+      setMpQr(j.init_point)
+    } catch {
+      toast.error("Error de red al generar el QR")
+    } finally {
+      setMpQrLoading(false)
+    }
+  }
   const moveOrder = () => submitSale("pending")
 
   return (
@@ -1250,6 +1280,15 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
                   <div className="flex flex-col gap-2 mt-3">
                     <Button
+                      onClick={generateMpQr}
+                      disabled={mpQrLoading || cartItems.length === 0}
+                      variant="outline"
+                      className="h-11 w-full rounded-[1.25rem] border-[#009ee3] text-[#009ee3] hover:bg-[#009ee3]/10 text-xs font-bold uppercase tracking-[0.2em]"
+                    >
+                      {mpQrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="mr-2 h-4 w-4" />}
+                      Cobrar con QR (Mercado Pago)
+                    </Button>
+                    <Button
                       onClick={finalizeSale}
                       disabled={isSubmitting || cartItems.length === 0}
                       className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
@@ -1273,6 +1312,37 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       </div>
 
       <LoyaltyScannerDialog open={scannerOpen} onOpenChange={setScannerOpen} onScan={handleCardScan} />
+
+      {/* QR de cobro con Mercado Pago */}
+      <Dialog open={!!mpQr} onOpenChange={(o) => !o && setMpQr(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <QrCode className="h-5 w-5 text-[#009ee3]" />
+              Cobrar {formatCurrency(total)}
+            </DialogTitle>
+          </DialogHeader>
+          {mpQr && (
+            <div className="flex flex-col items-center gap-4 py-2">
+              <div className="rounded-xl bg-white p-4">
+                <QRCode value={mpQr} size={220} />
+              </div>
+              <p className="text-center text-sm text-muted-foreground">
+                El cliente escanea el QR con su celular y paga. Cuando se acredite, te llega un aviso de
+                "Pago recibido".
+              </p>
+              <a
+                href={mpQr}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-[#009ee3] hover:underline"
+              >
+                Abrir link de pago
+              </a>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <PosSettingsDialog
         open={settingsOpen}

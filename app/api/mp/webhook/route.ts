@@ -106,6 +106,19 @@ export async function POST(req: NextRequest) {
             subscription_end_date: plusOneMonthISO(),
           })
           .eq("id", pay.external_reference)
+
+        // Registramos el cobro real (idempotente por mp_payment_id) para el panel de admin.
+        await admin.from("subscription_payments").upsert(
+          {
+            user_id: pay.external_reference,
+            mp_payment_id: String(pay.id),
+            amount: pay.transaction_amount || 0,
+            currency: pay.currency_id || "ARS",
+            status: "approved",
+            paid_at: pay.date_approved || new Date().toISOString(),
+          },
+          { onConflict: "mp_payment_id" }
+        )
         console.log(`MP payment ${pay.id} aprobado → usuario ${pay.external_reference} activo`)
       } else if (pay.status === "rejected" && pay.external_reference) {
         await admin

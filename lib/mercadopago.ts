@@ -20,24 +20,34 @@ export function getAppUrl(): string {
   return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
 }
 
-/** Crea una suscripción (preapproval) sin plan asociado, con precio fijo mensual. */
+/** Crea una suscripción (preapproval) sin plan asociado, con precio fijo mensual.
+ *  Si se pasa `startDate`, el PRIMER cobro ocurre en esa fecha (ej: fin del trial);
+ *  la tarjeta se adhiere ahora pero recién se debita al terminar la prueba. */
 export async function createPreapproval(params: {
   payerEmail: string
   externalReference: string
   reason?: string
+  startDate?: string // ISO; cuándo arranca a cobrar (default: ya)
 }) {
+  // MP exige que start_date sea futuro; aseguramos al menos +10 min.
+  const minStart = Date.now() + 10 * 60 * 1000
+  const start = params.startDate ? Math.max(new Date(params.startDate).getTime(), minStart) : null
+
+  const auto_recurring: any = {
+    frequency: 1,
+    frequency_type: "months",
+    transaction_amount: getSubscriptionPrice(),
+    currency_id: "ARS",
+  }
+  if (start) auto_recurring.start_date = new Date(start).toISOString()
+
   const body = {
     reason: params.reason || "Suscripción UcoBot",
     external_reference: params.externalReference,
     payer_email: params.payerEmail,
     back_url: `${getAppUrl()}/dashboard?suscripcion=ok`,
     status: "pending",
-    auto_recurring: {
-      frequency: 1,
-      frequency_type: "months",
-      transaction_amount: getSubscriptionPrice(),
-      currency_id: "ARS",
-    },
+    auto_recurring,
   }
 
   const res = await fetch(`${MP_API}/preapproval`, {
@@ -86,5 +96,8 @@ export async function getPayment(id: string) {
     external_reference?: string
     metadata?: any
     preapproval_id?: string
+    transaction_amount?: number
+    currency_id?: string
+    date_approved?: string
   }
 }

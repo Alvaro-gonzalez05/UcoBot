@@ -1,5 +1,7 @@
+import { Suspense } from "react"
 import { Settings } from "@/components/dashboard/settings"
 import { SubscriptionCard } from "@/components/dashboard/subscription-card"
+import { MpConnectCard } from "@/components/dashboard/mp-connect-card"
 
 export default function ConfiguracionPage() {
   return (
@@ -9,6 +11,9 @@ export default function ConfiguracionPage() {
         <p className="text-muted-foreground">Administra tu cuenta y preferencias del sistema</p>
       </div>
       <SubscriptionCard />
+      <Suspense fallback={null}>
+        <MpConnectCard />
+      </Suspense>
       <Settings />
     </div>
   )

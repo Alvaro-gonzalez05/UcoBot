@@ -34,7 +34,7 @@ export default async function DashboardLayout({
         <MobileHeader user={data.user} profile={profile} />
 
         <main id="dashboard-main" className="flex-1 overflow-y-auto hide-scrollbar py-4 pr-4 pl-4 lg:pl-0 pb-28 lg:pb-4">
-          {!isSubscriptionActive(profile?.subscription_status) && (
+          {!isSubscriptionActive(profile) && (
             <Link
               href="/dashboard/configuracion"
               className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 text-sm hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors"

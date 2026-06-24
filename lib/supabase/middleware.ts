@@ -44,6 +44,7 @@ export async function updateSession(request: NextRequest) {
       request.nextUrl.pathname.startsWith("/register/") ||
       request.nextUrl.pathname.startsWith("/demo/") ||
       request.nextUrl.pathname.startsWith("/f/") ||
+      request.nextUrl.pathname.startsWith("/pago/") ||
       request.nextUrl.pathname.startsWith("/tarjeta/"),
   )
 

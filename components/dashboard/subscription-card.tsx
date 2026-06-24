@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, CreditCard, CheckCircle2, AlertTriangle } from "lucide-react"
 import { toast } from "sonner"
+import { isSubscriptionActive, trialDaysLeft } from "@/lib/subscription"
 
 const PRICE_LABEL = "$90.000 / mes"
 
@@ -22,6 +23,8 @@ export function SubscriptionCard() {
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<string>("none")
   const [endDate, setEndDate] = useState<string | null>(null)
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null)
+  const [exempt, setExempt] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -30,11 +33,13 @@ export function SubscriptionCard() {
       if (!user) return setLoading(false)
       const { data } = await supabase
         .from("user_profiles")
-        .select("subscription_status, subscription_end_date")
+        .select("subscription_status, subscription_end_date, trial_ends_at, billing_exempt")
         .eq("id", user.id)
         .maybeSingle()
       setStatus(data?.subscription_status || "none")
       setEndDate(data?.subscription_end_date || null)
+      setTrialEndsAt(data?.trial_ends_at || null)
+      setExempt(!!data?.billing_exempt)
       setLoading(false)
     }
     load()
@@ -58,8 +63,10 @@ export function SubscriptionCard() {
     }
   }
 
+  const info = { subscription_status: status, trial_ends_at: trialEndsAt, billing_exempt: exempt }
+  const alDia = isSubscriptionActive(info)
+  const daysLeft = trialDaysLeft(info)
   const meta = statusMeta[status]
-  const isActive = status === "active"
 
   return (
     <Card>
@@ -81,28 +88,45 @@ export function SubscriptionCard() {
                 <p className="text-sm text-muted-foreground">Plan mensual</p>
                 <p className="text-2xl font-black">{PRICE_LABEL}</p>
               </div>
-              {meta && (
+              {exempt ? (
+                <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 border-emerald-200">
+                  Activa (pago manual)
+                </Badge>
+              ) : alDia && daysLeft !== null ? (
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 border-blue-200">
+                  Prueba — {daysLeft} día{daysLeft !== 1 ? "s" : ""}
+                </Badge>
+              ) : meta ? (
                 <Badge variant="secondary" className={meta.cls}>
                   {meta.label}
                 </Badge>
-              )}
+              ) : null}
             </div>
 
-            {isActive && endDate && (
+            {status === "active" && endDate && (
               <p className="text-xs text-muted-foreground">
                 Próximo cobro: {new Date(endDate).toLocaleDateString("es-AR")}
               </p>
             )}
 
-            {!isActive && (
+            {alDia && daysLeft !== null && (
               <p className="text-sm text-muted-foreground">
-                {status === "past_due"
-                  ? "Tu último pago no se pudo procesar. Reactivá el abono para seguir usando UcoBot."
-                  : "Activá el débito automático con Mercado Pago para mantener tu cuenta activa."}
+                Te quedan <strong>{daysLeft} día{daysLeft !== 1 ? "s" : ""}</strong> de prueba. Suscribite para no
+                quedarte sin servicio cuando termine.
               </p>
             )}
 
-            {!isActive && (
+            {!alDia && (
+              <p className="text-sm text-muted-foreground">
+                {status === "past_due"
+                  ? "Tu último pago no se pudo procesar. Reactivá el abono para seguir usando UcoBot."
+                  : daysLeft === 0 || status === "trial" || status === "trialing"
+                    ? "Tu prueba gratis terminó. Activá el abono para seguir usando UcoBot."
+                    : "Activá el débito automático con Mercado Pago para mantener tu cuenta activa."}
+              </p>
+            )}
+
+            {!exempt && status !== "active" && (
               <Button
                 onClick={handleSubscribe}
                 disabled={submitting}

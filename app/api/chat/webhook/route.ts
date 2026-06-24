@@ -5,6 +5,7 @@ import { createNotification } from "@/lib/notifications"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
 import { isPromotionActive, promotionLabel, bestProductPromotion } from "@/lib/promotions"
 import { isSubscriptionActive } from "@/lib/subscription"
+import { getValidSellerToken, createPreference } from "@/lib/mp-payments"
 
 /**
  * Convierte Markdown estándar al formato de WhatsApp/Instagram/Messenger.
@@ -131,15 +132,17 @@ export async function POST(request: NextRequest) {
         location,
         menu_link,
         business_info,
-        subscription_status
+        subscription_status,
+        trial_ends_at,
+        billing_exempt
       `)
       .eq("id", bot.user_id)
       .single()
 
     // BLOQUEO POR SUSCRIPCIÓN: si el dueño no está al día (abono vencido/cancelado/
-    // suspendido), el bot NO responde en ningún canal. Solo bloqueamos si pudimos leer
-    // el perfil (si la consulta falló, fail-open para no cortar por un error transitorio).
-    if (userProfile && !isSubscriptionActive(userProfile.subscription_status)) {
+    // suspendido, o trial vencido), el bot NO responde en ningún canal. Solo bloqueamos si
+    // pudimos leer el perfil (si la consulta falló, fail-open para no cortar por un error).
+    if (userProfile && !isSubscriptionActive(userProfile)) {
       console.log(`⛔ Bot no responde: suscripción "${userProfile.subscription_status}" del usuario ${bot.user_id} no está al día`)
       return NextResponse.json({ error: "Subscription not active" }, { status: 403 })
     }
@@ -925,6 +928,24 @@ ${rewardsList ? `- Premios canjeables:\n${rewardsList}` : '- Todavía no hay pre
     const loyaltyRules = (featurePrompts.loyalty_points || '').trim()
     const handoverRules = (featurePrompts.handover || '').trim()
 
+    // ¿El negocio tiene Mercado Pago conectado? Si sí, el bot puede generar links de pago.
+    let hasMpConnected = false
+    try {
+      const { data: mpConn } = await supabase
+        .from('mp_connections')
+        .select('id')
+        .eq('user_id', bot.user_id)
+        .maybeSingle()
+      hasMpConnected = !!mpConn
+    } catch { /* noop */ }
+
+    const mpBlock = hasMpConnected
+      ? `═══ COBROS CON MERCADO PAGO ═══
+- El negocio tiene Mercado Pago conectado: podés generar un LINK DE PAGO cuando el cliente quiere pagar, querés cobrar una seña, o cerrás una venta con un monto concreto.
+- Para generarlo, agregá AL FINAL, en una línea aparte, la etiqueta EXACTA [PAGO:MONTO] con el monto en números (sin símbolos ni puntos). Ejemplo: [PAGO:15000]. El sistema la reemplaza por el link real de pago; el cliente NO ve la etiqueta.
+- Usá un solo [PAGO:...] por mensaje y SOLO cuando ya acordaste el monto. No inventes links ni montos.`
+      : ''
+
     // Bloque: información del cliente actual
     const clientInfoBlock = (() => {
       const currentPlatform = platform || conversation.platform
@@ -1011,7 +1032,7 @@ ${clientInfoBlock}
 
 ═══ QUÉ PODÉS HACER ═══
 ${capabilitiesList}
-${ordersBlock ? '\n' + ordersBlock + '\n' : ''}${reservationsBlock ? '\n' + reservationsBlock + '\n' : ''}${loyaltyBlock ? '\n' + loyaltyBlock + '\n' : ''}${registerBlock ? '\n' + registerBlock + '\n' : ''}${formsInfo ? '\n═══ FORMULARIOS ═══\n' + formsInfo + '\n' : ''}${promotionsInfo ? '\n═══ PROMOCIONES ACTIVAS (descuentos vigentes) ═══\n' + promotionsInfo + '\n' : ''}
+${ordersBlock ? '\n' + ordersBlock + '\n' : ''}${reservationsBlock ? '\n' + reservationsBlock + '\n' : ''}${loyaltyBlock ? '\n' + loyaltyBlock + '\n' : ''}${registerBlock ? '\n' + registerBlock + '\n' : ''}${formsInfo ? '\n═══ FORMULARIOS ═══\n' + formsInfo + '\n' : ''}${promotionsInfo ? '\n═══ PROMOCIONES ACTIVAS (descuentos vigentes) ═══\n' + promotionsInfo + '\n' : ''}${mpBlock ? '\n' + mpBlock + '\n' : ''}
 ═══ DERIVACIÓN A HUMANO (regla de seguridad, SIEMPRE activa) ═══
 - Derivá SOLO en estos casos: (a) el cliente pide EXPLÍCITAMENTE hablar con una persona/humano/asesor, (b) hay una queja grave, o (c) no podés resolver su pedido con la info que tenés. En esos casos tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]" seguida de un mensaje amable avisando que un asesor humano va a responder en breve.
 - NO derives solo porque el cliente muestre interés, pregunte precios, planes o disponibilidad, o quiera avanzar con una compra/contratación: eso lo atendés VOS, dando la info y guiando el siguiente paso. El interés NO es motivo de derivación. Derivá recién si el cliente lo pide o si ya hiciste tu parte y hace falta una persona para cerrar.
@@ -1141,6 +1162,31 @@ PRIORIDADES ANTE CONFLICTO:
             conversationHistory, // Pass history
             productsInfo // Pass catalog info
           )
+        }
+
+        // Si el bot pidió un link de pago con [PAGO:monto], lo generamos con el MP del negocio
+        // y reemplazamos la etiqueta por el link real (o la quitamos si no se pudo).
+        const pagoMatch = aiResponse.match(/\[PAGO:\s*([\d.,]+)\]/i)
+        if (pagoMatch) {
+          let replacement = ''
+          const amount = Number(pagoMatch[1].replace(/[.,]/g, ''))
+          if (hasMpConnected && amount > 0) {
+            try {
+              const seller = await getValidSellerToken(bot.user_id)
+              if (seller) {
+                const pref = await createPreference({
+                  sellerUserId: bot.user_id,
+                  sellerToken: seller.token,
+                  title: `Pago - ${bot.name}`,
+                  amount,
+                })
+                replacement = `\n${pref.init_point}`
+              }
+            } catch (e) {
+              console.error('No se pudo generar link de pago:', e)
+            }
+          }
+          aiResponse = aiResponse.replace(/\[PAGO:\s*[\d.,]+\]/i, replacement)
         }
 
         // Quitamos los marcadores internos (ya se usaron para detectar/registrar el pedido o la

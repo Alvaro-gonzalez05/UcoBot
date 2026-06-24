@@ -17,20 +17,33 @@ export async function POST() {
       return NextResponse.json({ error: "Tu cuenta no tiene email para facturar" }, { status: 400 })
     }
 
+    const admin = createAdminClient()
+
+    // El primer cobro arranca cuando termina el trial (si todavía le quedan días).
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("trial_ends_at")
+      .eq("id", user.id)
+      .maybeSingle()
+    const startDate =
+      profile?.trial_ends_at && new Date(profile.trial_ends_at).getTime() > Date.now()
+        ? profile.trial_ends_at
+        : undefined
+
     // Creamos la suscripción en Mercado Pago
     const preapproval = await createPreapproval({
       payerEmail: user.email,
       externalReference: user.id,
+      startDate,
     })
 
-    // Guardamos el id y dejamos el estado en "pending" hasta que MP confirme
-    const admin = createAdminClient()
+    // Guardamos el id. NO tocamos subscription_status: durante el trial sigue en "trial"
+    // (la tarjeta queda adherida y MP cobra recién al terminar la prueba).
     await admin
       .from("user_profiles")
       .update({
         mp_preapproval_id: preapproval.id,
         mp_payer_email: user.email,
-        subscription_status: "pending",
       })
       .eq("id", user.id)
 
