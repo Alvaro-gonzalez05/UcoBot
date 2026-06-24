@@ -34,15 +34,41 @@ export function MpConnectCard() {
 
   useEffect(() => {
     loadStatus()
-    // Feedback al volver del OAuth
+    // Feedback al volver del OAuth (caso fallback full-page)
     const mp = params.get("mp")
     if (mp === "ok") toast.success("¡Mercado Pago conectado!")
     if (mp === "error") toast.error(params.get("msg") || "No se pudo conectar Mercado Pago")
+
+    // Resultado del OAuth cuando se hace por popup
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return
+      if (e.data?.source !== "mp-oauth") return
+      if (e.data.mp === "ok") {
+        toast.success("¡Mercado Pago conectado!")
+        loadStatus()
+      } else {
+        toast.error(e.data.msg || "No se pudo conectar Mercado Pago")
+      }
+    }
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
   }, [])
 
+  // Abre el OAuth de Mercado Pago en un popup centrado (no a pantalla completa).
   const handleConnect = () => {
-    // Redirige al flujo OAuth (la ruta arma el state y manda a MP)
-    window.location.href = "/api/mp/oauth/start"
+    const w = 480
+    const h = 720
+    const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2)
+    const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2)
+    const popup = window.open(
+      "/api/mp/oauth/start",
+      "mp_oauth",
+      `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
+    )
+    if (!popup) {
+      // Si el navegador bloquea el popup, caemos al flujo normal
+      window.location.href = "/api/mp/oauth/start"
+    }
   }
 
   const handleDisconnect = async () => {

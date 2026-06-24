@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const state = url.searchParams.get("state")
 
   const fail = (msg: string) =>
-    NextResponse.redirect(new URL(`/dashboard/configuracion?mp=error&msg=${encodeURIComponent(msg)}`, base))
+    NextResponse.redirect(new URL(`/mp/conectado?mp=error&msg=${encodeURIComponent(msg)}`, base))
 
   try {
     const supabase = await createClient()
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       { onConflict: "user_id" }
     )
 
-    return NextResponse.redirect(new URL("/dashboard/configuracion?mp=ok", base))
+    return NextResponse.redirect(new URL("/mp/conectado?mp=ok", base))
   } catch (e: any) {
     console.error("Error en OAuth callback MP:", e)
     return fail(e?.message || "No se pudo conectar Mercado Pago")

@@ -9,11 +9,11 @@ import {
   DoorOpen,
   Sun,
   Moon,
-  Handshake,
   Loader2,
   CheckCircle2,
   Plug,
 } from "lucide-react";
+import { SiMercadopago } from "react-icons/si";
 import { useTheme } from "next-themes";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
@@ -23,6 +23,7 @@ import type { User } from "@supabase/supabase-js";
 import LogoutAnimation from "@/components/ui/logout-animation";
 import { useLogoutAnimation } from "@/hooks/use-logout-animation";
 import { isSubscriptionActive, trialDaysLeft } from "@/lib/subscription";
+import { toast } from "sonner";
 
 interface ProfileDropdownProps {
   user: User;
@@ -98,6 +99,36 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
       .then((j) => setMpConnected(!!j.connected))
       .catch(() => setMpConnected(false));
   }, [isOpen, mpConnected]);
+
+  // Resultado del OAuth cuando se conecta por popup
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.source !== "mp-oauth") return;
+      if (e.data.mp === "ok") {
+        setMpConnected(true);
+        toast.success("¡Mercado Pago conectado!");
+      } else {
+        toast.error(e.data.msg || "No se pudo conectar Mercado Pago");
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  // Abre el OAuth de Mercado Pago en un popup centrado
+  const openMpConnect = () => {
+    const w = 480;
+    const h = 720;
+    const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
+    const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
+    const popup = window.open(
+      "/api/mp/oauth/start",
+      "mp_oauth",
+      `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
+    );
+    if (!popup) window.location.href = "/api/mp/oauth/start";
+  };
 
   if (!mounted) {
     return null;
@@ -238,9 +269,7 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
                   {/* Top: logo + wordmark */}
                   <div className="flex items-center justify-between mb-8 relative z-10">
                     <div className="flex items-center gap-2">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white">
-                        <Handshake className="h-5 w-5" style={{ color: "#009EE3" }} />
-                      </div>
+                      <SiMercadopago className="h-8 w-8 text-white" />
                       <span className="font-bold tracking-tight text-[15px]">Mercado Pago</span>
                     </div>
                     {subLoading && <Loader2 className="h-4 w-4 animate-spin text-white/80" />}
@@ -376,14 +405,17 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
                 </p>
                 <button
                   onClick={() => {
-                    setIsOpen(false);
-                    if (mpConnected) router.push("/dashboard/configuracion");
-                    else window.location.href = "/api/mp/oauth/start";
+                    if (mpConnected) {
+                      setIsOpen(false);
+                      router.push("/dashboard/configuracion");
+                    } else {
+                      openMpConnect();
+                    }
                   }}
                   className="group relative w-32 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-3 text-left hover:border-[#009EE3] hover:shadow-md transition-all bg-white/60 dark:bg-neutral-800/40"
                 >
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl mb-2" style={{ backgroundColor: "#009EE3" }}>
-                    <Handshake className="h-5 w-5 text-white" />
+                    <SiMercadopago className="h-5 w-5 text-white" />
                   </div>
                   <p className="text-sm font-semibold text-neutral-800 dark:text-white leading-tight">Mercado Pago</p>
                   {mpConnected === null ? (
