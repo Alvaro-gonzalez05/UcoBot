@@ -197,7 +197,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   const [userSubscription, setUserSubscription] = useState<any>(null)
   const [canCreateBot, setCanCreateBot] = useState(true)
   const [tagInput, setTagInput] = useState("")
-  const [editingBot, setEditingBot] = useState<BotData | null>(() => (!demo && initialBots.length >= 1 ? initialBots[0] : null))
+  // Auto-abrimos solo si hay UN bot (cuenta normal). Con varios (vista admin) mostramos lista.
+  const [editingBot, setEditingBot] = useState<BotData | null>(() => (!demo && initialBots.length === 1 ? initialBots[0] : null))
   const [tagInputsByFeature, setTagInputsByFeature] = useState<Record<string, string>>({
     take_orders: "",
     take_reservations: "",
@@ -449,8 +450,19 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1 pt-2">
           <div className="flex items-center gap-3">
+            {bots.length > 1 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setEditingBot(null)}
+                className="rounded-xl h-9 w-9 flex-shrink-0"
+                title="Volver a la lista de bots"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
             <div className="min-w-0">
-              <h2 className="text-xl sm:text-3xl font-bold dark:text-white truncate">UcoBot</h2>
+              <h2 className="text-xl sm:text-3xl font-bold dark:text-white truncate">{formData.name || "Bot"}</h2>
               <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
                 {formData.is_active
                   ? <span className="text-green-500 font-semibold">● Activo</span>
@@ -818,6 +830,50 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             </div>
           )}
 
+        </div>
+      </div>
+    )
+  }
+
+  // Hay bots pero ninguno abierto → lista para elegir cuál configurar (ej: cliente con varios)
+  if (bots.length > 0) {
+    return (
+      <div className="space-y-4">
+        <div className="px-1 pt-2">
+          <h2 className="text-2xl font-bold dark:text-white">Bots ({bots.length})</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Elegí un bot para configurar.</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {bots.map((bot) => {
+            const channels = (bot.platforms?.length ? bot.platforms : [bot.platform])
+              .filter(Boolean)
+              .map((p: string) => platformLabels[p as keyof typeof platformLabels] || p)
+              .join(" + ")
+            return (
+              <button
+                key={bot.id}
+                onClick={() => openEditDialog(bot)}
+                className="text-left bg-card rounded-2xl border border-border p-4 hover:border-[#D1F366] hover:shadow-md transition-all flex items-center gap-3"
+              >
+                <div className="h-11 w-11 rounded-xl bg-[#D1F366]/15 flex items-center justify-center flex-shrink-0">
+                  <Bot className="h-5 w-5 text-[#76a609]" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold truncate dark:text-white">{bot.name || "Bot"}</p>
+                  <p className="text-xs text-muted-foreground truncate">{channels || "Sin canal"}</p>
+                </div>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${
+                    bot.is_active
+                      ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400"
+                      : "bg-gray-100 text-gray-600 border-gray-200"
+                  }`}
+                >
+                  {bot.is_active ? "Activo" : "Inactivo"}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
     )
