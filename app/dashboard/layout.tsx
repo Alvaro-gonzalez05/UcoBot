@@ -1,8 +1,10 @@
 import type React from "react"
+import Link from "next/link"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { DashboardSidebar, MobileHeader } from "@/components/dashboard/dashboard-sidebar"
 import { MobileBottomBar } from "@/components/dashboard/mobile-bottom-bar"
+import { isSubscriptionActive } from "@/lib/subscription"
 
 export default async function DashboardLayout({
   children,
@@ -32,6 +34,19 @@ export default async function DashboardLayout({
         <MobileHeader user={data.user} profile={profile} />
 
         <main id="dashboard-main" className="flex-1 overflow-y-auto hide-scrollbar py-4 pr-4 pl-4 lg:pl-0 pb-28 lg:pb-4">
+          {!isSubscriptionActive(profile?.subscription_status) && (
+            <Link
+              href="/dashboard/configuracion"
+              className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-300 bg-red-50 dark:bg-red-950/30 dark:border-red-900 px-4 py-3 text-sm hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors"
+            >
+              <span className="text-red-800 dark:text-red-300">
+                <strong>Tu abono no está al día.</strong> El bot dejó de responder a tus clientes. Reactivá tu suscripción para volver a operar.
+              </span>
+              <span className="shrink-0 rounded-lg bg-red-600 text-white px-3 py-1.5 text-xs font-bold">
+                Reactivar abono
+              </span>
+            </Link>
+          )}
           {children}
         </main>
       </div>

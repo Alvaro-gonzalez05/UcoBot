@@ -19,7 +19,8 @@ export const config = {
      * - api/debug/* (debug endpoints)
      * - api/chat/webhook (webhook chat API)
      * - api/automations/* (automation endpoints for cron jobs)
+     * - api/mp/* (Mercado Pago: el webhook lo llama MP sin sesión)
      */
-    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|html|js|json)$|api/whatsapp|api/instagram|api/debug|api/chat/webhook|api/automations|api/push|api/demo|api/forms|api/loyalty).*)",
+    "/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp|mp4|webm|html|js|json)$|api/whatsapp|api/instagram|api/debug|api/chat/webhook|api/automations|api/push|api/demo|api/forms|api/loyalty|api/mp).*)",
   ],
 }

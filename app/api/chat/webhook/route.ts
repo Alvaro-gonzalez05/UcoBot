@@ -4,6 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createNotification } from "@/lib/notifications"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
 import { isPromotionActive, promotionLabel, bestProductPromotion } from "@/lib/promotions"
+import { isSubscriptionActive } from "@/lib/subscription"
 
 /**
  * Convierte Markdown estándar al formato de WhatsApp/Instagram/Messenger.
@@ -135,8 +136,12 @@ export async function POST(request: NextRequest) {
       .eq("id", bot.user_id)
       .single()
 
-    if (userProfile?.subscription_status === 'suspended') {
-      return NextResponse.json({ error: "User account suspended" }, { status: 403 })
+    // BLOQUEO POR SUSCRIPCIÓN: si el dueño no está al día (abono vencido/cancelado/
+    // suspendido), el bot NO responde en ningún canal. Solo bloqueamos si pudimos leer
+    // el perfil (si la consulta falló, fail-open para no cortar por un error transitorio).
+    if (userProfile && !isSubscriptionActive(userProfile.subscription_status)) {
+      console.log(`⛔ Bot no responde: suscripción "${userProfile.subscription_status}" del usuario ${bot.user_id} no está al día`)
+      return NextResponse.json({ error: "Subscription not active" }, { status: 403 })
     }
 
     // Determine which Gemini API Key to use
