@@ -25,6 +25,8 @@ import Link from "next/link"
 import { BusinessDetailsCard } from "@/components/dashboard/admin/business-details-card"
 import { UserSuspendButton } from "@/components/dashboard/admin/user-suspend-button"
 import { UserActionsMenu } from "@/components/dashboard/admin/user-actions-menu"
+import { AiUsageChart } from "@/components/dashboard/admin/ai-usage-chart"
+import { buildDailyUsage } from "@/lib/ai-usage"
 
 function getInitials(name: string) {
   return (name || "U")
@@ -95,6 +97,20 @@ export default async function AdminUserDetailsPage({
     .eq("user_id", params.id)
     .order("created_at", { ascending: false })
     .limit(15)
+
+  // Uso de IA del usuario (últimos 30 días)
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
+  thirtyDaysAgo.setHours(0, 0, 0, 0)
+  const { data: aiRows } = await supabase
+    .from("ai_usage")
+    .select("cost_usd, total_tokens, created_at, user_id")
+    .eq("user_id", params.id)
+    .gte("created_at", thirtyDaysAgo.toISOString())
+  const aiDaily = buildDailyUsage(aiRows || [], 30)
+  const aiTotalCalls = (aiRows || []).length
+  const aiTotalCost = (aiRows || []).reduce((acc, r) => acc + Number(r.cost_usd || 0), 0)
+  const aiTotalTokens = (aiRows || []).reduce((acc, r) => acc + Number(r.total_tokens || 0), 0)
 
   const statusCfg =
     STATUS_CONFIG[profile.subscription_status || "trialing"] ||
@@ -220,6 +236,27 @@ export default async function AdminUserDetailsPage({
               })}
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Uso de IA del usuario */}
+      <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border">
+          <div>
+            <h3 className="font-bold text-base dark:text-white">Uso de la IA</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Consultas por día (últimos 30).</p>
+          </div>
+          <div className="text-right">
+            <p className="text-lg font-bold dark:text-white">
+              {aiTotalCalls} <span className="text-sm font-medium text-muted-foreground">consultas</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {aiTotalTokens.toLocaleString("es-AR")} tokens · ${aiTotalCost.toFixed(4)}
+            </p>
+          </div>
+        </div>
+        <div className="p-4">
+          <AiUsageChart data={aiDaily} height={220} />
         </div>
       </div>
 

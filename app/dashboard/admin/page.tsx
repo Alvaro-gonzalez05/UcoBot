@@ -13,6 +13,8 @@ import {
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { AiUsageChart } from "@/components/dashboard/admin/ai-usage-chart"
+import { buildDailyUsage } from "@/lib/ai-usage"
 
 function getInitials(name: string) {
   return (name || "U")
@@ -79,6 +81,27 @@ export default async function AdminDashboard() {
 
   const totalRevenue =
     monthPayments?.reduce((acc, p) => acc + (Number(p.amount) || 0), 0) || 0
+
+  // ── Uso de IA (últimos 30 días) para el gráfico general ──────────────────
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29)
+  thirtyDaysAgo.setHours(0, 0, 0, 0)
+
+  const { data: aiRows } = await supabase
+    .from("ai_usage")
+    .select("user_id, cost_usd, created_at")
+    .gte("created_at", thirtyDaysAgo.toISOString())
+
+  const { data: allUsersForUsage } = await supabase
+    .from("user_profiles")
+    .select("id, business_name")
+
+  const usageNameById = new Map(
+    (allUsersForUsage || []).map((u) => [u.id, u.business_name || "Sin nombre"])
+  )
+  const aiDaily = buildDailyUsage(aiRows || [], 30, usageNameById)
+  const aiTotalCalls = (aiRows || []).length
+  const aiTotalCost = (aiRows || []).reduce((acc, r) => acc + Number(r.cost_usd || 0), 0)
 
   return (
     <div className="flex flex-col gap-6">
@@ -206,6 +229,27 @@ export default async function AdminDashboard() {
           </div>
           <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
         </Link>
+      </div>
+
+      {/* AI usage chart (general) */}
+      <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
+        <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border">
+          <div>
+            <h3 className="font-bold text-base dark:text-white">Uso de la IA</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Consultas por día (últimos 30). Pasá el mouse para ver el uso de cada cliente.
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">30 días</p>
+            <p className="text-lg font-bold dark:text-white">
+              {aiTotalCalls} <span className="text-sm font-medium text-muted-foreground">consultas · ${aiTotalCost.toFixed(2)}</span>
+            </p>
+          </div>
+        </div>
+        <div className="p-4">
+          <AiUsageChart data={aiDaily} />
+        </div>
       </div>
 
       {/* Main content: Users + Activity */}

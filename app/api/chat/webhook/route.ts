@@ -6,6 +6,7 @@ import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
 import { isPromotionActive, promotionLabel, bestProductPromotion } from "@/lib/promotions"
 import { isSubscriptionActive } from "@/lib/subscription"
 import { getValidSellerToken, createPreference } from "@/lib/mp-payments"
+import { computeCostUsd } from "@/lib/ai-pricing"
 
 /**
  * Convierte Markdown estándar al formato de WhatsApp/Instagram/Messenger.
@@ -44,7 +45,11 @@ const GEMINI_MODELS = [
  * (incluido 404 "modelo no disponible" o 4xx) pasa al siguiente modelo en vez de cortar.
  * Devuelve la primera Response OK, o la última Response fallida si ninguno funcionó.
  */
-async function callGeminiWithFallback(apiKey: string, body: any): Promise<Response | null> {
+async function callGeminiWithFallback(
+  apiKey: string,
+  body: any,
+  opts?: { userId?: string; purpose?: string }
+): Promise<Response | null> {
   const payload = JSON.stringify(body)
   let lastResponse: Response | null = null
 
@@ -58,6 +63,8 @@ async function callGeminiWithFallback(apiKey: string, body: any): Promise<Respon
 
         if (res.ok) {
           if (model !== GEMINI_MODELS[0]) console.log(`✅ Gemini respondió con modelo de respaldo: ${model}`)
+          // Registramos el uso (tokens + costo) sin bloquear la respuesta.
+          if (opts?.userId) recordAiUsage(res.clone(), model, opts.userId, opts.purpose)
           return res
         }
 
@@ -88,6 +95,29 @@ async function callGeminiWithFallback(apiKey: string, body: any): Promise<Respon
     console.error(`❌ Gemini falló en TODOS los modelos: [${GEMINI_MODELS.join(", ")}]`)
   }
   return lastResponse
+}
+
+/** Registra el uso de IA (tokens + costo USD) de una llamada. Fire-and-forget. */
+async function recordAiUsage(res: Response, model: string, userId: string, purpose?: string) {
+  try {
+    const data = await res.json()
+    const u = data?.usageMetadata || {}
+    const input = u.promptTokenCount || 0
+    const output = u.candidatesTokenCount || 0
+    const total = u.totalTokenCount || input + output
+    const admin = createAdminClient()
+    await admin.from("ai_usage").insert({
+      user_id: userId,
+      model,
+      purpose: purpose || "chat",
+      input_tokens: input,
+      output_tokens: output,
+      total_tokens: total,
+      cost_usd: computeCostUsd(model, input, output),
+    })
+  } catch (e) {
+    console.error("No se pudo registrar ai_usage:", e)
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -1091,7 +1121,7 @@ PRIORIDADES ANTE CONFLICTO:
         topK: 20,
         topP: 0.8,
       }
-    })
+    }, { userId: bot.user_id, purpose: 'chat' })
 
     if (!response || !response.ok) {
       console.error('Gemini API failed after all models/retries')
@@ -1309,7 +1339,7 @@ Responde SOLO con el JSON.
     const response = await callGeminiWithFallback(geminiApiKey, {
       contents: [{ parts: [{ text: analysisPrompt }] }],
       generationConfig: { temperature: 0.1 }
-    });
+    }, { userId: bot.user_id, purpose: 'detection' });
 
     if (!response || !response.ok) return;
     const data = await response.json();
@@ -1659,7 +1689,7 @@ Si no hay pedido completo, responde: NO_ORDER
     const response = await callGeminiWithFallback(geminiApiKey, {
       contents: [{ parts: [{ text: extractionPrompt }] }],
       generationConfig: { temperature: 0.1 }
-    })
+    }, { userId: bot.user_id, purpose: 'order' })
 
     if (response && response.ok) {
       const data = await response.json()
@@ -1793,7 +1823,7 @@ Si NO hay reserva completa, responde: NO_RESERVATION
         topP: 0.8,
         topK: 40
       }
-    })
+    }, { userId: bot.user_id, purpose: 'reservation' })
 
     console.log('🤖 Gemini response status:', response?.status)
     if (response && response.ok) {
@@ -2602,7 +2632,7 @@ Respondé SOLO con JSON: {"lead_tags": ["TagExacto", ...]} (lista vacía si ning
     const response = await callGeminiWithFallback(geminiApiKey, {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.1 }
-    })
+    }, { userId: bot.user_id, purpose: 'classification' })
 
     if (!response || !response.ok) return
 
