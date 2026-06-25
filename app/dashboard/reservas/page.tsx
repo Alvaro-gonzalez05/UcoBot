@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { ReservasClient } from "@/components/dashboard/reservas-client"
+import { getAccountContext } from "@/lib/account"
 
 interface ReservasPageProps {
   searchParams: {
@@ -16,6 +17,10 @@ export default async function ReservasPage({ searchParams }: ReservasPageProps) 
     redirect("/login")
   }
 
+  // Si es empleado, opera sobre los datos del dueño.
+  const account = await getAccountContext()
+  const ownerId = account?.ownerId || data.user.id
+
   // Parse pagination parameters
   const page = parseInt(searchParams.page || "1")
   const limit = 10 // Reservas por página
@@ -29,7 +34,7 @@ export default async function ReservasPage({ searchParams }: ReservasPageProps) 
       client:client_id(name, phone),
       conversation:conversation_id(platform)
     `, { count: "exact" })
-    .eq("user_id", data.user.id)
+    .eq("user_id", ownerId)
     .order("created_at", { ascending: false }) // Order by creation date (newest first)
     .range(offset, offset + limit - 1)
 
@@ -38,7 +43,7 @@ export default async function ReservasPage({ searchParams }: ReservasPageProps) 
   const totalPages = Math.ceil(totalItems / limit)
 
   return (
-    <ReservasClient 
+    <ReservasClient
       reservations={reservations || []}
       pagination={{
         page,

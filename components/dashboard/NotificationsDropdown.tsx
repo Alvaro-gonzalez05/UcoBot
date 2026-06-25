@@ -37,7 +37,10 @@ export default function NotificationsDropdown({ position = 'sidebar' }: Notifica
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
-  
+  // Id único por instancia: el dropdown se monta varias veces (sidebar/header/downbar)
+  // y si todas usan el mismo nombre de canal, Realtime entra en conflicto y no llega el evento.
+  const instanceId = useRef(Math.random().toString(36).slice(2)).current;
+
   const supabase = createClient();
   const router = useRouter();
   
@@ -75,9 +78,9 @@ export default function NotificationsDropdown({ position = 'sidebar' }: Notifica
 
     console.log("🔔 Subscribing to notifications for user:", userId);
 
-    // Subscribe to realtime changes
+    // Subscribe to realtime changes (canal único por instancia para evitar conflictos)
     const channel = supabase
-      .channel(`notifications_user_${userId}`)
+      .channel(`notifications_user_${userId}_${instanceId}`)
       .on('postgres_changes', 
         { 
           event: '*', 

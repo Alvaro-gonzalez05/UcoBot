@@ -12,25 +12,31 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, description, price, category, is_available = true, image_url } = body
+    const { name, description, price, category, is_available = true, image_url, is_service = false, duration_min } = body
 
     // Validate required fields
     if (!name || !price) {
-      return NextResponse.json({ 
-        error: "Nombre y precio son campos obligatorios" 
+      return NextResponse.json({
+        error: "Nombre y precio son campos obligatorios"
       }, { status: 400 })
     }
+
+    // Si es empleado, el producto se crea bajo la cuenta del dueño.
+    const { data: prof } = await supabase.from("user_profiles").select("parent_user_id").eq("id", user.id).maybeSingle()
+    const ownerId = prof?.parent_user_id || user.id
 
     // Insert product
     const { data: product, error } = await supabase
       .from("products")
       .insert({
-        user_id: user.id,
+        user_id: ownerId,
         name: name.trim(),
         description: description?.trim() || null,
         price: parseFloat(price),
         category: category?.trim() || null,
         is_available,
+        is_service: !!is_service,
+        duration_min: is_service ? (duration_min ? parseInt(String(duration_min)) : 30) : null,
         image_url: image_url?.trim() || null,
       })
       .select()
@@ -67,11 +73,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 })
     }
 
-    // Get all products for the user
+    // Si es empleado, lee los productos del dueño.
+    const { data: prof } = await supabase.from("user_profiles").select("parent_user_id").eq("id", user.id).maybeSingle()
+    const ownerId = prof?.parent_user_id || user.id
+
+    // Get all products for the account
     const { data: products, error } = await supabase
       .from("products")
       .select("*")
-      .eq("user_id", user.id)
+      .eq("user_id", ownerId)
       .order("created_at", { ascending: false })
 
     if (error) {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { isPromotionActive, promotionLabel } from '@/lib/promotions'
+import { getTemplateSlots } from '@/lib/whatsapp-template'
 
 // Endpoint para procesar eventos programados (llamado por cron jobs)
 // Maneja cumpleaños, clientes inactivos, etc.
@@ -20,7 +22,13 @@ export async function POST(request: NextRequest) {
         
       case 'promotion.broadcast':
         return await processPromotionBroadcasts(supabase)
-        
+
+      case 'follow_up.check':
+        return await processFollowUpAutomations(supabase)
+
+      case 'reservation_reminder.check':
+        return await processReservationReminders(supabase)
+
       default:
         return NextResponse.json({ error: 'Unknown automation type' }, { status: 400 })
     }
@@ -572,6 +580,354 @@ async function processPromotionBroadcasts(supabase: any) {
       { error: 'Processing error', details: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
+  }
+}
+
+// Arma el contexto real del negocio (info, productos, promos activas) para que la IA del
+// seguimiento sepa lo mismo que cuando atiende y no invente promos/precios.
+async function buildBusinessContext(supabase: any, userId: string): Promise<string> {
+  const parts: string[] = []
+  try {
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('business_name, business_description, business_hours, location, menu_link')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (profile) {
+      const info: string[] = []
+      if (profile.business_name) info.push(`Negocio: ${profile.business_name}`)
+      if (profile.business_description) info.push(`Descripción: ${profile.business_description}`)
+      if (profile.location) info.push(`Ubicación: ${profile.location}`)
+      if (profile.menu_link) info.push(`Carta/catálogo: ${profile.menu_link}`)
+      // Horarios (resumen compacto)
+      const bh = profile.business_hours
+      if (bh && typeof bh === 'object') {
+        const dias: Record<string, string> = {
+          monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié', thursday: 'Jue',
+          friday: 'Vie', saturday: 'Sáb', sunday: 'Dom',
+        }
+        const abiertos = Object.entries(bh)
+          .filter(([, v]: any) => v?.isOpen)
+          .map(([k, v]: any) => `${dias[k] || k} ${v.open}-${v.close}`)
+        if (abiertos.length) info.push(`Horarios: ${abiertos.join(', ')}`)
+      }
+      if (info.length) parts.push('═══ NEGOCIO ═══\n' + info.join('\n'))
+    }
+
+    const { data: products } = await supabase
+      .from('products')
+      .select('name, price, description')
+      .eq('user_id', userId)
+      .limit(40)
+    if (products && products.length > 0) {
+      const list = products
+        .map((p: any) => `- ${p.name}: $${p.price}${p.description ? ` (${p.description})` : ''}`)
+        .join('\n')
+      parts.push('═══ PRODUCTOS ═══\n' + list)
+    }
+
+    const { data: promos } = await supabase
+      .from('promotions')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+    const active = (promos || []).filter((p: any) => isPromotionActive(p))
+    if (active.length > 0) {
+      const list = active.map((p: any) => `- ${p.name}: ${promotionLabel(p)}`).join('\n')
+      parts.push('═══ PROMOCIONES ACTIVAS ═══\n' + list)
+    } else {
+      parts.push('═══ PROMOCIONES ACTIVAS ═══\nNo hay promociones activas. NO inventes ni ofrezcas promos/descuentos que no existan.')
+    }
+  } catch (e) {
+    console.error('Error building business context for follow-up:', e)
+  }
+  return parts.join('\n\n')
+}
+
+// Genera un mensaje de seguimiento CONTEXTUAL con IA, basado en lo que se habló en esa charla
+// y en el contexto real del negocio (productos, promos, info). Null si no se pudo.
+async function generateFollowUpMessage(
+  supabase: any,
+  bot: any,
+  conversationId: string,
+  guide: string,
+  businessContext: string
+) {
+  try {
+    const apiKey = bot.gemini_api_key || process.env.GEMINI_DEMO_API_KEY
+    if (!apiKey) return null
+
+    const { data: msgs } = await supabase
+      .from('messages')
+      .select('sender_type, content')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: false })
+      .limit(8)
+    if (!msgs || msgs.length === 0) return null
+
+    const history = msgs
+      .reverse()
+      .map((m: any) => `${m.sender_type === 'client' ? 'Cliente' : 'Bot'}: ${m.content}`)
+      .join('\n')
+
+    const prompt = `Sos ${bot.name}, del negocio. Un cliente habló hace casi un día y no avanzó/cerró.
+Escribí UN solo mensaje de seguimiento, corto (1-2 oraciones), cálido y natural, RETOMANDO lo puntual que se habló para reengancharlo. No vuelvas a saludar formalmente, no suenes a robot.
+REGLA: usá SOLO datos reales del negocio (de abajo). NUNCA inventes productos, precios ni promociones. Si la indicación pide ofrecer una promo y NO hay promos activas, no inventes una: invitá a continuar sin prometer descuentos.
+${guide ? `Indicación del negocio para este seguimiento: ${guide}\n` : ''}${bot.personality_prompt ? `Tu personalidad: ${bot.personality_prompt}\n` : ''}
+${businessContext ? businessContext + '\n' : ''}
+Conversación reciente:
+${history}
+
+Respondé SOLO con el texto del mensaje (sin comillas ni prefijos).`
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } }),
+      }
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+    return text || null
+  } catch {
+    return null
+  }
+}
+
+// Procesar RECORDATORIOS de reserva/turno (con plantilla de Meta, X horas antes).
+async function processReservationReminders(supabase: any) {
+  console.log('⏰ Processing reservation reminders...')
+  try {
+    const { data: automations } = await supabase
+      .from('automations')
+      .select(`*, bots!inner(*)`)
+      .eq('trigger_type', 'reservation_reminder')
+      .eq('is_active', true)
+      .eq('bots.is_active', true)
+
+    if (!automations || automations.length === 0) {
+      return NextResponse.json({ message: 'No active reservation reminders', processed: 0 })
+    }
+
+    const now = new Date()
+    const todayStr = now.toISOString().slice(0, 10)
+    let totalQueued = 0
+
+    for (const automation of automations) {
+      const bot = automation.bots
+      const tv = automation.template_variables || {}
+      const templateName = tv.meta_template_name
+      if (!bot || !templateName) continue // el recordatorio requiere una plantilla de Meta aprobada
+
+      let templateLanguage = tv.meta_template_language || tv.template_language || 'es'
+      if (templateLanguage && typeof templateLanguage === 'object') templateLanguage = templateLanguage.code || 'es'
+
+      const hoursBefore = Number(automation.trigger_config?.hours_before) || 24
+
+      // Cuántas variables de cuerpo tiene la plantilla (para llenar las justas)
+      let bodyCount = 0
+      try {
+        bodyCount = getTemplateSlots(tv.template_data?.components || []).filter((s: any) => s.group === 'body').length
+      } catch {
+        bodyCount = 0
+      }
+
+      // Reservas futuras, no avisadas, no canceladas
+      const { data: rows } = await supabase
+        .from('reservations')
+        .select('id, customer_name, customer_phone, reservation_date, reservation_time, staff_name, service_name')
+        .eq('user_id', automation.user_id)
+        .is('reminder_sent_at', null)
+        .neq('status', 'cancelled')
+        .gte('reservation_date', todayStr)
+      if (!rows || rows.length === 0) continue
+
+      const windowMs = hoursBefore * 3600 * 1000
+      const due = rows.filter((r: any) => {
+        if (!r.reservation_date || !r.reservation_time || !r.customer_phone) return false
+        const dt = new Date(`${r.reservation_date}T${r.reservation_time}:00`).getTime()
+        const diff = dt - now.getTime()
+        return diff > 0 && diff <= windowMs // entra en las próximas X horas
+      })
+      if (due.length === 0) continue
+
+      const messages = due.map((r: any) => {
+        // Variables en orden fijo: {{1}} nombre, {{2}} fecha, {{3}} hora, {{4}} profesional/servicio
+        const allParams = [
+          r.customer_name || 'Cliente',
+          r.reservation_date,
+          r.reservation_time,
+          r.staff_name || r.service_name || '',
+        ]
+        const params = allParams.slice(0, bodyCount)
+        const components = bodyCount > 0 ? [{ type: 'body', parameters: params.map((t) => ({ type: 'text', text: String(t) })) }] : []
+        return {
+          user_id: automation.user_id,
+          automation_id: automation.id,
+          bot_id: bot.id,
+          message_content: `Recordatorio de turno: ${r.reservation_date} ${r.reservation_time}`,
+          recipient_name: r.customer_name,
+          recipient_phone: r.customer_phone,
+          platform: 'whatsapp',
+          scheduled_for: now.toISOString(),
+          automation_type: 'reservation_reminder',
+          priority: 2,
+          metadata: {
+            is_meta_template: true,
+            template_name: templateName,
+            template_language: templateLanguage,
+            whatsapp_components: components,
+          },
+        }
+      })
+
+      const { error } = await supabase.from('scheduled_messages').insert(messages)
+      if (error) {
+        console.error('❌ Error queueing reservation reminders:', error)
+        continue
+      }
+      await supabase.from('reservations').update({ reminder_sent_at: now.toISOString() }).in('id', due.map((r: any) => r.id))
+      totalQueued += messages.length
+      console.log(`✅ Recordatorios "${automation.name}": ${messages.length} encolados`)
+    }
+
+    return NextResponse.json({ success: true, processed: totalQueued, message: 'Reservation reminders processed' })
+  } catch (error) {
+    console.error('💥 Reservation reminder error:', error)
+    return NextResponse.json({ error: 'Failed to process reservation reminders' }, { status: 500 })
+  }
+}
+
+// Procesar automatizaciones de SEGUIMIENTO (follow_up)
+// Manda un mensaje a conversaciones que hablaron y no cerraron, antes de que venza la ventana de 24 hs.
+async function processFollowUpAutomations(supabase: any) {
+  console.log('📌 Processing follow-up automations...')
+  try {
+    const { data: automations } = await supabase
+      .from('automations')
+      .select(`*, bots!inner(*)`)
+      .eq('trigger_type', 'follow_up')
+      .eq('is_active', true)
+      .eq('bots.is_active', true)
+
+    if (!automations || automations.length === 0) {
+      return NextResponse.json({ message: 'No active follow-up automations', processed: 0 })
+    }
+
+    let totalQueued = 0
+
+    for (const automation of automations) {
+      const bot = automation.bots
+      const messageTemplate = automation.message_template
+      if (!bot || !messageTemplate) continue
+
+      // Modo del mensaje: 'plain' = texto fijo tal cual / 'ai' = la IA redacta uno contextual.
+      const messageMode = automation.trigger_config?.message_mode === 'plain' ? 'plain' : 'ai'
+
+      // Contexto del negocio (productos/promos/info) una sola vez por automatización (solo si usa IA).
+      const businessContext = messageMode === 'ai' ? await buildBusinessContext(supabase, automation.user_id) : ''
+
+      // Ventana: mandamos cuando faltan `hours_before_close` horas para las 24 hs.
+      const hoursBeforeClose = Number(automation.trigger_config?.hours_before_close) || 2
+      const now = Date.now()
+      const lower = new Date(now - 24 * 3600 * 1000).toISOString() // no después de cerrada
+      const upper = new Date(now - (24 - hoursBeforeClose) * 3600 * 1000).toISOString()
+
+      // Conversaciones candidatas: dentro de la franja, sin seguimiento previo,
+      // sin intervención humana (no pausadas / ayuda / revisión).
+      const { data: convs } = await supabase
+        .from('conversations')
+        .select('id, client_name, client_phone, client_instagram_id, platform, user_id')
+        .eq('bot_id', bot.id)
+        .gte('last_client_message_at', lower)
+        .lte('last_client_message_at', upper)
+        .is('follow_up_sent_at', null)
+        .eq('needs_attention', false)
+        .eq('in_review', false)
+        .neq('status', 'paused')
+        .limit(500)
+
+      if (!convs || convs.length === 0) continue
+
+      // Excluir solo las que cerraron RECIÉN (pedido o reserva en las últimas 24 hs,
+      // es decir, de esta interacción). Compras viejas NO cuentan como cierre actual.
+      const ids = convs.map((c: any) => c.id)
+      const [{ data: orders }, { data: reservations }] = await Promise.all([
+        supabase.from('orders').select('conversation_id').in('conversation_id', ids).gte('created_at', lower),
+        supabase.from('reservations').select('conversation_id').in('conversation_id', ids).gte('created_at', lower),
+      ])
+      const converted = new Set<string>([
+        ...(orders || []).map((o: any) => o.conversation_id),
+        ...(reservations || []).map((r: any) => r.conversation_id),
+      ])
+
+      const eligible = convs.filter((c: any) => {
+        if (converted.has(c.id)) return false
+        // Solo canales que el pipeline de envío soporta hoy
+        if (c.platform === 'whatsapp') return !!c.client_phone
+        if (c.platform === 'instagram') return !!c.client_instagram_id
+        return false // messenger: pendiente de soporte en process-queue
+      })
+
+      if (eligible.length === 0) continue
+
+      const messagesToInsert: any[] = []
+      for (const c of eligible) {
+        const firstName = (c.client_name || 'Cliente').split(' ')[0]
+        const plain = messageTemplate.replace(/\{name\}/g, c.client_name || 'Cliente').replace(/\{first_name\}/g, firstName)
+
+        // Según el modo: texto fijo, o la IA redacta uno contextual (con fallback al texto).
+        let content = plain
+        let usedAi = false
+        if (messageMode === 'ai') {
+          const aiText = await generateFollowUpMessage(supabase, bot, c.id, messageTemplate, businessContext)
+          if (aiText) {
+            content = aiText
+            usedAi = true
+          }
+        }
+
+        const base: any = {
+          user_id: c.user_id,
+          automation_id: automation.id,
+          bot_id: bot.id,
+          message_content: content,
+          recipient_name: c.client_name,
+          scheduled_for: new Date().toISOString(),
+          automation_type: 'follow_up',
+          priority: 2,
+          platform: c.platform,
+          metadata: { ai_generated: usedAi },
+        }
+        if (c.platform === 'whatsapp') base.recipient_phone = c.client_phone
+        else if (c.platform === 'instagram') base.recipient_instagram_id = c.client_instagram_id
+        messagesToInsert.push(base)
+      }
+
+      const { error: insertError } = await supabase.from('scheduled_messages').insert(messagesToInsert)
+      if (insertError) {
+        console.error('❌ Error queueing follow-up messages:', insertError)
+        continue
+      }
+
+      // Marcar como ya seguidas para no repetir
+      await supabase
+        .from('conversations')
+        .update({ follow_up_sent_at: new Date().toISOString() })
+        .in('id', eligible.map((c: any) => c.id))
+
+      totalQueued += messagesToInsert.length
+      console.log(`✅ Follow-up "${automation.name}": ${messagesToInsert.length} mensajes encolados`)
+    }
+
+    return NextResponse.json({ success: true, processed: totalQueued, message: 'Follow-up automations processed' })
+  } catch (error) {
+    console.error('💥 Follow-up automation error:', error)
+    return NextResponse.json({ error: 'Failed to process follow-up automations' }, { status: 500 })
   }
 }
 

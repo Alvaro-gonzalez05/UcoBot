@@ -470,10 +470,11 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
           }
         }
 
-        // DEBOUNCE LOGIC: Wait 7 seconds to see if more messages arrive
-        // This allows grouping multiple rapid messages into a single AI response
-        console.log('⏳ Waiting 7s for potential follow-up messages...')
-        await new Promise(resolve => setTimeout(resolve, 7000))
+        // DEBOUNCE LOGIC: ventana de escucha configurable por bot (default 7s).
+        // Agrupa los mensajes que el cliente manda seguidos en una sola respuesta.
+        const debounceMs = (Number(bot?.feature_config?.debounce_seconds) || 7) * 1000
+        console.log(`⏳ Esperando ${debounceMs}ms (ventana de escucha)...`)
+        await new Promise(resolve => setTimeout(resolve, debounceMs))
 
         // Check if any newer messages exist for this conversation
         const { data: newerMessages } = await supabase
@@ -554,7 +555,7 @@ async function generateAndSendAIResponse(
     }
 
     const aiResponse = await response.json()
-    
+
     if (aiResponse.response) {
       // Token propio del cliente primero (configuración manual / legacy):
       // el System Token solo sirve para WABAs conectados vía Embedded Signup.
@@ -566,8 +567,18 @@ async function generateAndSendAIResponse(
         return
       }
 
-      // Send response via WhatsApp
-      const sent = await sendWhatsAppMessage(accessToken, phoneNumberId, senderPhone, aiResponse.response)
+      // Si el bot tiene "separar mensajes largos", el chat webhook devuelve varias partes.
+      const parts: string[] = Array.isArray(aiResponse.messages) && aiResponse.messages.length > 0
+        ? aiResponse.messages
+        : [aiResponse.response]
+
+      let sent = false
+      for (let i = 0; i < parts.length; i++) {
+        const ok = await sendWhatsAppMessage(accessToken, phoneNumberId, senderPhone, parts[i])
+        sent = sent || ok
+        // Pequeña pausa entre mensajes para que se sienta natural
+        if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 1200))
+      }
 
       if (sent) {
         // Log usage for AI response

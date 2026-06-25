@@ -47,7 +47,7 @@ import {
 
 interface AutomationFormData {
   name: string
-  trigger_type: "birthday" | "inactive_client" | "new_promotion" | "comment_reply" | "new_order" | "order_ready" | ""
+  trigger_type: "birthday" | "inactive_client" | "new_promotion" | "comment_reply" | "new_order" | "order_ready" | "follow_up" | "reservation_reminder" | ""
   trigger_config: Record<string, any>
   message_template: string
   template_id?: string
@@ -144,6 +144,20 @@ const triggerTypes = {
     description: "Responde automáticamente a comentarios (Instagram)",
     color: "bg-pink-500",
     platforms: ["instagram"] // Exclusivo de Instagram
+  },
+  follow_up: {
+    icon: Clock,
+    label: "Seguimiento (antes de cerrar)",
+    description: "Reengancha a quien habló y no cerró, antes de que venza la ventana de 24 hs",
+    color: "bg-sky-500",
+    platforms: ["whatsapp", "instagram"]
+  },
+  reservation_reminder: {
+    icon: Calendar,
+    label: "Recordatorio de reserva/turno",
+    description: "Avisa al cliente unas horas antes de su reserva o turno (plantilla de WhatsApp)",
+    color: "bg-emerald-500",
+    platforms: ["whatsapp"]
   },
 }
 
@@ -875,6 +889,116 @@ export function MultiStepAutomationCreation({ isOpen, onClose, onAutomationCreat
     if (!formData.trigger_type) return null
 
     switch (formData.trigger_type) {
+      case "reservation_reminder":
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="hours_before_reminder" className="text-sm font-medium">
+                Cuántas horas antes avisar
+              </Label>
+              <Select
+                value={formData.trigger_config.hours_before?.toString() || "24"}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    trigger_config: { ...formData.trigger_config, hours_before: parseInt(value) },
+                  })
+                }
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Seleccionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2">2 horas antes</SelectItem>
+                  <SelectItem value="3">3 horas antes</SelectItem>
+                  <SelectItem value="6">6 horas antes</SelectItem>
+                  <SelectItem value="12">12 horas antes</SelectItem>
+                  <SelectItem value="24">24 horas antes</SelectItem>
+                  <SelectItem value="48">48 horas antes</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Como el recordatorio suele caer fuera de la ventana de 24 hs, se envía con una <strong>plantilla de WhatsApp aprobada</strong> (la elegís en el paso siguiente).
+                Armala con las variables en este orden: <code>{"{{1}}"}</code> nombre, <code>{"{{2}}"}</code> fecha, <code>{"{{3}}"}</code> hora, <code>{"{{4}}"}</code> profesional.
+              </p>
+            </div>
+          </div>
+        )
+
+      case "follow_up":
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="hours_before_close" className="text-sm font-medium">
+                Cuántas horas antes de cerrar la ventana
+              </Label>
+              <Select
+                value={formData.trigger_config.hours_before_close?.toString() || "2"}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    trigger_config: { ...formData.trigger_config, hours_before_close: parseInt(value) },
+                  })
+                }
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Seleccionar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1 hora antes</SelectItem>
+                  <SelectItem value="2">2 horas antes</SelectItem>
+                  <SelectItem value="3">3 horas antes</SelectItem>
+                  <SelectItem value="4">4 horas antes</SelectItem>
+                  <SelectItem value="6">6 horas antes</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Le manda el mensaje a quien habló y no cerró, cuando falte ese tiempo para que se cumplan las 24 hs.
+                Solo a conversaciones sin pedido/reserva reciente y que no esté atendiendo un humano.
+              </p>
+            </div>
+
+            <div>
+              <Label className="text-sm font-medium">¿Cómo se arma el mensaje?</Label>
+              <div className="grid grid-cols-1 gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormData({ ...formData, trigger_config: { ...formData.trigger_config, message_mode: "ai" } })
+                  }
+                  className={`text-left rounded-xl border p-3 transition-colors ${
+                    (formData.trigger_config.message_mode || "ai") === "ai"
+                      ? "border-[#D1F366] bg-[#D1F366]/10"
+                      : "border-border hover:bg-muted/40"
+                  }`}
+                >
+                  <p className="text-sm font-semibold">Con IA (contextual)</p>
+                  <p className="text-xs text-muted-foreground">
+                    La IA escribe un mensaje a medida según lo que se habló. Lo que pongas abajo es la
+                    <strong> indicación/tono</strong> (ej: "recordale las bicis que vio y ofrecé una visita").
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormData({ ...formData, trigger_config: { ...formData.trigger_config, message_mode: "plain" } })
+                  }
+                  className={`text-left rounded-xl border p-3 transition-colors ${
+                    formData.trigger_config.message_mode === "plain"
+                      ? "border-[#D1F366] bg-[#D1F366]/10"
+                      : "border-border hover:bg-muted/40"
+                  }`}
+                >
+                  <p className="text-sm font-semibold">Mensaje fijo</p>
+                  <p className="text-xs text-muted-foreground">
+                    Se envía tal cual lo que escribas abajo (podés usar <code>{"{name}"}</code>). Sin IA.
+                  </p>
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+
       case "birthday":
         return (
           <div className="space-y-4">

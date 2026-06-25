@@ -97,6 +97,51 @@ async function callGeminiWithFallback(
   return lastResponse
 }
 
+/** "HH:MM" + minutos → "HH:MM" (para calcular el fin de un turno según su duración). */
+function addMinutesToTime(time: string, mins: number): string {
+  const [h, m] = (time || "00:00").split(":").map(Number)
+  const total = (h || 0) * 60 + (m || 0) + (mins || 0)
+  const hh = Math.floor((total % 1440) / 60)
+  const mm = total % 60
+  return `${String(hh).padStart(2, "0")}:${String(mm).padStart(2, "0")}`
+}
+
+/** Minutos desde medianoche de un "HH:MM". */
+function timeToMinutes(time: string): number {
+  const [h, m] = (time || "00:00").split(":").map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+/**
+ * Divide una respuesta larga en varios mensajes (por párrafos) para que se sienta
+ * más natural. Devuelve [texto] si es corto o no se puede dividir bien.
+ */
+function splitBotMessage(text: string, maxParts = 4): string[] {
+  const clean = (text || "").trim()
+  if (clean.length <= 350) return [clean]
+  const paras = clean.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean)
+  if (paras.length <= 1) return [clean]
+
+  const chunks: string[] = []
+  let cur = ""
+  for (const p of paras) {
+    if (cur && cur.length + p.length + 2 > 500) {
+      chunks.push(cur)
+      cur = p
+    } else {
+      cur = cur ? `${cur}\n\n${p}` : p
+    }
+  }
+  if (cur) chunks.push(cur)
+
+  if (chunks.length > maxParts) {
+    const head = chunks.slice(0, maxParts - 1)
+    const tail = chunks.slice(maxParts - 1).join("\n\n")
+    return [...head, tail]
+  }
+  return chunks
+}
+
 /** Registra el uso de IA (tokens + costo USD) de una llamada. Fire-and-forget. */
 async function recordAiUsage(res: Response, model: string, userId: string, purpose?: string) {
   try {
@@ -507,20 +552,29 @@ export async function POST(request: NextRequest) {
       geminiApiKey
     )
 
-    // Save bot response to messages table (works for both real and test conversations)
+    // Si "separar mensajes largos" está activo, guardamos cada parte como un mensaje
+    // distinto, así también se ve separado en el chat del dashboard (no solo para el cliente).
+    const splitEnabled = !!bot.feature_config?.split_long_messages
+    const messages = splitEnabled ? splitBotMessage(botResponse) : [botResponse]
+
+    const nowMs = Date.now()
     const { error: saveError } = await supabase
       .from("messages")
-      .insert({
-        conversation_id: actualConversationId,
-        content: botResponse,
-        sender_type: 'bot',
-        message_type: 'text',
-        metadata: { 
-          generated_via: 'webhook', 
-          sender_phone: senderPhone,
-          is_handover: shouldPause 
-        }
-      })
+      .insert(
+        messages.map((content, idx) => ({
+          conversation_id: actualConversationId,
+          content,
+          sender_type: 'bot',
+          message_type: 'text',
+          // +idx ms para preservar el orden de las partes en el chat
+          created_at: new Date(nowMs + idx).toISOString(),
+          metadata: {
+            generated_via: 'webhook',
+            sender_phone: senderPhone,
+            is_handover: shouldPause && idx === messages.length - 1,
+          },
+        }))
+      )
 
     if (saveError) {
       console.error('Error saving bot message:', saveError)
@@ -534,7 +588,11 @@ export async function POST(request: NextRequest) {
     if (shouldPause) {
       updateData.status = 'paused'
       updateData.needs_attention = true
-      updateData.paused_until = null
+      // Reactivación automática de la IA: si el bot tiene configurado un tiempo,
+      // la pausa se vence sola; si es 0/no configurado, queda pausada hasta que un humano la reactive.
+      const reactivateHours = Number(bot.feature_config?.auto_reactivate_hours) || 0
+      updateData.paused_until =
+        reactivateHours > 0 ? new Date(Date.now() + reactivateHours * 3600 * 1000).toISOString() : null
     } else {
       updateData.status = 'active'
     }
@@ -549,8 +607,11 @@ export async function POST(request: NextRequest) {
       classifyAndSaveLeadTag(supabase, bot, actualConversationId, message, geminiApiKey).catch(() => {})
     }
 
+    // Devolvemos las partes (mismas que guardamos) para que el webhook de plataforma
+    // las mande como mensajes separados al cliente.
     return NextResponse.json({
       response: botResponse,
+      messages,
       conversationId,
       botId,
       status: shouldPause ? 'paused' : 'active'
@@ -1014,13 +1075,96 @@ IMPORTANTE — cuándo agregar el marcador: SOLO cuando el cliente confirmó el 
 ${productsInfo ? productsInfo + '\n' : ''}${deliveryModesInfo ? deliveryModesInfo + '\n' : ''}${orderRules ? `Instrucciones del negocio para tomar pedidos (seguilas al pie de la letra):\n${orderRules}` : ''}`.trim()
       : ''
 
-    // Bloque RESERVAS: mecánica fija + instrucciones del negocio
-    const reservationsBlock = features.includes('take_reservations')
-      ? `═══ RESERVAS ═══
+    // Modo de la agenda: 'table' (mesa, personas) o 'appointment' (turno, servicio+profesional)
+    const reservationMode = bot.feature_config?.reservation_mode === 'appointment' ? 'appointment' : 'table'
+
+    // En modo turno, cargamos profesionales, servicios y la AGENDA (horarios + ocupados).
+    let appointmentStaffInfo = ''
+    if (features.includes('take_reservations') && reservationMode === 'appointment') {
+      try {
+        const todayStr = new Date().toISOString().slice(0, 10)
+        const [{ data: staffRows }, { data: prodRows }, { data: bookedRows }] = await Promise.all([
+          supabase.from('staff').select('name, service_ids').eq('user_id', bot.user_id).eq('is_active', true),
+          supabase.from('products').select('id, name, duration_min').eq('user_id', bot.user_id).eq('is_service', true),
+          supabase
+            .from('reservations')
+            .select('staff_name, reservation_date, reservation_time, duration_min, status')
+            .eq('user_id', bot.user_id)
+            .not('staff_name', 'is', null)
+            .gte('reservation_date', todayStr)
+            .neq('status', 'cancelled')
+            .order('reservation_date')
+            .order('reservation_time'),
+        ])
+        const prodName = new Map((prodRows || []).map((p: any) => [p.id, p.name]))
+
+        const sections: string[] = []
+
+        // Servicios con duración (para que el bot espacie bien los turnos)
+        if (prodRows && prodRows.length > 0) {
+          const svcLines = prodRows
+            .map((p: any) => `- ${p.name} (${p.duration_min || 30} min)`)
+            .join('\n')
+          sections.push(`Servicios y su duración:\n${svcLines}`)
+        }
+
+        if (staffRows && staffRows.length > 0) {
+          const lines = staffRows
+            .map((s: any) => {
+              const servs = (s.service_ids || []).map((id: string) => prodName.get(id)).filter(Boolean)
+              return `- ${s.name}${servs.length ? ` (hace: ${servs.join(', ')})` : ' (hace todos los servicios)'}`
+            })
+            .join('\n')
+          sections.push(`Profesionales disponibles (ofrecé SOLO estos):\n${lines}`)
+        } else {
+          sections.push('Todavía no hay profesionales cargados.')
+        }
+
+        // Horario de atención (de la info del negocio)
+        const bh = (userProfile as any)?.business_hours
+        if (bh && typeof bh === 'object') {
+          const dias: Record<string, string> = {
+            monday: 'Lun', tuesday: 'Mar', wednesday: 'Mié', thursday: 'Jue',
+            friday: 'Vie', saturday: 'Sáb', sunday: 'Dom',
+          }
+          const abiertos = Object.entries(bh)
+            .filter(([, v]: any) => v?.isOpen)
+            .map(([k, v]: any) => `${dias[k] || k} ${v.open}-${v.close}`)
+          if (abiertos.length) sections.push(`Horario de atención (ofrecé turnos SOLO dentro de esto): ${abiertos.join(', ')}`)
+        }
+
+        // Turnos ya ocupados por profesional (rango inicio-fin según duración) → no ofrecer
+        if (bookedRows && bookedRows.length > 0) {
+          const byStaff: Record<string, string[]> = {}
+          for (const r of bookedRows as any[]) {
+            const key = r.staff_name || '—'
+            const end = addMinutesToTime(r.reservation_time, r.duration_min || 30)
+            ;(byStaff[key] ||= []).push(`${r.reservation_date} ${r.reservation_time}-${end}`)
+          }
+          const occLines = Object.entries(byStaff)
+            .map(([name, slots]) => `- ${name}: ${slots.join(', ')}`)
+            .join('\n')
+          sections.push(`Turnos YA OCUPADOS (NO ofrezcas horarios que se solapen con estos; respetá la duración del servicio. Si piden uno ocupado, proponé otro libre):\n${occLines}`)
+        }
+
+        appointmentStaffInfo = sections.join('\n\n')
+      } catch (e) {
+        console.error('Error cargando agenda para turnos:', e)
+      }
+    }
+
+    // Bloque RESERVAS / TURNOS: mecánica fija + instrucciones del negocio
+    const reservationsBlock = !features.includes('take_reservations')
+      ? ''
+      : reservationMode === 'appointment'
+        ? `═══ TURNOS / CITAS ═══
+Mecánica obligatoria: pedí el SERVICIO que quiere, el PROFESIONAL (ofrecé los de la lista; si no tiene preferencia, asignás uno que haga ese servicio), la FECHA, la HORA, el NOMBRE y el TELÉFONO. Aceptá formatos naturales ("mañana", "el viernes", "3 pm"). No repreguntes datos que el cliente ya dio. Ofrecé SOLO servicios reales (del catálogo de productos) y profesionales reales (de la lista). Al confirmar el turno, agregá AL FINAL, en una línea aparte, la frase EXACTA "RESERVA CONFIRMADA": es un marcador interno, el cliente NO la ve.
+IMPORTANTE — marcador: SOLO cuando ya tenés servicio, profesional, fecha, hora, nombre y teléfono y el cliente confirmó. Si falta algo o solo está consultando, NO lo pongas. Ante la duda, NO lo pongas.
+${appointmentStaffInfo ? appointmentStaffInfo + '\n' : ''}${reservationRules ? `Instrucciones del negocio para turnos (seguilas al pie de la letra):\n${reservationRules}` : ''}`.trim()
+        : `═══ RESERVAS ═══
 Mecánica obligatoria: pedí fecha, hora, cantidad de personas, nombre y teléfono. Aceptá formatos naturales ("mañana", "el viernes", "7 pm"). No repreguntes datos que el cliente ya dio. El TEXTO de confirmación redactalo según tu personalidad y las instrucciones del negocio. Al confirmar la reserva, agregá AL FINAL, en una línea aparte, la frase EXACTA "RESERVA CONFIRMADA": es un marcador interno del sistema, el cliente NO la ve.
 IMPORTANTE — cuándo agregar el marcador: SOLO cuando ya tenés TODOS los datos (fecha, hora, personas, nombre y teléfono) y el cliente confirmó. Si todavía falta algún dato o el cliente solo está consultando disponibilidad, NO agregues el marcador. Ante la duda, NO lo pongas.
 ${reservationRules ? `Instrucciones del negocio para reservas (seguilas al pie de la letra):\n${reservationRules}` : ''}`.trim()
-      : ''
 
     // Bloque FIDELIDAD
     const loyaltyBlock = features.includes('loyalty_points') && loyaltyInfo
@@ -1317,7 +1461,7 @@ Si es un PEDIDO CONFIRMADO (${canTakeOrders ? 'SI' : 'NO'} habilitado):
   "tags": ["tag1"]
 }
 
-Si es una RESERVA CONFIRMADA (${canTakeReservations ? 'SI' : 'NO'} habilitado):
+Si es una RESERVA / TURNO CONFIRMADO (${canTakeReservations ? 'SI' : 'NO'} habilitado):
 {
   "type": "reservation",
   "customerName": "...",
@@ -1325,6 +1469,8 @@ Si es una RESERVA CONFIRMADA (${canTakeReservations ? 'SI' : 'NO'} habilitado):
   "reservationDate": "YYYY-MM-DD",
   "reservationTime": "HH:MM",
   "partySize": 0,
+  "serviceName": "nombre exacto del servicio si es un turno, o null",
+  "staffName": "nombre exacto del profesional si es un turno, o null",
   "specialRequests": "...",
   "tags": ["tag1"]
 }
@@ -1545,6 +1691,51 @@ async function saveReservationFromAI(
       }
     }
 
+    // Modo turno: resolver servicio (producto) y profesional (staff) a sus IDs.
+    let serviceId: string | null = null
+    let serviceName: string | null = reservationData.serviceName || null
+    let staffId: string | null = null
+    let staffName: string | null = reservationData.staffName || null
+    let durationMin = 30
+    if (serviceName) {
+      const { data: prod } = await supabase
+        .from('products').select('id, name, duration_min').eq('user_id', bot.user_id).ilike('name', serviceName).limit(1).maybeSingle()
+      if (prod) { serviceId = prod.id; serviceName = prod.name; durationMin = prod.duration_min || 30 }
+    }
+    if (staffName) {
+      const { data: st } = await supabase
+        .from('staff').select('id, name').eq('user_id', bot.user_id).ilike('name', staffName).limit(1).maybeSingle()
+      if (st) { staffId = st.id; staffName = st.name }
+    }
+
+    // AGENDA: evitar SOLAPAMIENTO del mismo profesional (según la duración del servicio).
+    if (staffId && reservationData.reservationDate && reservationData.reservationTime) {
+      const newStart = timeToMinutes(reservationData.reservationTime)
+      const newEnd = newStart + durationMin
+      const { data: sameDay } = await supabase
+        .from('reservations')
+        .select('reservation_time, duration_min')
+        .eq('staff_id', staffId)
+        .eq('reservation_date', reservationData.reservationDate)
+        .neq('status', 'cancelled')
+      const overlap = (sameDay || []).some((r: any) => {
+        const s = timeToMinutes(r.reservation_time)
+        const e = s + (r.duration_min || 30)
+        return newStart < e && s < newEnd // se pisan los rangos
+      })
+      if (overlap) {
+        console.warn(`⛔ Turno solapado: ${staffName} el ${reservationData.reservationDate} ${reservationData.reservationTime}`)
+        await createNotification({
+          userId: bot.user_id,
+          title: "Turno solapado (revisar)",
+          message: `${customerName || 'Un cliente'} intentó tomar turno con ${staffName} el ${reservationData.reservationDate} a las ${reservationData.reservationTime}, pero se pisa con otro. Contactalo para reprogramar.`,
+          type: "warning",
+          link: `/dashboard/reservas`,
+        })
+        return // no creamos el turno solapado
+      }
+    }
+
     const { data: insertedReservation, error } = await supabase
       .from("reservations")
       .insert({
@@ -1557,6 +1748,14 @@ async function saveReservationFromAI(
         reservation_time: reservationData.reservationTime,
         party_size: reservationData.partySize,
         special_requests: reservationData.specialRequests,
+        staff_id: staffId,
+        service_id: serviceId,
+        staff_name: staffName,
+        service_name: serviceName,
+        duration_min: serviceId ? durationMin : null,
+        ends_at: serviceId && reservationData.reservationDate && reservationData.reservationTime
+          ? `${reservationData.reservationDate}T${addMinutesToTime(reservationData.reservationTime, durationMin)}:00`
+          : null,
         status: 'pending',
         tags: tags
       })
@@ -1564,10 +1763,13 @@ async function saveReservationFromAI(
 
     if (!error && insertedReservation) {
       console.log('✅ Reservation saved successfully from AI');
+      const notifMsg = (staffName || serviceName)
+        ? `Turno${serviceName ? ` de ${serviceName}` : ''}${staffName ? ` con ${staffName}` : ''} el ${reservationData.reservationDate} a las ${reservationData.reservationTime}`
+        : `Reserva para ${reservationData.partySize} personas el ${reservationData.reservationDate} a las ${reservationData.reservationTime}`
       await createNotification({
         userId: bot.user_id,
-        title: "Nueva reserva confirmada",
-        message: `Reserva para ${reservationData.partySize} personas el ${reservationData.reservationDate} a las ${reservationData.reservationTime}`,
+        title: (staffName || serviceName) ? "Nuevo turno confirmado" : "Nueva reserva confirmada",
+        message: notifMsg,
         type: "success",
         link: `/dashboard/reservas`
       });

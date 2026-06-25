@@ -142,7 +142,13 @@ type FormState = {
   platforms: string[]
   personality_prompt: string
   features: string[]
-  feature_config: { prompts?: Record<string, string> }
+  feature_config: {
+    prompts?: Record<string, string>
+    auto_reactivate_hours?: number // 0 = nunca
+    debounce_seconds?: number
+    split_long_messages?: boolean
+    reservation_mode?: "table" | "appointment"
+  }
   allowed_tags: string[]
   automations: string[]
   gemini_api_key: string
@@ -700,6 +706,32 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                       />
                     </div>
                   )}
+
+                  {/* Modo de reservas (solo para la función Tomar reservas) */}
+                  {isEnabled && feature.id === "take_reservations" && (
+                    <div className="pt-3 mt-1">
+                      <Label className="text-xs text-muted-foreground">Tipo de agenda</Label>
+                      <p className="text-[11px] text-muted-foreground/80 mb-1">
+                        "Mesa/Reserva" pide cantidad de personas (restaurantes). "Turno/Cita" pide servicio y profesional (peluquería, barbería, consultorio).
+                      </p>
+                      <select
+                        value={formData.feature_config?.reservation_mode || "table"}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            feature_config: {
+                              ...prev.feature_config,
+                              reservation_mode: e.target.value as "table" | "appointment",
+                            },
+                          }))
+                        }
+                        className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm"
+                      >
+                        <option value="table">Mesa / Reserva</option>
+                        <option value="appointment">Turno / Cita</option>
+                      </select>
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -822,6 +854,86 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             </div>
           </div>
 
+
+          {/* Comportamiento del bot — full width */}
+          <div className="lg:col-span-3 executive-card space-y-5">
+            <div className="flex items-center gap-2">
+              <Bot className="w-4 h-4 text-[#D1F366]" />
+              <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Comportamiento del bot</p>
+            </div>
+
+            {/* Reactivador automático de IA */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-1">
+              <div className="min-w-0">
+                <Label className="font-medium">Reactivar IA automáticamente</Label>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                  Cuando pausás la IA o se deriva a un humano, vuelve a activarse sola después de este tiempo.
+                </p>
+              </div>
+              <select
+                value={formData.feature_config?.auto_reactivate_hours ?? 0}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    feature_config: { ...prev.feature_config, auto_reactivate_hours: Number(e.target.value) },
+                  }))
+                }
+                className="h-9 rounded-lg border border-border bg-background px-3 text-sm flex-shrink-0"
+              >
+                <option value={0}>Nunca (manual)</option>
+                <option value={1}>1 hora</option>
+                <option value={3}>3 horas</option>
+                <option value={6}>6 horas</option>
+                <option value={12}>12 horas</option>
+                <option value={24}>24 horas</option>
+              </select>
+            </div>
+
+            {/* Ventana de escucha (debounce) */}
+            <div className="pt-3 border-t border-border/30">
+              <Label className="font-medium">Ventana de escucha</Label>
+              <p className="text-[11px] text-muted-foreground/80 mt-0.5 mb-2">
+                Tiempo que el bot espera para agrupar los mensajes seguidos del cliente en una sola respuesta.
+              </p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={3}
+                  max={15}
+                  step={1}
+                  value={formData.feature_config?.debounce_seconds ?? 7}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      feature_config: { ...prev.feature_config, debounce_seconds: Number(e.target.value) },
+                    }))
+                  }
+                  className="flex-1 accent-[#D1F366]"
+                />
+                <span className="text-sm font-bold w-12 text-right">{formData.feature_config?.debounce_seconds ?? 7}s</span>
+              </div>
+            </div>
+
+            {/* Separar mensajes largos */}
+            <div className="flex items-center justify-between gap-2 pt-3 border-t border-border/30">
+              <div className="min-w-0">
+                <Label className="font-medium">Separar mensajes largos</Label>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                  Divide las respuestas largas en varios mensajes (por párrafo) para que se sienta más natural.
+                </p>
+              </div>
+              <Switch
+                checked={!!formData.feature_config?.split_long_messages}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    feature_config: { ...prev.feature_config, split_long_messages: checked },
+                  }))
+                }
+              />
+            </div>
+
+          </div>
 
           {/* Plantillas de WhatsApp — bento grid full width */}
           {formData.platforms.includes("whatsapp") && (

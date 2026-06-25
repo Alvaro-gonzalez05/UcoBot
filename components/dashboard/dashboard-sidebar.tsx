@@ -77,13 +77,15 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
       if (!authUser) return
       if (!userId) setUserId(authUser.id)
 
-      const { data: bots, error: botsError } = await supabase
-        .from("bots").select("features").eq("user_id", authUser.id)
-      if (botsError) { console.error('Error fetching bots for sidebar:', botsError); return }
-
       const { data: userProfile } = await supabase
-        .from("user_profiles").select("role, sidebar_config").eq("id", authUser.id).single()
+        .from("user_profiles").select("role, sidebar_config, parent_user_id").eq("id", authUser.id).single()
       const isAdmin = userProfile?.role === 'admin'
+      // Si es empleado, las funciones se calculan sobre los bots del DUEÑO.
+      const ownerId = userProfile?.parent_user_id || authUser.id
+
+      const { data: bots, error: botsError } = await supabase
+        .from("bots").select("features").eq("user_id", ownerId)
+      if (botsError) { console.error('Error fetching bots for sidebar:', botsError); return }
 
       type SidebarEntry = { id: string; label: string; visible: boolean }
       const sidebarConfig: SidebarEntry[] = Array.isArray(userProfile?.sidebar_config)

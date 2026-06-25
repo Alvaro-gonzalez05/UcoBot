@@ -448,10 +448,10 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
 
         console.log('🤖 Generating AI response for Instagram message...')
 
-        // DEBOUNCE LOGIC: Wait 7 seconds to see if more messages arrive
-        // This allows grouping multiple rapid messages into a single AI response
-        console.log('⏳ Waiting 7s for potential follow-up messages...')
-        await new Promise(resolve => setTimeout(resolve, 7000))
+        // DEBOUNCE LOGIC: ventana de escucha configurable por bot (default 7s)
+        const debounceMs = (Number(bot?.feature_config?.debounce_seconds) || 7) * 1000
+        console.log(`⏳ Esperando ${debounceMs}ms (ventana de escucha)...`)
+        await new Promise(resolve => setTimeout(resolve, debounceMs))
 
         // Check if any newer messages exist for this conversation
         const { data: newerMessages } = await supabase
@@ -492,26 +492,23 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
 
         if (aiResponse.ok) {
           const aiResponseData = await aiResponse.json()
-          
-          // Store AI response
-          await supabase
-            .from('messages')
-            .insert({
-              conversation_id: conversation.id,
-              content: { type: 'text', text: aiResponseData.response },
-              text_content: aiResponseData.response,
-              sender_type: 'bot',
-              created_at: new Date().toISOString()
-            })
 
-          // Send response via Instagram API
+          // El mensaje del bot ya lo guarda /api/chat/webhook (una o varias partes).
+
+          // Send response via Instagram API (varias partes si "separar mensajes largos")
           try {
-            await sendInstagramMessage(
-              integration.config.access_token, 
-              integration.config.instagram_business_account_id, 
-              senderInstagramId, 
-              aiResponseData.response
-            )
+            const parts: string[] = Array.isArray(aiResponseData.messages) && aiResponseData.messages.length > 0
+              ? aiResponseData.messages
+              : [aiResponseData.response]
+            for (let i = 0; i < parts.length; i++) {
+              await sendInstagramMessage(
+                integration.config.access_token,
+                integration.config.instagram_business_account_id,
+                senderInstagramId,
+                parts[i]
+              )
+              if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 1200))
+            }
             console.log('✅ Instagram message sent successfully!')
 
             // Log usage for AI response

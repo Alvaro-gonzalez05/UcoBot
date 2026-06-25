@@ -308,9 +308,10 @@ async function processMessengerEntry(entry: any, request: NextRequest) {
           }
         }
 
-        // DEBOUNCE: esperar 7s por mensajes adicionales para responder una sola vez
-        console.log('⏳ Waiting 7s for potential follow-up messages...')
-        await new Promise((resolve) => setTimeout(resolve, 7000))
+        // DEBOUNCE: ventana de escucha configurable por bot (default 7s)
+        const debounceMs = (Number(bot?.feature_config?.debounce_seconds) || 7) * 1000
+        console.log(`⏳ Esperando ${debounceMs}ms (ventana de escucha)...`)
+        await new Promise((resolve) => setTimeout(resolve, debounceMs))
 
         const { data: newerMessages } = await supabase
           .from('messages')
@@ -347,21 +348,15 @@ async function processMessengerEntry(entry: any, request: NextRequest) {
           const aiResponseData = await aiResponse.json()
 
           if (aiResponseData.response) {
-            await supabase.from('messages').insert({
-              conversation_id: conversation.id,
-              content: aiResponseData.response,
-              sender_type: 'bot',
-              message_type: 'text',
-              created_at: new Date().toISOString(),
-            })
-
+            // El mensaje del bot ya lo guarda /api/chat/webhook (una o varias partes).
             try {
-              await sendMessengerMessage(
-                integration.config.access_token,
-                pageId,
-                senderPsid,
-                aiResponseData.response
-              )
+              const parts: string[] = Array.isArray(aiResponseData.messages) && aiResponseData.messages.length > 0
+                ? aiResponseData.messages
+                : [aiResponseData.response]
+              for (let i = 0; i < parts.length; i++) {
+                await sendMessengerMessage(integration.config.access_token, pageId, senderPsid, parts[i])
+                if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 1200))
+              }
               console.log('✅ Messenger message sent successfully!')
 
               await supabase.from('usage_logs').insert({

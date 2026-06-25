@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { PedidosClient } from "@/components/dashboard/pedidos-client"
+import { getAccountContext } from "@/lib/account"
 
 interface PedidosPageProps {
   searchParams: {
@@ -16,6 +17,9 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
     redirect("/login")
   }
 
+  const account = await getAccountContext()
+  const ownerId = account?.ownerId || data.user.id
+
   // Parse pagination parameters
   const page = parseInt(searchParams.page || "1")
   const limit = 10 // Pedidos por página
@@ -29,7 +33,7 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
       client:client_id(name, phone),
       conversation:conversation_id(platform)
     `, { count: "exact" })
-    .eq("user_id", data.user.id)
+    .eq("user_id", ownerId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1)
 
@@ -41,7 +45,7 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
   const { data: products } = await supabase
     .from("products")
     .select("*")
-    .eq("user_id", data.user.id)
+    .eq("user_id", ownerId)
     .order("created_at", { ascending: false })
 
   // Get unique categories
@@ -51,7 +55,7 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
   const { data: deliverySettings } = await supabase
     .from("delivery_settings")
     .select("*")
-    .eq("user_id", data.user.id)
+    .eq("user_id", ownerId)
     .single()
 
   return (

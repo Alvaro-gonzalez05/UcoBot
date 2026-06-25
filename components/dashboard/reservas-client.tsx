@@ -33,6 +33,8 @@ interface Reservation {
   party_size: number
   status: string
   table_number?: string
+  staff_name?: string | null
+  service_name?: string | null
   special_requests?: string
   tags?: string[]
   conversation?: {
@@ -404,14 +406,26 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
                         <Clock className="h-4 w-4 flex-shrink-0" />
                         <span>{reservation.reservation_time}</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        <Store className="h-4 w-4 flex-shrink-0" />
-                        <span>{reservation.table_number || "Sin mesa"}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Users className="h-4 w-4 flex-shrink-0" />
-                        <span>{reservation.party_size} {reservation.party_size === 1 ? "persona" : "personas"}</span>
-                      </div>
+                      {reservation.service_name || reservation.staff_name ? (
+                        <div className="flex items-center gap-1.5">
+                          <Store className="h-4 w-4 flex-shrink-0" />
+                          <span>
+                            {reservation.service_name || "Turno"}
+                            {reservation.staff_name ? ` con ${reservation.staff_name}` : ""}
+                          </span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <Store className="h-4 w-4 flex-shrink-0" />
+                            <span>{reservation.table_number || "Sin mesa"}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Users className="h-4 w-4 flex-shrink-0" />
+                            <span>{reservation.party_size} {reservation.party_size === 1 ? "persona" : "personas"}</span>
+                          </div>
+                        </>
+                      )}
                       {reservation.special_requests && (
                         <div className="flex items-center gap-1.5">
                           <Tag className="h-4 w-4 flex-shrink-0" />

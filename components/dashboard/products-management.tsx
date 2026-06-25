@@ -75,6 +75,8 @@ export function ProductsManagement({ initialProducts, userId, botsWithOrders }: 
     description: "",
     price: "",
     category: "",
+    is_service: false,
+    duration_min: "",
     is_available: true,
     image_url: "",
   })
@@ -133,6 +135,7 @@ export function ProductsManagement({ initialProducts, userId, botsWithOrders }: 
         .insert([{
           ...formData,
           price: parseFloat(formData.price),
+          duration_min: formData.is_service ? (formData.duration_min ? parseInt(formData.duration_min) : 30) : null,
           user_id: userId,
         }])
         .select()
@@ -169,6 +172,7 @@ export function ProductsManagement({ initialProducts, userId, botsWithOrders }: 
         .update({
           ...formData,
           price: parseFloat(formData.price),
+          duration_min: formData.is_service ? (formData.duration_min ? parseInt(formData.duration_min) : 30) : null,
         })
         .eq("id", selectedProduct.id)
         .select()
@@ -250,6 +254,8 @@ export function ProductsManagement({ initialProducts, userId, botsWithOrders }: 
       description: product.description || "",
       price: product.price.toString(),
       category: product.category || "",
+      is_service: !!(product as any).is_service,
+      duration_min: (product as any).duration_min ? String((product as any).duration_min) : "",
       is_available: product.is_available,
       image_url: product.image_url || "",
     })
@@ -445,6 +451,30 @@ export function ProductsManagement({ initialProducts, userId, botsWithOrders }: 
               />
             </div>
             <div className="grid gap-2">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="is_service"
+                  checked={formData.is_service}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_service: checked })}
+                />
+                <Label htmlFor="is_service">Es un servicio (se agenda como turno)</Label>
+              </div>
+              {formData.is_service && (
+                <div className="grid gap-1.5 mt-1">
+                  <Label htmlFor="duration_min">Duración (minutos)</Label>
+                  <Input
+                    id="duration_min"
+                    type="number"
+                    min="5"
+                    step="5"
+                    value={formData.duration_min}
+                    onChange={(e) => setFormData({ ...formData, duration_min: e.target.value })}
+                    placeholder="30 (default si lo dejás vacío)"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="grid gap-2">
               <Label htmlFor="description">Descripción</Label>
               <Textarea
                 id="description"
@@ -523,6 +553,30 @@ export function ProductsManagement({ initialProducts, userId, botsWithOrders }: 
                   value={formData.category}
                   onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 />
+              </div>
+              <div className="grid gap-2">
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="edit-is_service"
+                    checked={formData.is_service}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_service: checked })}
+                  />
+                  <Label htmlFor="edit-is_service">Es un servicio (se agenda como turno)</Label>
+                </div>
+                {formData.is_service && (
+                  <div className="grid gap-1.5 mt-1">
+                    <Label htmlFor="edit-duration_min">Duración (minutos)</Label>
+                    <Input
+                      id="edit-duration_min"
+                      type="number"
+                      min="5"
+                      step="5"
+                      value={formData.duration_min}
+                      onChange={(e) => setFormData({ ...formData, duration_min: e.target.value })}
+                      placeholder="30 (default si lo dejás vacío)"
+                    />
+                  </div>
+                )}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="edit-description">Descripción</Label>

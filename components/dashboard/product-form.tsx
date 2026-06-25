@@ -38,7 +38,9 @@ export function ProductForm({ onProductCreated, existingCategories }: ProductFor
     price: "",
     category: "",
     is_available: true,
-    image_url: ""
+    image_url: "",
+    is_service: false,
+    duration_min: "",
   })
   const [newCategory, setNewCategory] = useState("")
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false)
@@ -308,12 +310,37 @@ export function ProductForm({ onProductCreated, existingCategories }: ProductFor
               <Switch
                 id="is_available"
                 checked={formData.is_available}
-                onCheckedChange={(checked) => 
+                onCheckedChange={(checked) =>
                   setFormData(prev => ({ ...prev, is_available: checked }))
                 }
               />
               <Label htmlFor="is_available">Disponible para pedidos</Label>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="is_service"
+                checked={formData.is_service}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_service: checked }))}
+              />
+              <Label htmlFor="is_service">Es un servicio (se agenda como turno)</Label>
+            </div>
+            {formData.is_service && (
+              <div className="space-y-1 pt-1">
+                <Label htmlFor="duration_min">Duración (minutos)</Label>
+                <Input
+                  id="duration_min"
+                  type="number"
+                  min="5"
+                  step="5"
+                  placeholder="30 (default si lo dejás vacío)"
+                  value={formData.duration_min}
+                  onChange={(e) => setFormData(prev => ({ ...prev, duration_min: e.target.value }))}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex gap-2 pt-4">
