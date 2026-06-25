@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { TeamManagement } from "@/components/dashboard/team-management"
 import {
   User, Bell, CreditCard, Shield, LogOut, Trash2,
   LayoutDashboard, Camera, Eye, EyeOff, GripVertical,
@@ -56,6 +57,7 @@ export function Settings() {
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [createdAt, setCreatedAt] = useState("")
   const [planType, setPlanType] = useState("free")
+  const [isOwner, setIsOwner] = useState(true) // false si es empleado
 
   // Sidebar config state
   const [sidebarSections, setSidebarSections] = useState<SidebarSectionConfig[]>(
@@ -92,7 +94,7 @@ export function Settings() {
 
       const { data } = await supabase
         .from("user_profiles")
-        .select("business_name, full_name, avatar_url, sidebar_config, plan_type")
+        .select("business_name, full_name, avatar_url, sidebar_config, plan_type, parent_user_id")
         .eq("id", user.id)
         .single()
 
@@ -101,6 +103,7 @@ export function Settings() {
         setFullName(data.full_name || "")
         setAvatarUrl(data.avatar_url || null)
         setPlanType(data.plan_type || "free")
+        setIsOwner(!data.parent_user_id)
 
         if (data.sidebar_config && Array.isArray(data.sidebar_config)) {
           // Merge saved config with defaults (in case new sections were added)
@@ -257,10 +260,11 @@ export function Settings() {
       </ScrollSlideUp>
 
       <Tabs defaultValue="perfil" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className={`grid w-full ${isOwner ? "grid-cols-6" : "grid-cols-5"}`}>
           <TabsTrigger value="perfil">Perfil</TabsTrigger>
           <TabsTrigger value="negocio">Mi negocio</TabsTrigger>
           <TabsTrigger value="panel">Panel lateral</TabsTrigger>
+          {isOwner && <TabsTrigger value="equipo">Equipo</TabsTrigger>}
           <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
           <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
         </TabsList>
@@ -456,6 +460,13 @@ export function Settings() {
             </Card>
           </ScrollFadeIn>
         </TabsContent>
+
+        {/* ── EQUIPO (solo dueño) ──────────────────────────────────────────── */}
+        {isOwner && (
+          <TabsContent value="equipo" className="space-y-4">
+            <TeamManagement />
+          </TabsContent>
+        )}
 
         {/* ── SEGURIDAD ────────────────────────────────────────────────────── */}
         <TabsContent value="seguridad" className="space-y-4">

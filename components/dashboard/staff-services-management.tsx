@@ -92,7 +92,7 @@ export function StaffServicesManagement({ userId }: { userId: string }) {
     <div className="bg-card rounded-2xl border border-border p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-1">
         <UserRound className="h-5 w-5 text-[#D1F366]" />
-        <h3 className="font-bold">Equipo</h3>
+        <h3 className="font-bold">Profesionales (turnos)</h3>
       </div>
       <p className="text-xs text-muted-foreground mb-4">
         Cargá tus profesionales y elegí qué servicios hace cada uno. Los servicios son tus{" "}
