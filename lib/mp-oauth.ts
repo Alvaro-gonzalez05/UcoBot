@@ -24,7 +24,8 @@ export function getOAuthClientSecret(): string {
 }
 
 export function getRedirectUri(): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  // Sacamos barras finales para no generar "dominio//api" (MP rechaza si no coincide exacto).
+  const base = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "")
   return `${base}/api/mp/oauth/callback`
 }
 

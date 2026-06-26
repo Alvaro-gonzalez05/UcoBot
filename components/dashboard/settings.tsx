@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { TeamManagement } from "@/components/dashboard/team-management"
+import { MpConnectCard } from "@/components/dashboard/mp-connect-card"
 import {
   User, Bell, CreditCard, Shield, LogOut, Trash2,
   LayoutDashboard, Camera, Eye, EyeOff, GripVertical,
@@ -260,11 +261,12 @@ export function Settings() {
       </ScrollSlideUp>
 
       <Tabs defaultValue="perfil" className="space-y-6">
-        <TabsList className={`grid w-full ${isOwner ? "grid-cols-6" : "grid-cols-5"}`}>
+        <TabsList className={`grid w-full ${isOwner ? "grid-cols-7" : "grid-cols-5"}`}>
           <TabsTrigger value="perfil">Perfil</TabsTrigger>
           <TabsTrigger value="negocio">Mi negocio</TabsTrigger>
           <TabsTrigger value="panel">Panel lateral</TabsTrigger>
           {isOwner && <TabsTrigger value="equipo">Equipo</TabsTrigger>}
+          {isOwner && <TabsTrigger value="integraciones">Integraciones</TabsTrigger>}
           <TabsTrigger value="seguridad">Seguridad</TabsTrigger>
           <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
         </TabsList>
@@ -465,6 +467,15 @@ export function Settings() {
         {isOwner && (
           <TabsContent value="equipo" className="space-y-4">
             <TeamManagement />
+          </TabsContent>
+        )}
+
+        {/* ── INTEGRACIONES (solo dueño) ───────────────────────────────────── */}
+        {isOwner && (
+          <TabsContent value="integraciones" className="space-y-4">
+            <Suspense fallback={null}>
+              <MpConnectCard />
+            </Suspense>
           </TabsContent>
         )}
 

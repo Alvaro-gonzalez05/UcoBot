@@ -11,7 +11,6 @@ import {
   Moon,
   Loader2,
   CheckCircle2,
-  Plug,
 } from "lucide-react";
 import { SiMercadopago } from "react-icons/si";
 import { useTheme } from "next-themes";
@@ -23,7 +22,6 @@ import type { User } from "@supabase/supabase-js";
 import LogoutAnimation from "@/components/ui/logout-animation";
 import { useLogoutAnimation } from "@/hooks/use-logout-animation";
 import { isSubscriptionActive, trialDaysLeft } from "@/lib/subscription";
-import { toast } from "sonner";
 
 interface ProfileDropdownProps {
   user: User;
@@ -38,7 +36,6 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [mpConnected, setMpConnected] = useState<boolean | null>(null);
   const [subLoading, setSubLoading] = useState(false);
   const router = useRouter();
   const supabase = createClient();
@@ -90,45 +87,6 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Estado de conexión de Mercado Pago (para la sección Integraciones)
-  useEffect(() => {
-    if (!isOpen || mpConnected !== null) return;
-    fetch("/api/mp/oauth/status")
-      .then((r) => r.json())
-      .then((j) => setMpConnected(!!j.connected))
-      .catch(() => setMpConnected(false));
-  }, [isOpen, mpConnected]);
-
-  // Resultado del OAuth cuando se conecta por popup
-  useEffect(() => {
-    const onMessage = (e: MessageEvent) => {
-      if (e.origin !== window.location.origin) return;
-      if (e.data?.source !== "mp-oauth") return;
-      if (e.data.mp === "ok") {
-        setMpConnected(true);
-        toast.success("¡Mercado Pago conectado!");
-      } else {
-        toast.error(e.data.msg || "No se pudo conectar Mercado Pago");
-      }
-    };
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []);
-
-  // Abre el OAuth de Mercado Pago en un popup centrado
-  const openMpConnect = () => {
-    const w = 480;
-    const h = 720;
-    const left = window.screenX + Math.max(0, (window.outerWidth - w) / 2);
-    const top = window.screenY + Math.max(0, (window.outerHeight - h) / 2);
-    const popup = window.open(
-      "/api/mp/oauth/start",
-      "mp_oauth",
-      `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
-    );
-    if (!popup) window.location.href = "/api/mp/oauth/start";
-  };
 
   if (!mounted) {
     return null;
@@ -396,42 +354,6 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
                     </span>
                   )}
                 </div>
-              </div>
-
-              {/* Integraciones */}
-              <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
-                <p className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3 flex items-center gap-1.5">
-                  <Plug className="h-3.5 w-3.5" /> Integraciones
-                </p>
-                <button
-                  onClick={() => {
-                    if (mpConnected) {
-                      setIsOpen(false);
-                      router.push("/dashboard/configuracion");
-                    } else {
-                      openMpConnect();
-                    }
-                  }}
-                  className="group relative w-32 rounded-2xl border border-neutral-200 dark:border-neutral-700 p-3 text-left hover:border-[#009EE3] hover:shadow-md transition-all bg-white/60 dark:bg-neutral-800/40"
-                >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl mb-2" style={{ backgroundColor: "#009EE3" }}>
-                    <SiMercadopago className="h-5 w-5 text-white" />
-                  </div>
-                  <p className="text-sm font-semibold text-neutral-800 dark:text-white leading-tight">Mercado Pago</p>
-                  {mpConnected === null ? (
-                    <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-neutral-400">
-                      <Loader2 className="h-3 w-3 animate-spin" /> ...
-                    </span>
-                  ) : mpConnected ? (
-                    <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Conectado
-                    </span>
-                  ) : (
-                    <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-bold text-neutral-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-neutral-300 dark:bg-neutral-600" /> Desconectado
-                    </span>
-                  )}
-                </button>
               </div>
 
               {/* Menu Items */}

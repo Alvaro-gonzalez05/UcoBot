@@ -9,7 +9,7 @@ import { refreshAccessToken, expiresAtFromNow } from "@/lib/mp-oauth"
 const MP_API = "https://api.mercadopago.com"
 
 function appUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  return (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "")
 }
 
 /**
@@ -95,6 +95,120 @@ export async function createPreference(params: {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data?.message || "Mercado Pago rechazó la creación del pago")
   return { id: data.id as string, init_point: data.init_point as string }
+}
+
+/**
+ * Asegura que el vendedor tenga una sucursal + caja (POS) para el QR interoperable.
+ * Devuelve el external_pos_id (lo guarda en mp_connections para no recrearlo).
+ */
+export async function ensureSellerPos(userId: string, sellerToken: string, mpUserId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data: conn } = await admin
+    .from("mp_connections")
+    .select("pos_external_id, store_id")
+    .eq("user_id", userId)
+    .maybeSingle()
+  if (conn?.pos_external_id) return conn.pos_external_id
+
+  const { data: prof } = await admin
+    .from("user_profiles")
+    .select("business_name, location")
+    .eq("id", userId)
+    .maybeSingle()
+
+  const extStore = `UCO${userId.replace(/-/g, "").slice(0, 10).toUpperCase()}`
+  const extPos = `${extStore}P1`
+
+  // 1) Crear sucursal (si ya existe, MP devuelve error y seguimos con el store_id guardado)
+  let storeId = conn?.store_id || null
+  try {
+    const storeRes = await fetch(`${MP_API}/users/${mpUserId}/stores`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sellerToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: prof?.business_name || "Local",
+        external_id: extStore,
+        location: {
+          street_number: "0",
+          street_name: prof?.location || "Sin dirección",
+          city_name: "N/A",
+          state_name: "N/A",
+          latitude: -34.6037,
+          longitude: -58.3816,
+        },
+      }),
+    })
+    const store = await storeRes.json().catch(() => ({}))
+    if (store?.id) storeId = String(store.id)
+  } catch (e) {
+    console.error("Error creando sucursal MP:", e)
+  }
+
+  // 2) Crear caja (POS)
+  try {
+    const posRes = await fetch(`${MP_API}/pos`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${sellerToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "UcoBot POS",
+        fixed_amount: true,
+        store_id: storeId,
+        external_store_id: extStore,
+        external_id: extPos,
+        category: 621102,
+      }),
+    })
+    const pos = await posRes.json().catch(() => ({}))
+    // Si la caja ya existía o se creó, usamos nuestro external_id determinístico.
+    if (!posRes.ok && !String(pos?.message || "").toLowerCase().includes("already")) {
+      console.error("Error creando caja MP:", pos)
+    }
+  } catch (e) {
+    console.error("Error creando caja MP:", e)
+  }
+
+  await admin.from("mp_connections").update({ store_id: storeId, pos_external_id: extPos }).eq("user_id", userId)
+  return extPos
+}
+
+/** Crea un QR dinámico (interoperable) con monto. Devuelve la trama qr_data y el id de la orden. */
+export async function createQrOrder(
+  sellerToken: string,
+  externalPosId: string,
+  amount: number,
+  externalReference: string
+): Promise<{ qrData: string | null; orderId: string | null }> {
+  const res = await fetch(`${MP_API}/v1/orders`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${sellerToken}`,
+      "Content-Type": "application/json",
+      "X-Idempotency-Key": (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
+    },
+    body: JSON.stringify({
+      type: "qr",
+      total_amount: amount.toFixed(2),
+      external_reference: externalReference,
+      config: { qr: { external_pos_id: externalPosId, mode: "dynamic" } },
+      transactions: { payments: [{ amount: amount.toFixed(2) }] },
+    }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data?.message || data?.errors?.[0]?.message || "Mercado Pago rechazó la creación del QR")
+  }
+  return { qrData: data?.type_response?.qr_data || data?.qr_data || null, orderId: data?.id ? String(data.id) : null }
+}
+
+/** Consulta el estado de una orden (para saber si el QR ya se pagó). */
+export async function getQrOrderStatus(sellerToken: string, orderId: string): Promise<{ paid: boolean; status: string }> {
+  const res = await fetch(`${MP_API}/v1/orders/${orderId}`, {
+    headers: { Authorization: `Bearer ${sellerToken}` },
+  })
+  const data = await res.json().catch(() => ({}))
+  const status = String(data?.status || "")
+  const paid = ["processed", "paid", "closed", "completed"].includes(status)
+  return { paid, status }
 }
 
 /** Consulta un pago con el token del vendedor (para el webhook). */
