@@ -6,9 +6,10 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, Link2, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { motion } from "framer-motion"
 import QRCode from "react-qr-code"
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
@@ -102,8 +103,12 @@ const paymentOptions = [
   { id: "cash", label: "Efectivo", icon: Banknote },
   { id: "card", label: "Tarjeta", icon: CreditCard },
   { id: "transfer", label: "Transferencia", icon: Landmark },
-  { id: "link", label: "Link Pago", icon: Link2 },
+  { id: "qr", label: "QR", icon: QrCode },
 ]
+
+/** Configs viejas usaban "link" (Link de pago); ahora es "qr". */
+const normalizePaymentMethods = (methods: string[]) =>
+  Array.from(new Set(methods.map((m) => (m === "link" ? "qr" : m))))
 
 export function PuntoDeVentaView({ userId, products: initialProducts, categories: initialCategories, clients, promotions }: PuntoDeVentaViewProps) {
   const supabase = createClient()
@@ -134,7 +139,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   // Configuración del POS (medios de pago + propina) y cobro
   const [posSettings, setPosSettings] = useState<PosSettings>({
-    payment_methods: ["cash", "card", "transfer", "link"],
+    payment_methods: ["cash", "card", "transfer", "qr"],
     tip_enabled: false,
     tip_percent: 10,
   })
@@ -177,9 +182,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       .maybeSingle()
       .then(({ data }) => {
         if (data) {
-          const pm = Array.isArray(data.payment_methods) && data.payment_methods.length > 0
-            ? data.payment_methods
-            : ["cash", "card", "transfer", "link"]
+          const pm = normalizePaymentMethods(
+            Array.isArray(data.payment_methods) && data.payment_methods.length > 0
+              ? data.payment_methods
+              : ["cash", "card", "transfer", "qr"]
+          )
           setPosSettings({
             payment_methods: pm,
             tip_enabled: data.tip_enabled ?? false,
@@ -724,6 +731,21 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     }, 3000)
     return () => clearInterval(interval)
   }, [mpQr, mpQrOrderId, mpQrPaid])
+
+  // Al confirmarse el pago: dejamos ver la animación del check y finalizamos la venta
+  // (registra la orden, cierra el carrito y el diálogo del QR).
+  useEffect(() => {
+    if (!mpQrPaid) return
+    const t = setTimeout(async () => {
+      await submitSale("completed")
+      setMpQr(null)
+      setMpQrOrderId(null)
+      setMpQrPaid(false)
+    }, 1800)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mpQrPaid])
+
   const moveOrder = () => submitSale("pending")
 
   return (
@@ -765,7 +787,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
           <div className="flex-1 overflow-y-auto -mx-1 px-1 pb-2 custom-scrollbar">
           {isRefetching ? (
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] 2xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(170px,1fr))]">
               {Array.from({ length: PRODUCTS_PAGE_SIZE }).map((_, i) => (
                 <div key={i} className="animate-pulse rounded-[2rem] bg-white dark:bg-muted p-3 shadow-[0_18px_45px_-8px_rgba(17,24,39,0.5)] dark:shadow-[0_18px_45px_-8px_rgba(0,0,0,0.9)]">
                   <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted dark:bg-muted/60 p-2">
@@ -791,7 +813,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                 </div>
               ) : (
                 <>
-              <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fit,minmax(170px,1fr))] 2xl:grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(170px,1fr))]">
                 {products.map((product) => {
                   const promo = bestProductPromotion(
                     { id: product.id, price: product.price, category: product.category },
@@ -1177,7 +1199,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
             {/* Pago + factura — fijo abajo */}
             <div
-              className="flex-shrink-0 px-3 sm:px-4 pt-3 pb-3 sm:pb-4 space-y-3 border-t border-slate-100 dark:border-border text-left"
+              className="flex-shrink-0 px-3 sm:px-4 pt-2.5 pb-3 sm:pb-4 space-y-2.5 border-t border-slate-100 dark:border-border text-left"
               style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
             >
                 <div>
@@ -1258,11 +1280,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
                   <div className="mt-2.5 flex flex-wrap items-end justify-between border-t border-slate-100 dark:border-border pt-2.5 gap-2">
                     <p className="text-sm font-bold uppercase tracking-[0.25em] text-slate-500 dark:text-muted-foreground">Total</p>
-                    <p className="min-w-0 truncate text-2xl font-black tracking-tight text-slate-900 dark:text-foreground sm:text-3xl">{formatCurrency(total)}</p>
+                    <p className="min-w-0 truncate text-xl font-black tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">{formatCurrency(total)}</p>
                   </div>
 
-                  {/* Paga con → vuelto */}
-                  {cartItems.length > 0 && (
+                  {/* Paga con → vuelto (solo efectivo) */}
+                  {paymentMethod === "cash" && cartItems.length > 0 && (
                     <div className="mt-2.5 space-y-1.5">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-400 flex-shrink-0 w-[68px]">Paga con</span>
@@ -1303,23 +1325,31 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
 
                   <div className="flex flex-col gap-2 mt-3">
-                    <Button
-                      onClick={generateMpQr}
-                      disabled={mpQrLoading || cartItems.length === 0}
-                      variant="outline"
-                      className="h-11 w-full rounded-[1.25rem] border-[#009ee3] text-[#009ee3] hover:bg-[#009ee3]/10 text-xs font-bold uppercase tracking-[0.2em]"
-                    >
-                      {mpQrLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="mr-2 h-4 w-4" />}
-                      Cobrar con QR (Mercado Pago)
-                    </Button>
-                    <Button
-                      onClick={finalizeSale}
-                      disabled={isSubmitting || cartItems.length === 0}
-                      className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
-                    >
-                      {isSubmitting ? "Procesando..." : "Finalizar venta"}
-                      <CheckCircle2 className="ml-2 h-4 w-4" />
-                    </Button>
+                    {paymentMethod === "qr" ? (
+                      <Button
+                        onClick={generateMpQr}
+                        disabled={mpQrLoading || cartItems.length === 0}
+                        className="h-12 w-full rounded-[1.25rem] bg-[#009ee3] text-sm font-bold uppercase tracking-[0.2em] text-white hover:bg-[#0089c7]"
+                      >
+                        {mpQrLoading ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            Cobrar con QR
+                            <QrCode className="ml-2 h-4 w-4" />
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        onClick={finalizeSale}
+                        disabled={isSubmitting || cartItems.length === 0}
+                        className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
+                      >
+                        {isSubmitting ? "Procesando..." : "Finalizar venta"}
+                        <CheckCircle2 className="ml-2 h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       onClick={moveOrder}
                       disabled={isSubmitting || cartItems.length === 0}
@@ -1349,9 +1379,31 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           {mpQr && (
             mpQrPaid ? (
               <div className="flex flex-col items-center gap-3 py-8">
-                <CheckCircle2 className="h-16 w-16 text-emerald-500" />
-                <p className="text-lg font-bold">¡Pago recibido!</p>
-                <p className="text-sm text-muted-foreground">Ya podés finalizar la venta.</p>
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 220, damping: 14 }}
+                  className="relative"
+                >
+                  <span className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping" />
+                  <CheckCircle2 className="relative h-20 w-20 text-emerald-500" />
+                </motion.div>
+                <motion.p
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.18 }}
+                  className="text-lg font-bold"
+                >
+                  ¡Pago recibido!
+                </motion.p>
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.32 }}
+                  className="text-sm text-muted-foreground"
+                >
+                  Finalizando la venta…
+                </motion.p>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-4 py-2">
