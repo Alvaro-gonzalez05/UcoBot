@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     if (!posExternal) return NextResponse.json({ error: "No se pudo preparar la caja de Mercado Pago" }, { status: 500 })
 
     const ref = `${ownerId.replace(/-/g, "").slice(0, 12)}-${Date.now()}`
-    const { qrData, orderId } = await createQrOrder(seller.token, posExternal, amount, ref)
+    const { qrData, orderId } = await createQrOrder(seller.token, seller.mpUserId || "", posExternal, amount, ref)
     if (!qrData) return NextResponse.json({ error: "No se pudo generar el QR" }, { status: 500 })
 
     return NextResponse.json({ qr_data: qrData, order_id: orderId })

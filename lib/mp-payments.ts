@@ -188,43 +188,65 @@ export async function ensureSellerPos(userId: string, sellerToken: string, mpUse
   return extPos
 }
 
-/** Crea un QR dinámico (interoperable) con monto. Devuelve la trama qr_data y el id de la orden. */
+/**
+ * Crea un QR dinámico (interoperable) con monto, usando la API Instore de Mercado Pago.
+ * Devuelve la trama EMVCo (qr_data, que se renderiza como QR) y la referencia para el polling.
+ */
 export async function createQrOrder(
   sellerToken: string,
+  mpUserId: string,
   externalPosId: string,
   amount: number,
   externalReference: string
 ): Promise<{ qrData: string | null; orderId: string | null }> {
-  const res = await fetch(`${MP_API}/v1/orders`, {
+  const url = `${MP_API}/instore/orders/qr/seller/collectors/${mpUserId}/pos/${externalPosId}/qrs`
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${sellerToken}`,
       "Content-Type": "application/json",
-      "X-Idempotency-Key": (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`),
     },
     body: JSON.stringify({
-      type: "qr",
-      total_amount: amount.toFixed(2),
       external_reference: externalReference,
-      config: { qr: { external_pos_id: externalPosId, mode: "dynamic" } },
-      transactions: { payments: [{ amount: amount.toFixed(2) }] },
+      title: "Cobro",
+      total_amount: amount,
+      items: [
+        {
+          title: "Cobro",
+          unit_price: amount,
+          quantity: 1,
+          unit_measure: "unit",
+          total_amount: amount,
+        },
+      ],
     }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     throw new Error(data?.message || data?.errors?.[0]?.message || "Mercado Pago rechazó la creación del QR")
   }
-  return { qrData: data?.type_response?.qr_data || data?.qr_data || null, orderId: data?.id ? String(data.id) : null }
+  // El polling se hace por external_reference (merchant_orders), así que lo devolvemos como orderId.
+  return { qrData: data?.qr_data || null, orderId: externalReference }
 }
 
-/** Consulta el estado de una orden (para saber si el QR ya se pagó). */
-export async function getQrOrderStatus(sellerToken: string, orderId: string): Promise<{ paid: boolean; status: string }> {
-  const res = await fetch(`${MP_API}/v1/orders/${orderId}`, {
-    headers: { Authorization: `Bearer ${sellerToken}` },
-  })
+/**
+ * Consulta si el QR ya se pagó, buscando la merchant_order por external_reference.
+ * (La API Instore no devuelve un id consultable directo; se rastrea por la referencia.)
+ */
+export async function getQrOrderStatus(
+  sellerToken: string,
+  externalReference: string
+): Promise<{ paid: boolean; status: string }> {
+  const res = await fetch(
+    `${MP_API}/merchant_orders/search?external_reference=${encodeURIComponent(externalReference)}`,
+    { headers: { Authorization: `Bearer ${sellerToken}` } }
+  )
   const data = await res.json().catch(() => ({}))
-  const status = String(data?.status || "")
-  const paid = ["processed", "paid", "closed", "completed"].includes(status)
+  const el = data?.elements?.[0]
+  const status = String(el?.order_status || el?.status || "")
+  const paidAmount = Number(el?.paid_amount || 0)
+  const totalAmount = Number(el?.total_amount || 0)
+  const paid = status === "paid" || (totalAmount > 0 && paidAmount >= totalAmount)
   return { paid, status }
 }
 
