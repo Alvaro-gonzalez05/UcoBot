@@ -69,6 +69,14 @@ const businessTypes = [
   "Tecnología", "Servicios Financieros", "E-commerce", "Otro",
 ]
 
+// Provincias válidas que acepta Mercado Pago para la sucursal (location.state_name).
+const argProvinces = [
+  "Buenos Aires", "Capital Federal", "Catamarca", "Chaco", "Chubut", "Corrientes",
+  "Córdoba", "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza",
+  "Misiones", "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz",
+  "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán",
+]
+
 /**
  * Panel "Mi Negocio": la información que la IA usa para responder.
  * Vive en Configuración → Mi negocio (antes estaba en el dashboard).
@@ -255,8 +263,11 @@ export function BusinessInfoPanel({ userId }: { userId: string }) {
               </div>
               <div>
                 <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Provincia</label>
-                <input className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white placeholder:text-white/20"
-                  placeholder="Ej: Mendoza" type="text" value={businessInfo.state} onChange={(e) => updateField("state", e.target.value)} />
+                <select className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white"
+                  value={businessInfo.state} onChange={(e) => updateField("state", e.target.value)}>
+                  <option className="bg-[#1C1C28]" value="">Seleccioná</option>
+                  {argProvinces.map(p => <option key={p} value={p} className="bg-[#1C1C28]">{p}</option>)}
+                </select>
               </div>
             </div>
             <p className="text-[10px] text-gray-500 leading-relaxed">
