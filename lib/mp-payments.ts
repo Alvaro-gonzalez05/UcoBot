@@ -209,10 +209,12 @@ export async function createQrOrder(
     body: JSON.stringify({
       external_reference: externalReference,
       title: "Cobro",
+      description: "Cobro en punto de venta",
       total_amount: amount,
       items: [
         {
           title: "Cobro",
+          description: "Cobro en punto de venta",
           unit_price: amount,
           quantity: 1,
           unit_measure: "unit",
