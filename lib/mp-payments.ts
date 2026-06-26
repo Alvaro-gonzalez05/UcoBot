@@ -126,8 +126,9 @@ export async function ensureSellerPos(userId: string, sellerToken: string, mpUse
   const authH = { Authorization: `Bearer ${sellerToken}` }
   const jsonH = { ...authH, "Content-Type": "application/json" }
 
-  // 1) Buscar la sucursal (si ya existe) o crearla.
-  let storeId: string | null = conn?.store_id || null
+  // 1) Buscar la sucursal por su external_id (no confiamos en el store_id guardado,
+  //    que pudo quedar inválido de intentos previos). Si no existe, la creamos.
+  let storeId: string | null = null
   try {
     const sr = await fetch(`${MP_API}/users/${mpUserId}/stores/search?external_id=${extStore}`, { headers: authH })
     const sj = await sr.json().catch(() => ({}))
@@ -173,7 +174,6 @@ export async function ensureSellerPos(userId: string, sellerToken: string, mpUse
         name: "UcoBot POS",
         fixed_amount: true,
         store_id: Number(storeId),
-        external_store_id: extStore,
         external_id: extPos,
         category: 621102,
       }),
