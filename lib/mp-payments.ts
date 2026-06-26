@@ -112,60 +112,77 @@ export async function ensureSellerPos(userId: string, sellerToken: string, mpUse
 
   const { data: prof } = await admin
     .from("user_profiles")
-    .select("business_name, location")
+    .select("business_name, location, business_info")
     .eq("id", userId)
     .maybeSingle()
 
+  const bi = (prof?.business_info || {}) as { city?: string; state?: string; address?: string }
+  const cityName = (bi.city || "").trim() || "Buenos Aires"
+  const stateName = (bi.state || "").trim() || "Buenos Aires"
+  const streetName = (bi.address || prof?.location || "").trim() || "Sin direccion"
+
   const extStore = `UCO${userId.replace(/-/g, "").slice(0, 10).toUpperCase()}`
   const extPos = `${extStore}P1`
+  const authH = { Authorization: `Bearer ${sellerToken}` }
+  const jsonH = { ...authH, "Content-Type": "application/json" }
 
-  // 1) Crear sucursal (si ya existe, MP devuelve error y seguimos con el store_id guardado)
-  let storeId = conn?.store_id || null
+  // 1) Buscar la sucursal (si ya existe) o crearla.
+  let storeId: string | null = conn?.store_id || null
   try {
-    const storeRes = await fetch(`${MP_API}/users/${mpUserId}/stores`, {
+    const sr = await fetch(`${MP_API}/users/${mpUserId}/stores/search?external_id=${extStore}`, { headers: authH })
+    const sj = await sr.json().catch(() => ({}))
+    if (sj?.results?.length) storeId = String(sj.results[0].id)
+  } catch { /* sigue al create */ }
+
+  if (!storeId) {
+    const cr = await fetch(`${MP_API}/users/${mpUserId}/stores`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${sellerToken}`, "Content-Type": "application/json" },
+      headers: jsonH,
       body: JSON.stringify({
         name: prof?.business_name || "Local",
         external_id: extStore,
         location: {
           street_number: "0",
-          street_name: prof?.location || "Sin dirección",
-          city_name: "N/A",
-          state_name: "N/A",
+          street_name: streetName,
+          city_name: cityName,
+          state_name: stateName,
           latitude: -34.6037,
           longitude: -58.3816,
         },
       }),
     })
-    const store = await storeRes.json().catch(() => ({}))
-    if (store?.id) storeId = String(store.id)
-  } catch (e) {
-    console.error("Error creando sucursal MP:", e)
+    const cj = await cr.json().catch(() => ({}))
+    if (cj?.id) storeId = String(cj.id)
+    else console.error("Error creando sucursal MP:", cj)
   }
+  if (!storeId) throw new Error("No se pudo crear la sucursal de Mercado Pago")
 
-  // 2) Crear caja (POS)
+  // 2) Buscar la caja (POS) o crearla.
+  let posOk = false
   try {
-    const posRes = await fetch(`${MP_API}/pos`, {
+    const pr = await fetch(`${MP_API}/pos/search?external_id=${extPos}`, { headers: authH })
+    const pj = await pr.json().catch(() => ({}))
+    if (pj?.results?.length) posOk = true
+  } catch { /* sigue al create */ }
+
+  if (!posOk) {
+    const cr = await fetch(`${MP_API}/pos`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${sellerToken}`, "Content-Type": "application/json" },
+      headers: jsonH,
       body: JSON.stringify({
         name: "UcoBot POS",
         fixed_amount: true,
-        store_id: storeId,
+        store_id: Number(storeId),
         external_store_id: extStore,
         external_id: extPos,
         category: 621102,
       }),
     })
-    const pos = await posRes.json().catch(() => ({}))
-    // Si la caja ya existía o se creó, usamos nuestro external_id determinístico.
-    if (!posRes.ok && !String(pos?.message || "").toLowerCase().includes("already")) {
-      console.error("Error creando caja MP:", pos)
-    }
-  } catch (e) {
-    console.error("Error creando caja MP:", e)
+    const cj = await cr.json().catch(() => ({}))
+    if (cr.ok || cj?.id) posOk = true
+    else console.error("Error creando caja MP:", cj)
   }
+  if (!posOk) throw new Error("No se pudo crear la caja de Mercado Pago")
 
   await admin.from("mp_connections").update({ store_id: storeId, pos_external_id: extPos }).eq("user_id", userId)
   return extPos

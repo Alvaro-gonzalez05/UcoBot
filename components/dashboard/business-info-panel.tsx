@@ -11,6 +11,8 @@ interface BusinessInfoData {
   business_type: string
   description: string
   address: string
+  city: string
+  state: string
   phone: string
   email: string
   website: string
@@ -37,6 +39,8 @@ const DEFAULT_BUSINESS_INFO: BusinessInfoData = {
   business_type: "",
   description: "",
   address: "",
+  city: "",
+  state: "",
   phone: "",
   email: "",
   website: "",
@@ -243,6 +247,21 @@ export function BusinessInfoPanel({ userId }: { userId: string }) {
                   placeholder="Calle Innovación 42" type="text" value={businessInfo.address} onChange={(e) => updateField("address", e.target.value)} />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Localidad / Ciudad</label>
+                <input className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white placeholder:text-white/20"
+                  placeholder="Ej: Godoy Cruz" type="text" value={businessInfo.city} onChange={(e) => updateField("city", e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Provincia</label>
+                <input className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white placeholder:text-white/20"
+                  placeholder="Ej: Mendoza" type="text" value={businessInfo.state} onChange={(e) => updateField("state", e.target.value)} />
+              </div>
+            </div>
+            <p className="text-[10px] text-gray-500 leading-relaxed">
+              La localidad y provincia se usan para registrar tu local en Mercado Pago al cobrar con QR.
+            </p>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Catálogo / Menú Link</label>
               <div className="relative">
