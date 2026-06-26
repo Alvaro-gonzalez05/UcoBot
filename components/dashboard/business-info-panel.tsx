@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
+import { AR_PROVINCES, AR_LOCALITIES } from "@/lib/ar-geo"
 import { toast } from "sonner"
 
 interface BusinessInfoData {
@@ -67,14 +68,6 @@ const businessTypes = [
   "Restaurante", "Tienda de Ropa", "Salón de Belleza", "Gimnasio",
   "Consultorio Médico", "Agencia de Viajes", "Inmobiliaria", "Educación",
   "Tecnología", "Servicios Financieros", "E-commerce", "Otro",
-]
-
-// Provincias válidas que acepta Mercado Pago para la sucursal (location.state_name).
-const argProvinces = [
-  "Buenos Aires", "Capital Federal", "Catamarca", "Chaco", "Chubut", "Corrientes",
-  "Córdoba", "Entre Ríos", "Formosa", "Jujuy", "La Pampa", "La Rioja", "Mendoza",
-  "Misiones", "Neuquén", "Río Negro", "Salta", "San Juan", "San Luis", "Santa Cruz",
-  "Santa Fe", "Santiago del Estero", "Tierra del Fuego", "Tucumán",
 ]
 
 /**
@@ -257,21 +250,31 @@ export function BusinessInfoPanel({ userId }: { userId: string }) {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Localidad / Ciudad</label>
-                <input className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white placeholder:text-white/20"
-                  placeholder="Ej: Godoy Cruz" type="text" value={businessInfo.city} onChange={(e) => updateField("city", e.target.value)} />
-              </div>
-              <div>
                 <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Provincia</label>
                 <select className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white"
-                  value={businessInfo.state} onChange={(e) => updateField("state", e.target.value)}>
+                  value={businessInfo.state}
+                  onChange={(e) => setBusinessInfo((prev) => ({ ...prev, state: e.target.value, city: "" }))}>
                   <option className="bg-[#1C1C28]" value="">Seleccioná</option>
-                  {argProvinces.map(p => <option key={p} value={p} className="bg-[#1C1C28]">{p}</option>)}
+                  {AR_PROVINCES.map(p => <option key={p} value={p} className="bg-[#1C1C28]">{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Localidad</label>
+                <select className="w-full bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-1 focus:ring-[#D1F366] py-2.5 px-4 text-white disabled:opacity-40"
+                  value={businessInfo.city}
+                  disabled={!businessInfo.state}
+                  onChange={(e) => updateField("city", e.target.value)}>
+                  <option className="bg-[#1C1C28]" value="">
+                    {businessInfo.state ? "Seleccioná" : "Elegí provincia primero"}
+                  </option>
+                  {(AR_LOCALITIES[businessInfo.state] || []).map(c => (
+                    <option key={c} value={c} className="bg-[#1C1C28]">{c}</option>
+                  ))}
                 </select>
               </div>
             </div>
             <p className="text-[10px] text-gray-500 leading-relaxed">
-              La localidad y provincia se usan para registrar tu local en Mercado Pago al cobrar con QR.
+              La provincia y localidad se usan para registrar tu local en Mercado Pago al cobrar con QR.
             </p>
             <div>
               <label className="block text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-widest">Catálogo / Menú Link</label>
