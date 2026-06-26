@@ -335,6 +335,8 @@ export function PedidosClient({
       if (ex) return prev.map((i) => (i.product_id === p.id ? { ...i, quantity: i.quantity + 1 } : i))
       return [...prev, { product_id: p.id, name: p.name, price: Number(p.price) || 0, quantity: 1, image_url: p.image_url || null }]
     })
+    setShowAddProduct(false)
+    setAddSearch("")
   }
 
   const updateItemQty = (index: number, delta: number) => {
@@ -895,9 +897,9 @@ export function PedidosClient({
           </DialogHeader>
 
           {selectedOrder && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 overflow-y-auto pr-1 -mr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-0 flex-1 min-h-0">
               {/* ── Columna izquierda: info del pedido ── */}
-              <div className="space-y-4">
+              <div className="space-y-4 overflow-y-auto md:pr-5">
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <Label className="text-xs text-muted-foreground">Cliente</Label>
@@ -947,8 +949,8 @@ export function PedidosClient({
               </div>
 
               {/* ── Columna derecha: productos estilo carrito ── */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
+              <div className="flex flex-col min-h-0 md:border-l md:border-white/20 md:pl-5">
+                <div className="flex items-center justify-between shrink-0">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Productos</Label>
                   <Button type="button" variant="outline" size="sm" className="rounded-xl gap-1 h-8" onClick={() => setShowAddProduct((v) => !v)}>
                     <Plus className="h-3.5 w-3.5" /> Agregar
@@ -957,7 +959,7 @@ export function PedidosClient({
 
                 {/* Buscador de productos para agregar */}
                 {showAddProduct && (
-                  <div className="rounded-2xl border border-border bg-muted/30 p-2 space-y-2">
+                  <div className="mt-2.5 shrink-0 rounded-2xl border border-border bg-muted/30 p-2 space-y-2">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="Buscar producto..." className="h-9 pl-8 rounded-xl" autoFocus />
@@ -991,8 +993,8 @@ export function PedidosClient({
                   </div>
                 )}
 
-                {/* Lista de productos del pedido (estilo carrito) */}
-                <div className="space-y-2.5">
+                {/* Lista de productos del pedido (estilo carrito) — único scroll del layout */}
+                <div className="flex-1 min-h-0 overflow-y-auto space-y-2.5 pr-1 mt-2.5">
                   {editItems.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                       El pedido no tiene productos. Agregá con el botón de arriba.
@@ -1031,7 +1033,7 @@ export function PedidosClient({
                   )}
                 </div>
 
-                <div className="flex items-center justify-between border-t border-border pt-3">
+                <div className="flex items-center justify-between border-t border-border pt-3 mt-3 shrink-0">
                   <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Total</span>
                   <span className="text-xl font-black">{formatCurrency(editTotal)}</span>
                 </div>
