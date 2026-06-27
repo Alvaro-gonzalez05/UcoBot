@@ -1,0 +1,1623 @@
+===== PAGINA 1 =====
+ 
+ 
+MIC DTA 
+USUARIOS   EXTERNOS 
+AGENTES   DE   TRANSPORTE   ADUANERO 
+DEPÓSITOS   FISCALES 
+Versión 
+  
+10.2 
+Febrero   2026 
+
+===== PAGINA 2 =====
+ 
+INDICE 
+INTRODUCCIÓN.........................................................................................................................4 
+Operaciones implementadas en exportación..............................................................................4 
+Operaciones implementadas en importación..............................................................................6 
+Legislación de aplicación....................................................................................................6 
+Responsabilidad en la declaración y emisión del MIC DTA electrónico y de los CRT que lo  
+componen..........................................................................................................................7 
+Características los CRT........................................................................................................7 
+Propietario de la unidad de transporte y subcontratación del mismo a un tercero.............7 
+Vehículos adquiridos en “leasing”......................................................................................7 
+Acceso a los padrones informáticos administrados por la Secretaría de Transporte...........8 
+Relación del tránsito aduanero internacional (TAI) con la mercadería que se transporta y  
+los CRT respectivos............................................................................................................8 
+Relación entre el MIC DTA, el CRT y el RUT. Identificador del MIC DTA y de las  
+operaciones del tránsito....................................................................................................8 
+Identificación del MIC DTA electrónico...............................................................................9 
+Definición de Ruta Informática...........................................................................................9 
+Declaración de la fecha de llegada del TAI..........................................................................9 
+Declaración de la posición arancelaria NCM en el MIC DTA electrónico..............................9 
+Declaración del valor de la mercadería en el MIC DTA electrónico....................................10 
+Ámbito de aplicación del Sistema SINTIA..........................................................................10 
+Terminología....................................................................................................................11 
+Vehículos “en lastre”........................................................................................................11 
+Relación entre la unidad de transporte y el MIC DTA electrónico......................................11 
+Relación entre el contenedor y la destinación aduanera de exportación...........................11 
+Relación entre un MIC DTA electrónico y un CRT..............................................................11 
+Impresión del MIC DTA 
+electrónico...................................................................................11 
+Transbordos Programados................................................................................................11 
+Relación entre permisos de embarque y cada CRT............................................................11 
+Elementos comunes a las distintas pantallas que le facilitarán su utilización............................12 
+INGRESO AL APLICATIVO............................................................................................................15 
+2 
+
+===== PAGINA 3 =====
+ 
+MIC DTA DE SALIDA....................................................................................................................17 
+GESTION DEL ATA.......................................................................................................................17 
+REGISTRO DEL MIC DTA DE EXPORTACION............................................................................18 
+1. 
+Ruta informática.............................................................................................................19 
+2. 
+Datos del transporte........................................................................................................22 
+País de Paso...................................................................................................................................27 
+MIC DTA en Lastre.........................................................................................................................28 
+Transporte de carga......................................................................................................................29 
+3. 
+AGREGAR CARTA DE PORTE............................................................................................29 
+4. 
+Permiso de embarque....................................................................................................33 
+Modificación introducida en el ingreso de los datos de peso a partir del 1/10/2024............46 
+5. 
+CONTENEDORES.................................................................................................................
+47 
+5.1. 
+Carga consolidada en contenedor...............................................................................47 
+5.2. 
+Contenedores vacíos...................................................................................................51 
+6. 
+Precintos.........................................................................................................................52 
+6.1. 
+PRECINTOS PARA CONTENEDOR.................................................................................52 
+6.2. 
+PRECINTOS PARA CARGA SUELTA...............................................................................52 
+Consulta.................................................................................................................................59 
+CONTROL DE SALIDA DEL MIC DTA............................................................................................65 
+GESTION DEL DEPOSITARIO.......................................................................................................66 
+SALIDA DE DEPÓSITO DE EXPORTACION MIC/DTA.................................................................66 
+MIC DTA DE ENTRADA...................................................................................................................73 
+MTERMICM1 - Procedimiento para la salida de un CRT marcado como Tránsito..................86 
+MTERMICM1 - Procedimiento para la salida de un CRT marcado como Traslado.................88 
+ 
+3 
+
+===== PAGINA 4 =====
+ 
+INTRODUCCIÓN 
+A fin de facilitar el comercio exterior, los estados parte del MERCOSUR acuerdan aplicar 
+tecnología de la información a los procedimientos vinculados con el seguimiento de las 
+operaciones de Tránsito Aduanero Internacional. 
+Para ello, en virtud de la resolución MERCOSUR/GMC/RES Nº 17/04, acuerdan la informatización 
+del manifiesto internacional de cargas, la declaración de tránsito aduanero y el seguimiento de 
+las operaciones entre los estados parte, mediante procesos de intercambio electrónico de la 
+información. 
+Este Aplicativo permitirá a los usuarios ingresar los datos del manifiesto al SIM conectándose on 
+line o en forma remota. De la misma manera podrán realizar todos los trámites posteriores al 
+ingreso del manifiesto. 
+Operaciones implementadas en exportación 
+Para las empresas de transporte, representadas por un ATA será posible generar y registrar el 
+MIC DTA indicando la ruta del mismo, ingresando los datos de las cartas de porte que lo 
+conforman y asociando los permisos de embarque involucrados. Generados los documentos, se 
+imprimen en el formato habitual del MIC DTA. 
+Posteriormente, desde la aduana de partida intervienen los agentes aduaneros para la 
+presentación, y de corresponder, dar la anulación del MIC DTA, o la reversa del estado del MIC 
+DTA- en el caso de que el ATA necesitase realizar alguna rectificación previo al registro del 
+control de salida-. 
+Asimismo, el agente aduanero, deberá realizar el registro de la salida de depósito de  
+Exportación cuando la mercadería egrese de una planta de consolidación. En este caso, el ATA 
+registrará el Control de Salida. 
+En cambio, en los casos en que la mercadería se encuentre en un Depósito Fiscal, la salida 
+informática de la mercadería será responsabilidad del Depositario. El Control de salida será 
+registrado por el servicio aduanero. 
+Desde la Aduana de Frontera, será posible consultar los MIC DTA por arribar, realizar la 
+confirmación de arribo, realizar el cumplido del Tránsito de Exportación y acceder a distintas 
+consultas. 
+
+===== PAGINA 5 =====
+5 
+En síntesis, las funcionalidades por perfiles son las siguientes: 
+USUARIO EXTERNOS 
+SERVICIO ADUANERO 
+ATA 
+ 
+REGISTRAR  
+MIC/DTA 
+EXPORTACIÓN. 
+ 
+CONTROL DE SALIDA DEL 
+MIC/DTA. 
+PERFIL GUARDA 
+ 
+CONSULTA MIC/DTA POR 
+ARRIBAR. 
+ 
+CONSULTAS DE MIC DTA. 
+ 
+PRESENTACIÓN/ANULACIÓN DEL 
+MIC/DTA. 
+ 
+SALIDA DEL MIC/DTA. 
+ 
+CONTROL DE SALIDA DEL 
+MIC/DTA. 
+ 
+CONFIRMACIÓN DEL ARRIBO DEL 
+MIC/DTA. 
+ 
+GENERACIÓN DE SATAI Y EDTAI. 
+ 
+GENERACIÓN DE DETAI Y FITAI. 
+ 
+GENERACIÓN DE EPTAI Y SPTAI. 
+DEPOSITARIO 
+SALIDA DEL MIC/DTA (solo 
+cuando se trate de operación en 
+depósito). 
+PERFIL JEFATURA 
+ 
+PRESENTACIÓN/ANULACIÓN DEL 
+MIC/DTA. 
+ 
+REVERSIÓN DEL ESTADO DEL 
+MIC/DTA. 
+ 
+SALIDA DEL MIC/DTA. 
+ 
+CONTROL DE SALIDA DEL 
+MIC/DTA. 
+ 
+ANULACIÓN DE LA SALIDA DEL 
+MIC/DTA. 
+ 
+CONFIRMACIÓN DEL ARRIBO DEL 
+MIC/DTA. 
+ 
+CONSULTA MIC/DTA POR 
+ARRIBAR. 
+ 
+CONSULTAS DE MIC DTA. 
+ 
+GENERACION DE SATAI Y EDTAI. 
+ 
+GENERACIÓN DE DETAI Y FITAI. 
+ 
+GENERACIÓN DE EPTAI Y SPTAI. 
+Operaciones implementadas en importación 
+Para las empresas de transporte será posible generar y registrar el MANI terrestre utilizando los 
+datos del MIC DTA provenientes del registro del mismo en el país de origen del Tránsito Aduanero 
+Internacional. Lo desarrollarán con las mismas transacciones del SIM actuales, tanto en su versión 
+Registro del MIC (MANI, TRAS/TLMD) o Registro de un Manifiesto Terrestre. 
+Conceptos previos 
+Este apartado tiene por objeto la aclaración de dudas frecuentes que podrían presentarse tanto en 
+la declaración del MIC DTA electrónico como en aspectos operativos vinculados a este registro. 
+
+===== PAGINA 6 =====
+6 
+Se mantendrá en permanente actualización incorporando las consultas recibidas a través de las 
+mesas de ayuda o por otros medios. 
+Legislación de aplicación 
+ Acuerdo sobre Transporte Internacional Terrestre (ATIT), inscripto como Acuerdo de 
+Alcance Parcial en el marco de la Asociación Latinoamericana de Integración (ALADI). 
+ Resolución N° 263/90 de la Subsecretaría de Transporte. 
+ Resolución (ANA) Nº 2382/91, sus modificatorias y normas complementarias. 
+ Resolución N° 116/94 del Grupo Mercado Común del MERCOSUR. 
+ Resolución N° 17/04 del Grupo Mercado Común del MERCOSUR. 
+ Resolución General (AFIP) Nº 1849. Internalización de la Resolución GMC Nº 17/2004. 
+ Resolución General (AFIP) N° 2494 y sus modificatorias. 
+ Resolución General (AFIP) N° 2903 y sus modificatorias. 
+ Instrucción General (DI PNPA) Nº 13/11. Padrón único de Transportistas. 
+ Resolución General (AFIP) N° 2619, y sus modificatorias 
+Los Manifiestos Internacionales de Carga Terrestre/Declaración de Tránsitos Aduanero (MIC DTA) 
+cumplen el doble propósito de declaración de las cargas transportadas por el medio y de 
+declaración de Tránsito Aduanero Internacional (TAI). 
+Cada Manifiesto (MIC DTA) pueden contener más de un Conocimiento Rodoviario Terrestre (CRT) y 
+estos pueden, a su vez, tener destinos diferentes y ser cargados en Aduanas Intermedias entre la 
+Aduana de Partida del medio de transporte y la Aduana de Salida del país donde se origina el MIC 
+DTA electrónico. 
+Responsabilidad en la declaración y emisión del MIC DTA electrónico y de los 
+CRT que lo componen 
+La declaración y emisión del MIC DTA electrónico debe ser efectuada por un transportista 
+internacional terrestre (a través de un Agente de Transporte Aduanero que actúe por cuenta del 
+transportista), habilitado por la Autoridad competente y que, por ello, resulta responsable por la 
+misma. Este transportista es el único autorizado a emitir los CRT que componen el MIC DTA. 
+
+===== PAGINA 7 =====
+7 
+Características los CRT 
+La Carta de Porte/ Conocimiento Rodoviario Terrestre (CRT) puede ser a la orden o cesible por 
+endoso o puede comprender mercadería consolidada (en cuyo caso el consignatario será el agente 
+desconsolidador). 
+Propietario de la unidad de transporte y subcontratación del mismo a un tercero 
+En el transporte internacional de cargas puede perfectamente existir un transportista convencional 
+emisor del MIC DTA electrónico y un transportista subcontratado por éste, propietario del 
+transporte, pero siempre se debe tener presente que las habilitaciones para realizar transporte 
+internacional requieren la habilitación de la empresa transportista y la de los vehículos con los que 
+se realiza el mismo. 
+En el caso de que un transportista contrate a otro para efectuar un transporte, el primero conserva 
+la relación con el cliente (usuario), por lo tanto, emite el CRT y también el MIC DTA en donde 
+informa la existencia de un transportista contratado (propietario del transporte). 
+De acuerdo al sistema vigente, tanto el transportista convencional como el transportista efectivo se 
+deben encontrar habilitados para efectuar el servicio internacional. 
+Las operaciones de tránsito aduanero internacional terrestre (TAI) pueden efectuarse en los tramos 
+nacionales con vehículos no habilitados para transporte internacional, siempre que antes de su 
+salida transborden a vehículos habilitados para el transporte internacional, propiedad de empresas 
+habilitadas para hacer transporte internacional. 
+En el caso de que un transportista contrate a otro para efectuar un transporte, el primero 
+conserva la relación con el cliente (usuario), por lo tanto, emite el CRT y también el MIC DTA en 
+donde informa la existencia de un transportista contratado (propietario del transporte). Además, 
+puede darse otra situación, que el transportista habilitado contrate a otro transportista habilitado 
+para transportar la carga y éste, asuma la responsabilidad por la carga, el transporte y la entrega 
+de la mercadería, emitiendo el CRT consolidado y el MIC DTA correspondiente. 
+Vehículos adquiridos en “leasing” 
+En vehículos adquiridos por "leasing", el propietario del vehículo responsable ante las aduanas es el 
+sujeto adquirente que explota el medio de transporte. 
+Acceso a los padrones informáticos administrados por la Secretaría de 
+Transporte 
+El acceso a la información de sujetos habilitados se encuentra disponible para cualquier 
+operador, transportista o usuario; pero el ingreso de datos o su modificación sólo serán 
+efectuados y validados por la Secretaría de Transporte. 
+
+===== PAGINA 8 =====
+8 
+Relación del tránsito aduanero internacional (TAI) con la mercadería que se 
+transporta y los CRT respectivos 
+El TAl está otorgado a la mercadería que se transporta y se hace una operación de tránsito 
+internacional por cada uno de los CRT que componen el MIC DTA. La autorización del tránsito 
+está referida a un vehículo y a un solicitante que es la empresa transportista. 
+Por cada viaje que realice una unidad de transporte habilitada deberá haber uno y sólo un MIC 
+DTA electrónico. 
+Se considerarán unidades de transporte a los vehículos de carretera, comprendidos los 
+remolques y semirremolques. 
+Relación entre el MIC DTA, el CRT y el RUT. Identificador del MIC DTA y de las 
+operaciones del tránsito 
+Por cada unidad de transporte y por cada viaje existe un único MIC DTA electrónico identificado 
+por un identificador único e irrepetible denominado “Clave de Manifiesto”. Esta clave es 
+otorgada por el Sistema y puede ser observada formando parte del RUT. 
+A cada MIC DTA electrónico pueden estar vinculados uno o más CRT. 
+Por cada CRT existe una operación de tránsito aduanero internacional (TAI). Cada operación de 
+TAI está identificada por un RUT (Referencia Única de la operación de TAI) por lo que existen 
+tantas RUT como CRT se encuentren asociados a una Clave de Manifiesto (MIC DTA). 
+Cada RUT corresponde a la asociación de dos claves, la Clave del Manifiesto y la Clave de 
+Identificación de cada CRT. 
+El RUT (Referencia Única por cada CRT/operación de tránsito), a utilizarse para el intercambio 
+electrónico de información entre distintas aduanas a fin del seguimiento y cancelación de cada 
+operación de tránsito, se determina e imprime en el formulario MIC DTA a nivel de cada 
+documento de transporte tal como está previsto en la estructura de datos del Sistema. 
+El seguimiento de las operaciones de tránsito se efectúa por cada operación relación MIC DTA- 
+CRT. 
+Identificación del MIC DTA electrónico 
+El Manifiesto Internacional de Carga/Declaración de Tránsito Aduanero (MIC DTA) electrónico se 
+identifica mediante una clave única e irrepetible denominada “Clave de Manifiesto” otorgada por 
+el sistema, cuya estructura se encuentra conformada de la siguiente manera AAPPNNNNNN-D (11 
+dígitos), donde: 
+AA = Año de emisión (2 dígitos)  
+
+===== PAGINA 9 =====
+9 
+PP = País de emisión (2 dígitos) 
+NNNNNN = Número secuencial anual por código de emisión (6 dígitos) 
+D = Dígito verificador (1 dígito) 
+Definición de Ruta Informática 
+La Ruta Informática es la secuencia de datos relativos al País-Ciudad-Aduana-Lugar Operativo, a 
+integrar por el transportista en el momento del registro informático de la declaración del MIC DTA 
+electrónico, conforme al itinerario previsto que seguirá el medio de transporte, a fin de que se 
+constituyan en los únicos puntos autorizados para recibir o emitir la información requerida para el 
+seguimiento del tránsito. 
+Ante la presencia de transbordos programados, el documentante deberá declarar, al momento del 
+registro del MIC DTA electrónico, el punto donde tiene previsto que se produzcan los mismos. 
+No podrán cambiarse datos relativos a un punto de la “Ruta Informática” una vez que el medio de 
+transporte haya pasado por dicho punto. 
+Declaración de la fecha de llegada del TAI 
+Deberá declararse la fecha de llegada tentativa en que la unidad arribará al destino final del TAI. 
+En principio las aduanas controlarán el cumplimiento de los plazos máximos otorgados para los 
+tramos nacionales. 
+Declaración de la posición arancelaria NCM en el MIC DTA electrónico 
+La declaración de la posición arancelaria es obligatoria, debiendo registrarse los 8 dígitos 
+correspondientes a la posición arancelaria NCM en los casos en que la mercadería procede de la 
+exportación de un Estado Parte, y de 4 dígitos como mínimo correspondientes a la partida del 
+Sistema Armonizado cuando la mercadería proceda de la exportación de un país extrazona. 
+Con respecto a la responsabilidad asumida en orden a tal declaración deberá tenerse en cuenta lo 
+establecido por la Res. MERCOSUR GMC 17/04 en los aspectos específicos relativos a este tema. 
+Declaración del valor de la mercadería en el MIC DTA electrónico 
+El que corresponda según sea el total de la mercadería declarada y por cada ítem declarado. 
+Ámbito de aplicación del Sistema SINTIA 
+A partir del día 20 de diciembre de 2010, según la R.G. AFIP Nº 2961, el sistema SINTIA comenzó 
+su aplicación para los países signatarios del ATIT (Argentina, Bolivia, Brasil, Chile, Paraguay, Perú 
+y Uruguay). 
+
+===== PAGINA 10 =====
+10 
+Terminología 
+Vehículos “en lastre” 
+Corresponde declarar el MIC DTA electrónico para vehículos “en lastre” a tal fin se encuentra 
+previsto un indicador específico. 
+Relación entre la unidad de transporte y el MIC DTA electrónico 
+Por cada vehículo de transporte se declarará un único MIC DTA electrónico. 
+Por cada MIC DTA electrónico solamente podrá declararse un vehículo transportador. 
+Relación entre el contenedor y la destinación aduanera de exportación 
+Un contenedor podrá estar amparado por más de una destinación aduanera de exportación. 
+Una destinación aduanera de exportación podrá amparar más de un contenedor. 
+Relación entre un MIC DTA electrónico y un CRT 
+Un MIC DTA electrónico puede estar asociado a uno o más CRT. 
+Un CRT estará asociado a más de un MIC DTA electrónico sólo cuando el embarque sea 
+fraccionado. 
+Impresión del MIC DTA electrónico 
+La impresión del MIC DTA electrónico podrá ser realizada por el transportista o el Servicio 
+Aduanero. 
+Transbordos Programados 
+Los transbordos programados: 
+ Se realizarán por la totalidad de la carga declarada; 
+ Podrán llevarse a cabo en cualquier país por donde se realice el TAI (origen, intermedio 
+o de destino), y se podrán realizar más de una vez en el mismo país, quedando limitado 
+a un máximo de tres veces por país. 
+Relación entre permisos de embarque y cada CRT 
+En las operaciones de tránsito de exportación que se realicen mediante transporte internacional 
+terrestre por carretera, en el marco de las disposiciones del Acuerdo sobre Transporte Internacional 
+Terrestre (ATIT), por cada destinación aduanera deberá corresponder una única Carta de Porte 
+Internacional-Conocimiento de Transporte Internacional (CRT). 
+Están exceptuadas de la relación indicada en el párrafo anterior, las operaciones que: 
+a) Se efectúen bajo la modalidad de carga consolidada. 
+b) Los envases de las mercaderías a transportar, por sus características particulares, se 
+registran separadamente de ellas. 
+
+===== PAGINA 11 =====
+11 
+c) Determinará, en caso de corresponder, este Organismo e informará en su página web 
+www.arca.gob.ar. 
+Elementos comunes a las distintas pantallas que le facilitarán su utilización 
+ 
+Campos desplegables 
+Los mismos permitirán al declarante seleccionar una opción dentro de una lista  
+Están identificados con el símbolo 
+ 
+
+===== PAGINA 12 =====
+12 
+Como se observa en el ejemplo de la pantalla anterior, al cliquear sobre el símbolo se abre una 
+ventana con el listado de opciones entre las cuales se podrá seleccionar la que corresponda para la 
+información requerida. 
+Mensajes de advertencia 
+Los mensajes de advertencia que impiden proseguir con el registro aparecen escritos en rojo 
+Por ejemplo: el Mensaje de fecha inválida 
+ 
+Mensajes de validación correcta 
+Cuando el sistema valide la operación sin inconvenientes, aparecerá un mensaje de validación 
+exitosa. 
+ 
+Mensaje de error 
+
+===== PAGINA 13 =====
+13 
+Cuando el sistema no pueda validar algún dato de los requeridos para la registración, emitirá un mensaje 
+de en rojo indicando de la manera más clara posible cual es el dato a revisar. 
+ 
+Por otro lado, las advertencias que permiten continuar declarando aparecen como un 
+triángulo en amarillo para que se advierta la situación. 
+INGRESO AL APLICATIVO 
+Ingreso como Depositario 
+Si usted ingresa como Depositario, una vez ingresada la clave, el sistema le mostrará el menú 
+general de MARIA WEB en el que seleccionará la opción Gestión Depositarios Manifiesto 
+Internacional de Carga (MIC DTA) 
+El sistema habilitará la siguiente ventana en la que se seleccionarán las condiciones de acceso 
+del depositario. Especificando la Empresa por la que va a operar, el Tipo de Agente, Rol, así 
+como la Aduana y el Lugar Operativo desde el cual desea operar. 
+Una vez seleccionado el lugar desde donde se realizará la operación, el sistema habilitará la 
+primera pantalla de trabajo que permitirá generar la salida desde dicho lugar. 
+
+===== PAGINA 14 =====
+14 
+ 
+El depositario podrá realizar el ingreso del identificador del MIC DTA o el número de salida 
+mediante el uso del lector de código de barras. Para ello deberá haberlo configurado de manera 
+correcta. 
+Ingreso como Agente de Transporte 
+Para poder acceder al aplicativo deberá: 
+1. poseer Clave Fiscal y 
+2. estar registrado como Agente de Transporte Aduanero en la Dirección General de 
+Aduanas. 
+3. Adherir al servicio Gestión del ATA 
+Si usted ingresa como Agente de transporte, una vez ingresada la clave, el sistema le mostrará 
+el menú general de MARIA WEB en la que seleccionará la opción Gestión del ATA 
+El sistema habilitará una ventana en la que deberán seleccionarse las condiciones de acceso del 
+usuario. 
+En el mismo deberá especificar la Empresa por la que va a operar, el Tipo de Agente, Rol, y Aduana a la 
+que se desea conectar. 
+ 
+
+===== PAGINA 15 =====
+15 
+MIC DTA DE SALIDA GESTION DEL ATA 
+Una vez logueado, se accede al menú de opciones del aplicativo que se muestra en la siguiente 
+pantalla. 
+Barra de menú 
+ 
+Se encuentra a la izquierda y una vez que se seleccionó la opción, permanece oculta. Para volver 
+a elegir otra opción, desplace el puntero del mouse por la zona de la barra y el sistema le mostrará 
+nuevamente el menú general 
+El sistema habilitará diferentes solapas de trabajo, en la pantalla llamada Selección le permitirá 
+elegir entre 
+1. ingresar directamente el número de algún MIC DTA EN CURSO, REGISTRADO O 
+PRESENTADO que corresponda al ATA conectado, o si no conoce el número, podrá 
+seleccionar un rango de fechas para que le muestre una lista de los MIC DTA que 
+cumplan la condición. 
+ 
+2. registrar un nuevo MIC DTA de exportación, eligiendo la opción Agregar Mic Dta, o 
+3. imprimir el Reverso del MIC DTA. 
+Estos dos últimos se encuentran en el margen inferior derecho de la pantalla 
+ 
+
+===== PAGINA 16 =====
+16 
+ 
+Esta es la primera pantalla que se le presentará al usuario. 
+Si se hubiese elegido un MIC DTA existente y se tratase de un MIC DTA EN CURSO desde esta 
+pantalla se podrá modificar la carátula. 
+Si se tratase de un MIC DTA en estado REGISTRADO o PRESENTADO, sólo se podrá realizar la 
+consulta. 
+REGISTRO DEL MIC DTA DE EXPORTACIÓN 
+Presionando el botón “Agregar MIC DTA” se habilita la solapa “Carátula”.  
+La carátula se completa en dos pantallas: 
+ 
+1. Ruta informática e Itinerario 
+ 
+ 
+1. 
+Ruta informática 
+En esta pantalla se ingresan los datos referentes a los lugares operativos donde se ejerce el 
+control aduanero, se encuentra conformada por los datos de la Partida y Salida en el país de 
+Origen, y la Entrada y Destino en el país de finalización del tránsito, además del itinerario del 
+MIC DTA. 
+2. Datos  relativos  al transporte 
+
+===== PAGINA 17 =====
+17 
+La pantalla se divide en cuatro conjuntos de datos de ingreso obligatorio 
+1.- Partida 
+Corresponde al País, Ciudad, Aduana y Lugar operativo de partida del MIC DTA. 
+Los datos a ingresar son: 
+ País: el valor por defecto es ARGENTINA y no se permite su modificación. 
+ Ciudad: es un campo de ingreso obligatorio. Tiene asociada una tabla de referencia para 
+seleccionar los códigos de las ciudades. Muestra solamente las ciudades 
+correspondientes al código UN/LOCODE del País ingresado. 
+ Aduana: El sistema muestra la Aduana de registro del MIC DTA, no se permite su 
+modificación. Este dato se copiará en los campos 7 del MIC DTA y 5 del CRT. 
+ Lugar Operativo: El sistema muestra los códigos correspondientes a la Aduana de 
+registro que se encuentren vigentes. Si se ingresan en forma manual, el sistema validará 
+la información. 
+2.- Salida 
+Corresponde a la Ciudad, Aduana y Lugar Operativo de Salida en el País de partida del MIC 
+DTA. 
+Los datos a ingresar son: 
+ Ciudad: este es un campo obligatorio. Se pueden seleccionar las ciudades de una tabla 
+de referencia y muestra solamente las ciudades correspondientes al código UN/LOCODE 
+del País ingresado. 
+ Aduana: Se ingresa el código de la aduana correspondiente. El código ingresado puede 
+ser igual al de la Aduana de registro. 
+ Lugar Operativo: el sistema habilita una tabla que muestra los lugares operativos 
+correspondientes a la Aduana de Frontera o salida y que se encuentren vigentes. Si 
+ingresa el código en forma manual, el sistema validará que exista en la tabla para la 
+Aduana de frontera y que esté vigente. 
+3.- Destino 
+Corresponde al País, Ciudad, Aduana y lugar operativo de destino final del MIC DTA. 
+Los datos a ingresar son: 
+ País: El sistema muestra la lista de opciones para completar este campo. 
+ Ciudad: es un campo de ingreso obligatorio. Se selecciona el código UN/LOCODE de la 
+ciudad de desaduanamiento de la mercadería. 
+
+===== PAGINA 18 =====
+18 
+ Aduana: indica la aduana del país destino final del MIC DTA. Se pueden seleccionar los 
+códigos desde una tabla habilitada por el sistema. Si no existiera en el listado se puede 
+elegir la opción “OTR” (Otras Aduanas) y el sistema habilita un campo para que el 
+usuario ingrese el nombre de la aduana faltante. Esta opción sólo podrá utilizarse para 
+los países que tienen el código cargado. 
+ Lugar Operativo: indica el lugar operativo de la aduana de destino final del MIC/DTA. 
+4.- Entrada 
+Corresponde al País, Ciudad, Aduana y Lugar operativo de entrada al País de destino o país 
+de paso del MIC DTA. 
+Los datos a ingresar son: 
+ Ciudad: es un campo de ingreso obligatorio. Indica la ciudad sede de la aduana del país 
+de entrada. 
+ Aduana: Se ingresa el código de la aduana de entrada. 
+ Lugar Operativo: el sistema habilita una tabla que muestra los lugares operativos 
+correspondientes a la Aduana de entrada que se encuentren vigentes. Si ingresa el 
+código en forma manual, el sistema validará que exista en la tabla para la Aduana de 
+frontera y que esté vigente. 
+5.- Itinerario 
+Se ingresa la ruta que seguirá el medio de transporte hasta la ciudad de destino. Esta 
+información se imprimirá en el campo 40 del MIC DTA. 
+Una vez ingresados los datos se confirman con el botón ACEPTAR. La confirmación lleva a la 
+pantalla de los DATOS DEL TRANSPORTE. 
+ 
+
+===== PAGINA 19 =====
+19 
+Si no se desea validar la información, con el botón CANCELAR se vuelve a la carga de la carátula del 
+MIC DTA sin cambios 
+Para Tránsitos Argentina – Argentina: 
+Si la Aduana de Conexión al sistema correspondiera a una aduana del Área Aduanera Especial 
+(250), el País de destino deberá ser Argentina (200). 
+Por el contrario, si la Aduana de Conexión al sistema correspondiera al Territorio Nacional 
+Continental (200), el País de destino deberá ser Área Aduanera Especial (250). 
+Para Tránsitos desde el AAE Argentina – País signatario de la ATIT 
+(Brasil –203-, Bolivia –202-, Chile –208-, Paraguay –221-, Perú –222- y Uruguay –225-). 
+El país de destino deberá ser el País signatario de la ATIT, indicando de corresponder el Territorio 
+Nacional Continental como País de Paso. 
+ 
+ 
+2. 
+Datos del transporte 
+Oprimiendo el botón Editar rutas, el sistema recupera los datos ingresados anteriormente y 
+muestra el recorrido de la mercadería. 
+Haciendo clic en ‘EDITAR RUTA’ se vuelve a la pantalla de la carga del itinerario para 
+modificarlo. 
+
+===== PAGINA 20 =====
+20 
+Fecha emisión 
+El sistema inicialmente indicará la fecha de creación del MIC DTA. Al momento de la registración 
+toma la fecha correspondiente a ese momento. Esta información se graba en el campo 6 del MIC 
+DTA. 
+Vía del Transporte 
+Trae automáticamente el valor 4 que corresponde a la vía Camión. 
+En Lastre 
+Es un campo obligatorio que indica si el medio de transporte está vacío o con carga. Si la operación 
+fuese “EN LASTRE” y corresponde a Contenedores, los mismos se deben cargar como contenedores 
+vacíos en la solapa correspondiente, el sistema emite un mensaje recordatorio. 
+Estado 
+El campo ESTADO se completa automáticamente. El estado inicial del MIC DTA será CUR (en curso). 
+Cambia su valor a REG (registrado) al momento de registrar. 
+Plazo de transporte (en horas) 
+En este campo se ingresará la duración en horas del tránsito internacional, considerando el 
+recorrido hasta la aduana de Destino declarada, donde se destinará la mercadería. 
+Plazo interno: tal como se describe en el título, corresponde declarar el plazo desde la aduana de 
+partida hasta la aduana de frontera en nuestro territorio. 
+Transportista 
+Corresponde a los datos del transportador 
+Nro. Registro CNRT 
+En este campo se colocará el número de registro de la CNRT que posee la empresa en el padrón de 
+transportistas. Al validar ese dato con el botón “VALIDAR CNRT” se rellenan en la pantalla todos los 
+datos del transportista. 
+Nro. Permiso Internacional 
+Número de registro de la empresa transportista en la Secretaria de Transporte que lo habilita para 
+realizar ese recorrido del tránsito internacional. 
+CUIT Empresa 
+El ATA debe declarar la CUIT del Transportista de la misma que será responsable del tránsito 
+aduanero internacional (campo 2 del MIC DTA). 
+En el caso que el mismo sea extranjero, ocasional, y no posea CUIT, el sistema desplegará el 
+siguiente mensaje. 
+ 
+
+===== PAGINA 21 =====
+21 
+Asimismo, cuando el Transportista esté habilitado en el Padrón Único Transportista (PAUT) como 
+transportista extranjero ocasional, el sistema le permitirá ingresar manualmente el dato del domicilio, 
+debiendo consignarse el domicilio del transportista en su país de origen. 
+CUIT Apoderado 
+En este campo irá en forma optativa el Nro. de la CUIT del apoderado de la empresa transportista si 
+lo tuviera. 
+Razón social 
+Si laCUITEmpresa se encuentra en la base de datos, el sistema muestra el dato obtenido en la 
+conexión y corresponde al nombre de la empresa transportista (se imprime en el campo 1 del MIC 
+DTA y 3 del CRT). Si no está en la base de datos, deberá declararla quien registra. 
+Domicilio 
+El sistema muestra el domicilio asociado a la CUIT de la razón social de la empresa transportista 
+(campo 1 del MIC DTA y 3 del CRT). 
+País 
+El país del transportista debe declararlo el ATA obligatoriamente. Se puede elegir de una lista de 
+países (se imprime en el campo 1 del MIC DTA). 
+Tipo de Transportista 
+Corresponde a la condición del transportista. Contiene una lista desplegable para dos opciones: 
+Regular 
+Ocasional 
+ Propietario  vehículo  
+Este conjunto de datos es de ingreso obligatorio. 
+• 
+CUIT 
+Corresponde a la CUIT del propietario del registro en el país de origen (corresponde al 
+campo 10 del MIC DTA). 
+• 
+Razón social 
+Corresponde a la razón social de la empresa transportista (campo 9 del MIC DTA). 
+ Domicilio 
+Se indicará el domicilio de la empresa transportista (campo 9 del MIC DTA). 
+• 
+País 
+Se indicará el país de la empresa transportista (campo 9 del MIC DTA). 
+ Identificación  del  vehículo:  
+Este conjunto de datos es de ingreso obligatorio. 
+• 
+País Tractor 
+
+===== PAGINA 22 =====
+22 
+Se ingresa el código del país correspondiente. 
+ Patente Tractor 
+Se ingresa el número de patente del transporte. El sistema validará que el formato 
+ingresado corresponda al del país ingresado con anterioridad (campo 11 del MIC DTA).  
+País semirremolque 
+Se ingresa el código del país correspondiente. 
+• 
+Patente del semirremolque 
+Se ingresa el número de patente del transporte. Estos datos se imprimen en el campo 15 
+del MIC DTA. 
+• 
+Capacidad de tracción 
+En este campo se colocará la capacidad de arrastre del tractor en Toneladas (campo 13 
+del MIC DTA). 
+ Identificación  del  chasis  
+Es un grupo de campos obligatorios. Estos campos aceptan caracteres especiales como /, etc. 
+• 
+Marca: corresponde a la marca del chasis, es un campo de libre ingreso (campo 12 del 
+MIC DTA). 
+• 
+Número: corresponde al número de fábrica del chasis, también es de libre ingreso 
+(campo 12 del MIC DTA). 
+• 
+Modelo: corresponde al modelo de fábrica del chasis, es un campo de libre ingreso. Año: 
+corresponde al año de fabricación del vehículo, tiene formato de cuatro dígitos 
+numéricos (p.e.2008) (campo 14 del MIC DTA). 
+ Póliza   de  s eguro  
+Estos datos se ingresan obligatoriamente al momento de registrar el MIC/DTA y se imprimirán en el 
+campo 1 del MIC DTA. 
+• 
+Póliza seguro Camión/Semi: corresponde a los identificadores o números de las pólizas 
+de seguro, tanto del camión o tractor y del semirremolque, separados por el carácter /. 
+Vencimiento Seguro Camión: a través del botón calendario se ingresará la fecha de 
+vencimiento del Seguro del camión o tractor. 
+• 
+Vencimiento Seguro Semi: a través del botón calendario se ingresará la fecha de 
+vencimiento del Seguro del semirremolque. 
+Conductor 1 
+Estos datos se ingresan obligatoriamente al momento de registrar el MIC/DTA. Estos datos se 
+imprimirán en el campo 40 del MIC DTA. 
+• 
+Nombre: campo de libre ingreso. 
+• 
+Tipo de Documento: campo obligatorio. Contiene una lista para seleccionar el tipo que 
+corresponda (DNI, Pasaporte, Cédula de Identidad, Libreta Cívica o de Enrolamiento). 
+• 
+Nº de Documento: campo numérico de libre ingreso. 
+
+===== PAGINA 23 =====
+23 
+Conductor 2 
+Estos datos se ingresan opcionalmente. En caso de utilizar el transporte un segundo conductor se 
+deberán consignar los datos de éste. 
+• 
+Nombre: campo de libre ingreso. 
+• 
+Tipo de Documento: campo obligatorio. Contiene una lista para seleccionar el valor  
+que corresponda (DNI, Pasaporte, Cédula de Identidad, Libreta Cívica o de 
+Enrolamiento). 
+• 
+Nº de Documento: campo numérico de libre ingreso. 
+Rutas: 
+Este campo se encuentra en la parte inferior de la pantalla. El sistema muestra las descripciones 
+correspondientes a País, Aduana, Ciudad de Partida, Frontera (Salida), Entrada y Destino Final del 
+MIC DTA ingresados para los cuatro puntos aduaneros en la primera pantalla (campo 40 del MIC 
+DTA). 
+Editar ruta: 
+Cliqueando en “Editar Ruta” se vuelve a la pantalla de la carga del itinerario para modificarlo. 
+Una vez completa toda la información de esta solapa, al seleccionar GRABAR el sistema asignará un 
+número de MIC DTA el cual se encontrará en estado EN CURSO, y habilitará el acceso a la solapa 
+Países de Paso, que se completará solo de corresponder. 
+ 
+
+===== PAGINA 24 =====
+24 
+ Modificación   de estos  datos  
+Si fuese necesario modificarlos y el MIC DTA ya no se encontrase en estado en CURSO, se deberá 
+solicitar al servicio aduanero utilizar la REVERSION DEL ESTADO DEL MIC DTA, a fin de que lo 
+ponga nuevamente en estado EN CURSO, y entonces, registrar las modificaciones pertinentes.  
+País de Paso 
+Se informará el País de Paso, pudiendo elegirlo de la lista, una vez seleccionado deberá informar 
+la Aduana de Entrada, Lugar operativo y Ciudad correspondientes a la misma. 
+También deberá indicar el Orden (1, 2, 3, etc.), en cuanto a países de paso se trate, es decir que 
+si hubiese dos países antes de arribar al país de destino, deberá informar con Orden 1 aquel 
+que atraviesa primero, y con orden 2 el siguiente país antes de arribar al destino. 
+Por último, informará la Aduana de Salida en el país informado, Lugar operativo y Ciudad 
+correspondientes a la misma. 
+Finalmente, selecciona grabar para continuar con otro País de Paso, o pasar a la siguiente 
+pantalla. 
+MIC DTA en Lastre 
+Si se tratase de un MIC DTA en lastre, la declaración termina con la carátula y eventualmente el 
+País de Paso, y la solapa Contenedores. 
+ 
+El sistema le informa al declarante que debe ingresar a la solapa Contenedores a fin de cargar los 
+mismos, cuando se trate de lastre 
+ 
+
+===== PAGINA 25 =====
+25 
+Aquí se muestra la pantalla para cargar los Contenedores 
+ 
+Transporte de carga 
+Cuando no se trate de un MIC DTA en Lastre, seguidamente se habilita la solapa de Carta de Porte, 
+en donde se permitirá ingresar la información correspondiente a los documentos de transporte. 
+ 
+3. AGREGAR CARTA DE PORTE 
+Pueden existir Cartas de porte ingresadas previamente para modificar, como en este ejemplo, o 
+bien iniciar la carga desde cero. 
+Con el botón AGREGAR CARTA DE PORTE, el sistema habilita las pantallas para dar de alta una 
+nueva Carta de porte y asociarla al MIC DTA. 
+ 
+El sistema muestra en esta pantalla el número de MIC DTA y ciertos datos del itinerario ingresados 
+en la carátula. Se debe Ingresar el identificador de CRT en el campo que dice VALIDAR. 
+
+===== PAGINA 26 =====
+26 
+ 
+Una vez ingresado el número de CRT (carta de porte), el sistema lo valida haciendo clic en el botón 
+inferior (Validar número de Carta). 
+Es necesario que no el identificador de la carta de porte sea único dentro del mismo MIC DTA. Si así 
+fuese, el sistema emitirá un mensaje de error. 
+Se puede cargar opcionalmente la ‘Fecha de entrega al porteador’ Ésta será la fecha en que el 
+porteador se hace cargo del transporte de las mercaderías. También se puede informar la Ciudad y 
+el País donde se realiza tal entrega. Adicionalmente se cuenta con un campo donde se pueden dar 
+más especificaciones sobre este lugar de entrega al porteador. 
+Indicador de Fraccionado *   
+Este indicará si el CRT es Fraccionado. Se debe elegir una de las opciones (SI/NO). En caso 
+afirmativo, se habilitarán para la carga los campos “Peso Bruto Total”, “Descripción de la 
+Mercadería para Fraccionados” y “Monto FOB para Fraccionados”. Al cargar la solapa 
+destinación se informarán los valores Peso y Cantidad de bultos de la fracción que se embarcan 
+en la unidad de transporte para cada permiso de embarque fraccionado. 
+* Resulta importante consultar las modificaciones introducidas respecto a la forma de cargar los 
+datos en la solapas CRT y Permiso de Embarque. Las mismas se explican en el manual y existe un 
+cuadro explicativo en la página 46.  Modificación  introducida en el  ingreso de los  datos   de peso a  
+partir  del 1/10/2024.  
+Si la opción seleccionada es Fraccionado=SI, adicionalmente aparecerá la condición de la fracción, 
+preguntando si es última fracción o si es primera fracción. 
+Las opciones para fraccionados se completarán siguiendo la siguiente lógica: 
+Fracción NO 
+ 
+Se selecciona cuando toda la carga 
+amparada por el CRT se carga en el 
+medio de transporte amparado por 
+el MIC DTA en trato 
+
+===== PAGINA 27 =====
+27 
+Primera 
+Fracción 
+ 
+Se indica SI cuando es la primera 
+fracción que arriba al territorio. 
+En el campo “Cantidad Total de 
+bultos” se pondrá la cantidad 
+correspondiente a todo el CRT. 
+Desde la 
+segunda 
+Fracción y 
+hasta la 
+penúltima 
+ 
+En el campo “Número de MIC de la 
+primera fracción” se ingresará el 
+identificador del MIC DTA 
+correspondiente al primer envío de 
+esa carta de porte. 
+Dicha primera fracción debe estar 
+en al menos en estado EN CURSO 
+para que sea posible el registro del 
+resto de las fracciones 
+Última 
+Fracción 
+ 
+Como en el caso anterior, deberá 
+informar el identificador del MIC 
+DTA correspondiente al primer 
+envío de esa Carta de porte. 
+Cuando se ingresa el Número de MIC DTA de la primera fracción, se debe considerar que dicho MIC 
+DTA tiene que haber sido registrado como Primera Fracción: SI, de lo contrario, al intentar grabar 
+mostrará un error similar al siguiente: 
+ 
+
+===== PAGINA 28 =====
+28 
+Cuando se registra el MIC DTA, si el usuario indica que la operación es fraccionada (Indicador de 
+Fraccionado en “S”) y se informa que la carga a transportarse no es la 1ra. Fracción, en el campo 
+“Recuperar Fracción” se deberá ingresar el dato del Nro. del MIC DTA correspondiente a la 1ra. 
+Fracción. 
+ 
+Además deberá completar el indicador de Consolidado y el correspondiente a Registro Adicional de 
+Envase. 
+ 
+ 
+En la solapa de CRT, cuando se trate de un consolidado, se mostrará la suma de los distintos 
+permisos en los campos Peso Bruto Total, y Monto Fob para fraccionados, sin posibilidad de 
+editarlo. 
+La información del Peso Bruto y Neto, Volumen y Monto FOB se cargarán en esta solapa y deberán 
+corresponder a lo correspondiente del campo 12, 13 y 14 del CRT, respectivamente. 
+Es obligatorio completar el campo ‘Descripción de las mercaderías’ y ‘Fecha de llegada 
+tentativa’ para poder acceder al botón PERMISO DE EMBARQUE. 
+
+===== PAGINA 29 =====
+29 
+ 
+Al validar el número de CRT el sistema controla el Identificador de la Carta de Porte y habilita la 
+solapa PERMISO DE EMBARQUE. 
+ 
+4. Permiso de embarque 
+La solapa Perm. Embarque permite asociar el permiso de embarque a la Carta de Porte, y de 
+corresponder, también permitirá modificarlo. 
+El sistema habilitará la siguiente pantalla 
+ 
+Recordar que se permitirá asociar más de un permiso de embarque al mismo CRT de acuerdo a 
+los indicadores que se hayan seleccionado en la Carta de Porte (ej. Envases adicionales=S). Se 
+ingresa el número de permiso de embarque correspondiente a la declaración que ahora se 
+embarca y se desea asociar a la Carta de Porte. 
+
+===== PAGINA 30 =====
+30 
+Luego, presionando el botón “Consultar”, el sistema completa la información del 
+Remitente (exportador) y el País de Destino correspondientes a ese número de permiso. El 
+sistema muestra la siguiente pantalla: 
+ 
+Presionando el botón CONTINUAR, el sistema habilitará la siguiente pantalla donde el ATA 
+ingresará la información del consignatario y del destinatario. También se podrá modificar el 
+domicilio del remitente. 
+Se deben ingresar las cantidades de embalajes y pesos de las mercaderías que se embarcan. 
+ 
+En el sector inferior, el sistema muestra la información del precumplido correspondiente al 
+permiso de embarque. 
+Se deben completar los siguientes campos 
+CONSIGNATARIO 
+
+===== PAGINA 31 =====
+31 
+Estos datos son obligatorios y se imprimen en el campo 35 del MIC DTA y campo 6 del CRT. 
+• 
+CUIT: Número de clave única de identificación tributaria (o el equivalente en los países 
+signatarios del acuerdo) del consignatario. Este campo acepta caracteres 
+alfanuméricos. Por ejemplo: Argentina: CUIT30123456783, Paraguay: RUC123456789, 
+Chile: RUT961234564. 
+• 
+Razón Social: nombre con el que se encuentra registrada la empresa. 
+• 
+Domicilio: datos del domicilio de la empresa. 
+DESTINATARIO 
+Estos datos son obligatorios y se imprimen en el campo 34 del MIC DTA y 4 del CRT. 
+• 
+Razón social: nombre con el que se encuentra registrado el destinatario. 
+ 
+• 
+Domicilio: datos del domicilio del destinatario. 
+A continuación se presiona el botón Continuar y se habilitan los siguientes campos: 
+ 
+EMBALAJE: corresponde consignar el código del embalaje en que se encuentra la mercadería a ser 
+embarcada en el medio de transporte, desplegando el listado de opciones (campo 30 del MIC DTA). 
+Se controla que solo los tipos de embalaje que tenga el precumplido sean los que se puedan 
+ingresar en la solapa 'Perm. Embarque'. 
+
+===== PAGINA 32 =====
+32 
+Ejemplo:  
+La destinación 25033EC01000413A tiene el precumplido hecho con embalaje 05 (contenedor), si 
+ingresamos 99 (bultos) aparece el siguiente mensaje de error y no permite generar el CRT hasta 
+que se ingrese el embalaje correcto. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Lo mismo ocurre cuando se tiene más de un tipo de embalaje: 
+ 
+ 
+ATENCIÓN: 
+Si el precumplido se realizó con carga acondicionada en contenedores, se deberá modificar el 
+embalaje en esta solapa, informando el código 05 (contenedores) y la cantidad correspondiente 
+a los contenedores que egresarán en esa salida de MIC DTA (máximo 2). 
+
+===== PAGINA 33 =====
+33 
+CANTIDAD: Es la cantidad que se embarca en el medio de transporte para el permiso de embarque 
+seleccionado. 
+Este valor se imprime en el campo 31 del MIC DTA 
+ 
+PESO BRUTO: Es el peso que realmente se enviará en el medio de transporte para el permiso de 
+embarque seleccionado. 
+El dato del Peso Bruto se imprimirá en el campo 32 del MIC DTA. En el caso de que el CRT no sea 
+fraccionado, ni consolidado, el dato también se imprimirá en el campo 12 del CRT, pues serán 
+coincidentes. 
+En esta pantalla el usuario dispone del botón “Deshacer Cambios” que le permite volver atrás aquellas 
+modificaciones que hubiera ingresado. 
+ 
+ 
+Mensaje de confirmación por incongruencia de Peso y Cantidad: Te advierte cuando egresas toda la 
+cantidad precumplida pero no el peso y viceversa. Este control se hace al momento del registro del MIC-
+DTA. 
+
+===== PAGINA 34 =====
+34 
+Ejemplo: 
+Se consumen todas las cantidades pero no el peso. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+Al registrar el MIC-DTA aparece el mensaje de advertencia. 
+ 
+ 
+Se consume todo el peso pero no las cantidades. 
+
+===== PAGINA 35 =====
+35 
+ 
+Al registrar el MIC-DTA aparece el mensaje de advertencia. 
+ 
+ 
+Una vez que se hayan completado los datos de la pantalla, se debe pasar a la solapa del ítem tocando el 
+botón “Ítems”. 
+
+===== PAGINA 36 =====
+36 
+En la cabecera se muestran los identificadores del MIC DTA, Carta de Porte y permiso de embarque. 
+ 
+En esta pantalla puede seleccionar asignar al CRT todos o algunos de los ítems del permiso de 
+embarque. 
+Cuando el Permiso de Embarque posea un único ítem, éste se asignará automáticamente. Cuando 
+tenga más de un ítem deberá asociar al menos uno, para ello deberá presionar el botón ASIGNAR 
+que se encuentra inmediatamente a la derecha de la columna “Asociado”. El declarante también 
+puede usar el botón ‘Asignar Todos’ para realizar la asignación automática de todos los ítems del 
+Permiso de Embarque. 
+Obsérvese que se modifica la pantalla y el sistema valida la operación indicando ASOCIADO SI. 
+También tiene la posibilidad de usar el botón ‘Quitar Todos’ para desasociarlos. 
+Una vez completa la declaración, se presiona el botón VOLVER, para regresar a la pantalla anterior 
+“Permiso de Embarque”. 
+Desde la pantalla de permiso de Embarque, opcionalmente, se pueden asociar documentos que 
+sean requeridos por el Permiso de Embarque, para ello se utiliza el botón ‘DOCUMENTOS’ que lo 
+lleva a la pantalla donde se permite registrar la asociación de los documentos. 
+ 
+
+===== PAGINA 37 =====
+37 
+Se puede consultar el documento, tocando el botón modificar 
+ 
+Desde esta pantalla, se selecciona Modificar o Cancelar, según corresponda, y se vuelve a la 
+pantalla donde están todas las líneas de los documentos asociados. 
+Desde dicha pantalla, se selecciona Volver para retornar a la pantalla correspondiente al 
+Permiso de embarque. 
+ 
+Si se está de acuerdo con toda la declaración, se selecciona el botón VALIDAR que se 
+encuentra en la parte inferior de la pantalla. 
+Con esta operación el sistema actualiza la información, pero aún así es necesario grabarla 
+desde la solapa de CARTA de PORTE. El sistema emite el siguiente aviso: 
+ 
+
+===== PAGINA 38 =====
+38 
+Volviendo a CARTA DE PORTE, se completará la información correspondiente a la misma. 
+ 
+Los campos a completar son: 
+Peso Neto (KG): Este dato se imprimirá sobre el campo 12 del CRT y es de ingreso obligatorio 
+cuando el CRT sea fraccionado. En caso de ser un CRT Fraccionado No, el campo no es editable y 
+se carga automáticamente con el valor ingresado en la solapa 'Perm. Embarque'. 
+Peso Bruto (KG): este dato no es editable, se completará automáticamente a partir de lo 
+informado en la solapa de Permiso de Embarque (ver Peso bruto del Permiso en la pág. 36). 
+Volumen en metros cúbicos: Este valor se imprimirá en el campo 13 del CRT. Este campo es de 
+ingreso optativo. 
+Peso Bruto Total: de ingreso obligatorio cuando el CRT sea fraccionado. En caso de ser  
+
+===== PAGINA 39 =====
+39 
+Fraccionado No, se carga automáticamente con el mismo valor que tiene el "Peso Bruto" de la 
+solapa 'Perm. Embarque' y no es editable. Este valor se imprimirá en el campo 12 del CRT. 
+Cuando el CRT no sea Fraccionado, el "Peso bruto" coincidiría en el campo 12 del CRT y 32 del 
+MIC DTA. 
+ 
+• 
+Fracción: Se seleccionará Si cuando el CRT sea fraccionado. Mostrará además las opciones 
+“Ultima fracción” y “Primera fracción” y para cada una se elegirá entre las opciones SI o NO.  
+Estos selectores se imprimirán en el campo 18 del CRT. Además, en el caso de no ser la 
+“Primera fracción” se deberá informar en el recuadro “Numero de MIC de la primera fracción”, 
+dicho dato, este MIC DTA debe encontrarse por lo menos en estado EN CURSO. 
+• 
+Consolidado: si se selecciona SI, habilitará la carga de más de un permiso de embarque. Dicha 
+selección se imprimirá en el campo 18 del CRT. 
+• 
+Registro Adicional de Envase: se seleccionará SI cuando los envases de la carga se exporten en 
+forma temporal o cancelando una importación temporal, lo que obligará a declarar a nivel de 
+permiso de embarque, la declaración de exportación correspondiente a dichos envases. 
+• 
+Fecha de entrega al porteador: Este valor se imprimirá en el campo 7 del CRT y es de ingreso 
+optativo. 
+• 
+País de entrega al porteador: se puede seleccionar de una lista de valores 
+• 
+Ciudad de entrega al porteador: se selecciona de una lista de valores según lo seleccionado en 
+el campo país de entrega al porteador. 
+Este dato de ciudad se podrá ingresar manualmente. 
+• 
+Fecha de llegada tentativa: Es la fecha de arribo al punto aduanero del país de destinación.  
+
+===== PAGINA 40 =====
+40 
+Se imprimirá en el campo 40 del MIC DTA y en el campo 8 del CRT. 
+• 
+Monto FOB: Se imprimirá en el campo 27 del MIC DTA, excepto cuando es fraccionado. (ver 
+FOB para fraccionados pág. 30) 
+• 
+Valor venta en condición pactada: Este valor se imprimirá en el campo 14 del CRT. 
+• 
+Condición de venta: se puede elegir de la lista de valores 
+• 
+Flete externo: Este valor se imprimirá en el campo 19 del CRT y es de ingreso optativo. 
+• 
+Monto de reembolso: Este valor se imprimirá en el campo 20 del CRT y es de ingreso optativo. 
+• 
+Notificar a: Este valor se imprimirá en el campo 9 del CRT y es de ingreso optativo. 
+• 
+Porteadores sucesivos: Este valor se imprimirá en el campo 10 del CRT y es de ingreso optativo. 
+Comentarios 
+• 
+Comentario Destinatario: Este campo se imprime en el campo 4 del CRT y complementara los 
+datos del mismo. 
+• 
+Comentario Consignatario: Este campo se imprime en el campo 6 del CRT y complementara los 
+datos del mismo. 
+• 
+Comentario Notificar: Este campo se imprime en el campo 9 del CRT y complementara los 
+datos del mismo. 
+• 
+Lugar de emisión del CRT: Se imprime en el campo 5 del CRT. 
+Nota: con la barra de desplazamiento que se encuentra a la derecha se desplazará para 
+completar los campos que se encuentran debajo. 
+ 
+Se observa donde se completarán los gastos de Flete y Seguro en la divisa de operación aduanera, 
+datos que se imprimirán en el campo 15 del CRT. Los montos Flete y Seguro en dólares se 
+imprimirán en los campos 28 y 29 del MIC DTA respectivamente. 
+En caso de operaciones fraccionadas se deberán consignar los valores parciales (de cada una de las 
+fracciones) en los campos Monto en Dólares Flete y Monto en Dólares Seguro y los valores totales 
+en los campos Monto Remitente y/o Monto Destinatario en divisas. 
+ 
+
+===== PAGINA 41 =====
+41 
+Luego, si se seleccionó que el CRT es fraccionado, se ingresará la descripción de la mercadería 
+para fraccionados, que se imprimirá en el campo 11 del CRT y campo 38 del MIC 
+DTA y las observaciones del declarante para las Aduanas intervinientes que se imprimirá sobre 
+el campo 22 del CRT. El ingreso del campo observaciones es optativo. 
+Se presiona el botón GRABAR que se encuentra en la parte inferior de la pantalla. 
+ 
+El sistema mostrará un mensaje indicando que la validación ha sido exitosa. 
+Si se seleccionó alguno de los indicadores de “Consolidado” o “Registro adicional de envase”, se 
+presionará el botón Permiso de embarque y se deberán agregar los permisos de embarque 
+correspondientes. 
+Si se seleccionó el indicador Registro adicional de envase se permitirá en la destinación que 
+corresponda cargar como cantidad de bultos, el valor 0 de modo que la suma de las 
+destinaciones combinadas dé el valor real. 
+ Diferencias   al registrar   un permiso  sin  precumplido  
+Al ingresar un permiso que no tenga precumplido, el sistema mostrará el siguiente mensaje: 
+
+===== PAGINA 42 =====
+42 
+ 
+Al clickear en Continuar, permitirá registrar el CRT, asociar los ítems y eventualmente los 
+documentos 
+ 
+Esta información podrá quedar en curso, pero si no tiene el correspondiente precumplido, no 
+podrá pasar a estado REGISTRADO 
+ 
+Modificación introducida en el ingreso de los datos de peso a partir del 1/10/2024. 
+
+===== PAGINA 43 =====
+43 
+Es muy importante notar que a diferencia de lo que algunos declarantes realizaban que es 
+cargar en la solapa del permiso de embarque el total del contrato (cuando se trataba de 
+fraccionados), se ha modificado el campo en el cual se imprime la información. 
+Entonces lo que se cargue en la solapa de PERMISO DE EMBARQUE se imprimirá en el campo 
+correspondiente del MIC DTA. 
+Aquella información que se cargue en el CRT se imprimirá en los campos habilitados de la 
+CARTA DE PORTE. 
+ 
+El peso bruto que se imprime en el campo 12 del CRT, corresponde al Peso Bruto Fraccionado, el 
+cual se toma automáticamente del o de los permisos cuando se trate de un CRT NO 
+Fraccionado, caso contrario debe informarse en la solapa CRT. 
+Cuando el CRT no sea fraccionado el campo 12 del CRT y el 32 del MIC DTA coincidirán. 
+5. CONTENEDORES 
+CONTENEDORES: Si se hubiera ingresado el precumplido del permiso de embarque con 
+contenedores, se ingresará en la solapa CONTENEDORES. 
+Recordar que en la solapa se puede consultar la lista de contenedores, o también cargar de 
+manera manual, seleccionando Nuevo contenedor. 
+En esta solapa se completan los campos siguientes: 
+
+===== PAGINA 44 =====
+44 
+• 
+Condición Origen: condición de entrega del contenedor en Origen 
+• 
+Condición destino: condición de entrega del contenedor en destino. 
+• 
+Medidas: dimensiones de los contenedores según normas (20x20, 40x40, 45 pies y 48 
+pies). Este campo posee lista de opciones. 
+• 
+Carta de porte: muestra el conocimiento que se está completando. 
+• 
+Permiso: de corresponder muestra el permiso de embarque que se está completando. 
+• 
+Accesorios Tipo y Nro.: se ingresa el tipo de accesorio (flexitank, clip on, etc.) y el 
+identificador que posee. 
+• 
+Comentarios: se ingresarán las aclaraciones que sean necesarias. 
+ 
+5.1. 
+Carga consolidada en contenedor 
+Si se trata de más de un permiso precumplido en el mismo contenedor, para cada uno de los 
+permisos se debe generar su correspondiente CRT. 
+ 
+ATENCIÓN: 
+Si el precumplido se realizó con carga acondicionada en contenedores, se deberá modificar el 
+embalaje en la solapa PERMISO DE EMBARQUE, informando el código 05 (contenedores) y la cantidad 
+correspondiente a los contenedores que egresarán en esa salida de MIC DTA. 
+Adicionalmente, es importante recordar que debe estar agregada la declaración aduanera a la Carta 
+de Porte. 
+Se carga el segundo CRT con su permiso de embarque. En cada uno, se mostrarán las cantidades 
+y embalajes precumplidos 
+
+===== PAGINA 45 =====
+45 
+ 
+Se carga el resto de la información y se valida la carta de porte 
+ 
+Nos dirigimos a la solapa Contenedores donde aparecerá el contenedor precumplido, pero 
+relacionado con ambas Declaraciones de exportación y Doc.Transporte diferente 
+ 
+Se selecciona de la lista un primer contenedor y se hace click en Precintos 
+
+===== PAGINA 46 =====
+46 
+ 
+Se pasa a la solapa Precintos. De corresponder, se puede agregar más de un precinto, 
+seleccionando el botón “Nuevo precinto” 
+Nuevamente se va a la solapa Contenedores, se selecciona el segundo contenedor y se hace click en 
+Precintos 
+Se retorna a la solapa Precintos pero en este caso se visualiza que existe uno o más precintos 
+asociado al contenedor, es por ello que ya no se debe agregar otro precinto. 
+Luego, se hace click sobre la palabra “Bultos” dentro del renglón del contenedor, allí se indicará el tipo 
+de embalaje y la cantidad bultos que se cargaron dentro del contenedor. 
+En caso de que existan más de un tipo de embalaje, este paso se deberá repetir tantas veces 
+como distintas unidades de medida se hayan cargado dentro del contenedor presionando el 
+botón Nuevo Bulto. Se puede controlar y verificar lo ingresado presionando el botón Lista de 
+Bultos. 
+ 
+ 
+5.2. 
+Contenedores vacíos 
+En este ejemplo se muestra la carga de contenedores VACIOS, que no se relacionan con un permiso de 
+embarque. 
+
+===== PAGINA 47 =====
+47 
+ 
+ 
+Se presiona el botón Grabar y el sistema muestra la siguiente pantalla. 
+6. 
+Precintos 
+6.1. 
+PRECINTOS PARA CONTENEDOR 
+Una vez ingresados los bultos por contenedor se presiona el botón Grabar, y se vuelve a la 
+anterior pantalla, se agregarán los precintos correspondientes presionando la palabra 
+“Precintos” de la tabla CONTENEDORES ASIGNADOS (línea del detalle del contenedor de la 
+pantalla de la página 50). 
+
+===== PAGINA 48 =====
+48 
+ 
+Después de completar el campo Precinto, se presiona el botón GRABAR. 
+Si el contenedor llevara más de un precinto se presionará el botón Nuevo Precinto y se 
+completará nuevamente con los datos del siguiente precinto. Se puede controlar y verificar lo 
+ingresado presionando el botón Lista de Precintos. 
+En la impresión del MIC/DTA, los precintos declarados se visualizarán separados por un guion. 
+6.2. 
+PRECINTOS PARA CARGA SUELTA: 
+Si se hubiera declarado este tipo de carga se hará clic en la solapa PRECINTOS. 
+Se ingresarán los precintos clickeando el botón “Nuevo precinto”. 
+ 
+El campo Contenedor quedará en blanco. Se ingresa el identificador del precinto y se 
+presiona el botón “Grabar”. El sistema muestra el siguiente mensaje. 
+ 
+Este proceso se repetirá tantas veces como precintos tenga la carga, presionando el botón 
+“Nuevo precinto”. Para ir al listado de precintos se presiona el botón “Lista de precintos”. 
+
+===== PAGINA 49 =====
+49 
+Impresión de MIC DTA para revisión 
+Si se realiza una impresión previa antes de grabar el registro del MIC DTA, no se visualizará 
+información en el campo 6 – Fecha de emisión, del documento MIC DTA. 
+Se imprimirá en la parte inferior izquierda el estado del mismo (En curso). 
+MIC DTA EN CURSO que no pasen a estado Registrado 
+Los MIC DTA que se encuentren “EN CURSO”, serán dados de baja automáticamente de la base 
+de datos del SINTIA, pasados los 30 días corridos contados a partir de su ingreso al sistema. 
+Llenado de los Campos del MIC DTA  
+Para hacer más gráfica esta explicación se copiarán las pantallas indicando la información 
+ingresada en el sistema en que campo se imprimirá. 
+ 
+ 
+
+===== PAGINA 50 =====
+50 
+ 
+ 
+ 
+
+===== PAGINA 51 =====
+51 
+ 
+Registro del MIC DTA 
+Una vez que se asocian los permisos de embarque a la carta de porte y se grabó la información, 
+desde la pantalla CARATULA se puede realizar el registro del MIC DTA clickeando sobre el botón 
+REGISTRAR. 
+
+===== PAGINA 52 =====
+52 
+Habilitar control de Cantidad: Se ingresa el control de las cantidades al momento de registrar el MIC-
+DTA, mostrando un mensaje de error y no permitiendo el registro. Mientras se deje el MIC en curso si 
+te permite tener una cantidad mayor a la precumplida.   
+ 
+Al querer registrar el MIC-DTA te controla y aparece el siguiente mensaje de error: 
+ 
+ 
+ 
+Si la información es correcta se muestra un mensaje similar a este: 
+ 
+Impresión  
+Al apretar el botón IMPRIMIR, el sistema muestra una ventana donde se debe elegir la acción a 
+seguir. 
+ 
+
+===== PAGINA 53 =====
+53 
+Para la impresión el sistema genera un archivo en formato PDF. 
+Cuando el estado informático del MIC DTA sea “Registrado” o “Presentado”, se imprimirá 
+en el reporte del MIC DTA la fecha de emisión (campo 6). 
+Asimismo, al pie y a la izquierda del formulario MIC DTA, se imprimirá el estado 
+informático del MIC DTA   al momento de   la impresión . 
+Consulta 
+Desde el Menú Manifiesto de Importación, en la solapa SELECCIÓN se puede observar un campo 
+de información de la Lista de manifiestos en Curso, Presentados y Registrados. 
+En la misma se mostrará el identificador del MIC DTA, también se mostrará cuál es su estado, el 
+identificador del vehículo, la fecha de emisión y el País de destino, también se permitirá su impresión. 
+ 
+
+===== PAGINA 54 =====
+54 
+Impresión de Manifiesto con más de una carta de porte  
+ 
+
+===== PAGINA 55 =====
+55 
+ 
+
+===== PAGINA 56 =====
+56 
+ 
+
+===== PAGINA 57 =====
+57 
+ 
+
+===== PAGINA 58 =====
+58 
+Impresión de Manifiesto en lastre  
+ 
+
+===== PAGINA 59 =====
+59 
+CONTROL DE SALIDA DEL MIC DTA 
+Esta tarea estará a cargo del Agente de Transporte Aduanero cuando se trate de una operación de 
+tránsito de exportación, es decir, que se registra la salida en una jurisdicción aduanera distinta a la 
+que saldrá al exterior (R.G. ARCA 898/00). Esta operación no posee reversa 
+Para realizar el Control de Salida, se selecciona la opción desde el menú principal. 
+ 
+Se ingresa el identificador del MIC/DTA y el número de salida, por último, se debe completar el 
+campo “Tipo Salida” seleccionando entre las opciones SISTEMA o MANUAL, según corresponda. Se 
+toca el botón buscar y el sistema desplegará la información correspondiente a la salida solicitada. 
+ 
+Presionando el botón AUTORIZAR SALIDA, se abrirá la siguiente ventana 
+ 
+Si el agente externo acepta la operación, el sistema mostrará en la pantalla el estado actualizado, es decir 
+SALI. 
+
+===== PAGINA 60 =====
+60 
+GESTIÓN DEL DEPOSITARIO 
+En los casos en que la mercadería se encuentre dentro de un Depósito Fiscal, la responsabilidad de 
+registrar la salida informática de la mercadería es del depositario. 
+Una vez que se ingresó al aplicativo por la opción correspondiente, el Depositario procederá e 
+realizar la salida de Depósito de la mercadería. 
+SALIDA DE DEPÓSITO DE EXPORTACION MIC/DTA 
+Por cada MIC/DTA y todos los CRT asociados, se realiza una sola salida. Al registrar esta operación 
+se efectúa la salida de depósito de los Permisos de Embarque asociados al MIC/DTA. 
+ 
+El sistema habilitará la siguiente pantalla 
+ 
+Se muestra el lugar operativo seleccionado al iniciar la conexión y solicita el número de MIC DTA al 
+que se le va a generar la salida. Luego se presiona el botón CARGAR DATOS. 
+Presionando el botón CARGAR DATOS, el sistema trae la información correspondiente a los datos 
+del medio de transporte, el depósito de salida, destino/salida (aduana de salida), tipo de salida 
+(listado para elegir Sistema o Manual) 
+
+===== PAGINA 61 =====
+61 
+ 
+Se habilita la solapa DATOS TRANSPORTE. Si se selecciona “Modificar”, se habilita una pantalla que 
+permite el cambio de los datos. 
+Esta operación de modificación de datos de la solapa Transporte cambiará los grabados por el ATA, 
+por lo que deberá reimprimir obligatoriamente el MIC DTA. 
+Tanto si se selecciona Modificar, como Cancelar se vuelve a la solapa SALIDA MIC DTA. 
+ 
+En el campo TIPO DE SALIDA, se optará por Manual o Sistema 
+Se seleccionará la opción “SISTEMA” cuando corresponda. El sistema pregunta si ¿Esta salida 
+reemplaza a una Salida Anulada?: 
+ 
+Si la opción es negativa, debe tildar NO y cliquear en el botón Aceptar. 
+
+===== PAGINA 62 =====
+62 
+Si la opción elegida es SI, además de tildar la opción, es necesario completar el Número de Salida 
+Reemplazada y en el campo Observaciones, completar con una leyenda indicativa. 
+ 
+Luego de completar la información, se debe Aceptar. 
+ 
+Recuerde que el asterisco azul indica que obligatoriamente deberá completar los campos. 
+Presionando ACEPTAR, el sistema habilitará la siguiente pantalla. 
+ 
+Presionando el botón “Consultar MIC”, el sistema muestra la siguiente pantalla. 
+
+===== PAGINA 63 =====
+63 
+ 
+Cuando se registre la salida de un MIC DTA que corresponde a más de un permiso de embarque se 
+generará un juego de salidas por triplicado para cada permiso con el mismo número de salida, y se 
+presiona el botón “Registrar salida”. 
+ 
+El número de salida de los Permisos de Embarque es el mismo número que se ha generado para 
+el MIC/DTA. 
+El sistema habilita distintas opciones para imprimir la información o guardarla. 
+• 
+En caso de seleccionar “Pre – Impreso” se deberá poner en la impresora formulario OM- 
+2144. 
+• 
+En el caso de seleccionar “Standard” imprime sobre papel tamaño A4 las salidas 
+correspondientes. 
+
+===== PAGINA 64 =====
+64 
+ 
+Selección de impresión estándar 
+
+===== PAGINA 65 =====
+65 
+ 
+Selección de impresión preimpreso 
+
+===== PAGINA 66 =====
+66 
+MIC DTA DE ENTRADA 
+Recuperación de datos de los MIC DTA recibidos vía web service de países limítrofes al registrar 
+un manifiesto de importación. 
+Este instructivo será utilizado para las transacciones de registro de un MIC DTA en el Sistema Maria 
+tanto para el Registro del MIC (mtermicm1), como para el Registro de un manifiesto terrestre 
+(mterdsum1). 
+Se ingresará a la transacción MTERMICM1 
+En el campo Nro. De MIC/DTA, se colocará el número del documento del que se pretende 
+recuperar los datos. 
+ 
+Si el MIC/DTA ya se recuperó y está asociado a un MANI distinto de ANULADO, el sistema emitirá 
+un mensaje: 
+MIC/DTA ya utilizado para el MANI XXXXXXXXXXXXX ->Dato erróneo 
+
+===== PAGINA 67 =====
+67 
+ 
+Si el dato es correcto y está disponible, el sistema permitirá la continuación de la operación, 
+descargando obligatoriamente los datos del MIC DTA transmitidos por WS desde su origen. 
+Con el cursor en el campo Nro. Operac. MICDTA, el cual deberá ser completado con el número 
+correspondiente al lugar operativo en que se realiza la operación. 
+ 
+Se completa el Nro. Operac MICDTA y el sistema muestra la descripción del Lugar operativo 
+de origen y repite su código. 
+
+===== PAGINA 68 =====
+68 
+ 
+Luego de completar los datos de la operación del MIC DTA, el cursor se posicionará en el campo 
+Fecha de arribo, muestra la fecha del día, pero la misma puede ser modificada. 
+ 
+El sistema solicita el ingreso del lugar operativo de destino. Se puede seleccionar de un listado 
+(presionando CTRL+L) que mostrará los lugares operativos de la aduana de destino. 
+Luego se debe responder a la pregunta “Usa PEMA “S”/”N”?” (Precinto Electrónico de 
+Monitoreo Aduanero). Pasará los campos Transporte Vacío, Transportista y País  
+Transportista, sin posibilidad de corrección, posicionándose en el campo Comentarios. 
+
+===== PAGINA 69 =====
+69 
+El campo Comentarios no es obligatorio, por lo tanto, puede dejarse sin llenar si se desea. 
+ 
+En el campo Nro. Registro CNRT se ingresará dicho número según la Resolución General Nº 2494. El 
+sistema completa el campo CUIT Empresa y modifica el campo Transportista de la primera columna. 
+ 
+Para los campos CUIT Empresa Transportista y CUIT Apoderado si la información ingresada no pasa 
+esta validación, el sistema emitirá un mensaje: “Dígito verificador CUIT erróneo” o  
+“Transportista irregular en PAUT”. Estos mensajes nos avisan que el número de CUIT declarado no 
+es correcto o no corresponde a un transportista inscripto. 
+
+===== PAGINA 70 =====
+70 
+ 
+ 
+
+===== PAGINA 71 =====
+71 
+La aplicación solicita el ingreso de las patentes y el país correspondientes al camión y a los 
+acoplados (en caso de corresponder). 
+ 
+En el campo “Acoplado1” se deberá declarar el país en forma obligatoria para poder seguir adelante. 
+En el caso de que exista un segundo acoplado se seguirá el procedimiento como para el Acoplado 1. 
+El Peso Bruto transmitido electrónicamente puede ser modificado. 
+ 
+El Peso Neto debe ser declarado en el sistema en forma obligatoria ya que no es transmitido. 
+El Peso Neto no puede ser mayor que el Peso Bruto, para el caso la transacción cuenta con un 
+control que no permite la declaración de esa manera, emite un mensaje y no permite proseguir. 
+
+===== PAGINA 72 =====
+72 
+ 
+Una vez colocado el Peso Neto se posicionará automáticamente en el campo Estado y se 
+validará la carátula presionando F3. El sistema mostrará el mensaje “Validación realizada”. 
+ 
+
+===== PAGINA 73 =====
+ 
+Luego de la validación se procederá a realizar AV.PAG para pasar a otra pantalla (MTERMICM2) 
+que permitirá la carga de los CRT. El cursor se posiciona en el campo Título. 
+ 
+Si se conoce el identificador del CRT, se lo ingresara de lo contrario se lo puede cargar 
+recuperándolo de la lista de valores del campo, presionando CTRL-L. 
+De esta manera se evitarán errores ya que deberá ser exacto al que existe en la base de datos del 
+SIM para poder recuperar el CRT. 
+Si en cambio, se desea cargar un identificador del CRT diferente a los existentes en las tablas recibidas se 
+abre la opción para cargar un CRT nuevo para este MANI. 
+ 
+Luego de recuperar los datos del CRT (Consignatario, Notificar, Consolidado), éstos pueden ser 
+modificados por el declarante. El sistema salteará los indicadores “T” (Tránsito) y “Tl” (Traslado) y 
+los completará según la información de la carátula del manifiesto. Si es fraccionado colocará el 
+indicador F=S y procederá a cargar el identificador del Manifiesto donde se encuentra declarada la 
+primera fracción, en el campo Manifiesto. 
+Deberá declarar obligatoriamente el campo SENASA R19/02. 
+7081 
+
+===== PAGINA 74 =====
+82 
+ 
+El campo Cod.Emb. mostrará el código de embalaje declarado en el MIC DTA, el mismo será el del 
+país de origen del CRT, se deberá tener sumo cuidado en verificar que el código se corresponda 
+con los aceptados por el SIM. Este campo dispondrá de una lista de valores para seleccionar. 
+ 
+El campo Natur. Mercadería es modificable. 
+El campo Número bultos, se mostrará vacío, pero se puede llenar. 
+En el caso que el CRT esté marcado como Fraccionado y sea la primera fracción del mismo, se 
+deberá colocar la cantidad parcial (para la fracción) y la cantidad total. 
+Cuando se trate de las siguientes fracciones sólo se declararán las cantidades parciales para cada 
+fracción. 
+Si el CRT no es fraccionado el campo Cantidad Parcial se inhabilita, pudiéndose declarar solo la 
+cantidad total en el campo correspondiente. 
+
+===== PAGINA 75 =====
+83 
+ 
+Los campos Peso en kilos y Comentarios son modificables a criterio del declarante. 
+Si se valida y el código de embalaje es “05-contenedores”, el sistema mostrará un mensaje 
+de advertencia invitando a verificar la pantalla de contenedores. 
+ 
+Para revisar y validar los contenedores se debe ejecutar el comando F2-6. 
+
+===== PAGINA 76 =====
+84 
+ 
+Al habilitarse la pantalla con los datos de los contenedores, si alguno de ellos no tiene el 
+formato válido, el sistema avisará con un mensaje para que se lo declare nuevamente con el 
+mismo número que se transmitió. 
+ 
+Una vez colocado el número de contenedor igual al que se transmitió, el aplicativo dejará 
+proseguir con la modificación de los demás campos. 
+Para revisar el contenedor de una línea inferior se debe bajar con el cursor. 
+
+===== PAGINA 77 =====
+85 
+ 
+Una vez revisados los contenedores se valida la información con la tecla F3. 
+El aplicativo vuelve al campo Cod. Emb. donde se tipea nuevamente F3 para validar la línea y pasar 
+a la pantalla donde se declararán los datos de la Salida. 
+MTERMICM1 - Procedimiento para la salida de un CRT marcado como Tránsito 
+Se declarará la aduana de destino del Tránsito en el campo Aduana de Destino / Salida. 
+ 
+En el campo País de Destino se colocará el código del país de destino del tránsito según la codificación del 
+SIM. 
+
+===== PAGINA 78 =====
+86 
+ 
+El Campo Lugar Operativo de Destino, solicitará el ingreso del código del LOT que recibirá el 
+tránsito aduanero. Luego de colocar el LOT se seguirá como se indica en el título siguiente, que 
+corresponde a la declaración de un Traslado Sumario. 
+ 
+
+===== PAGINA 79 =====
+87 
+MTERMICM1 - Procedimiento para la salida de un CRT marcado como Traslado 
+ 
+En el campo Depósito de Destino se declarará el Lugar Operativo (LOT) de destino. Debe 
+ser diferente al que se está informando como LOT de origen de la declaración. 
+En el campo Importador se deberá declarar una CUIT válida del importador de la 
+mercadería. Este campo es optativo (puede dejarse en blanco). 
+En el caso que tuviera contenedores, los campos Precintos y Contenedores no se pueden 
+modificar. 
+Si el embalaje es diferente de contenedores se deberán declarar los precintos en el 
+campo correspondiente. 
+En el bloque DATOS DEL CONDUCTOR los datos son modificables y si están vacíos (en caso que 
+no se recupere el MIC) se deberán declarar. 
+El tipo de documento posee una lista de valores si el que fue transmitido no se 
+corresponde con los códigos del SIM. 
+
+===== PAGINA 80 =====
+88 
+ 
+En los campos Nro. Documento y Licencia se ingresarán los datos correspondientes al 
+conductor. 
+ 
+Para validar se procede con F3, y el aplicativo volverá a la pantalla anterior de la cual se 
+saldrá con F4. 
+
+===== PAGINA 81 =====
+89 
+ 
+Al ejecutar F4 desde campo Titulo el sistema pregunta: 
+ 
+Para poder registrar el MANI se debe optar por SI para volver a la carátula. 
+Si en la carátula el usuario abandona la sesión (apretando F4) SIN REGISTRAR el MANI, el 
+sistema procederá a ANULAR la operación y sólo podrá recuperar los datos transmitidos 
+realizando un NUEVO MANI. 
+
+===== PAGINA 82 =====
+90 
+Para poder Registrar el MANI, el operador debe posicionarse en el campo Estado y 
+cambiar el mismo de CUR a REG y validar con F3. 
+Una vez validado el sistema avisará el cambio de estado al operador con un mensaje 
+“Validación realizada”. 
+ 
+Si al intentar grabar en la pantalla de la carátula faltasen validar los contenedores que 
+fueron transmitidos, el sistema avisará al momento del registro del MANI con un mensaje 
+que impide proseguir indicando en qué CRT están los contenedores sin validar y la 
+cantidad de los mismos. 
+
+===== PAGINA 83 =====
+91 
+ 
+Si faltasen declarar los datos para la Salida del MANI el sistema emitirá un mensaje 
+indicando cuál es el Titulo que tiene los datos faltantes y no permitirá continuar con 
+la operación hasta incorporar los datos solicitados. 
+ 

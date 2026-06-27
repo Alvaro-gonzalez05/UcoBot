@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UcoBot · Kit Transportistas — Propuesta de Automatización MIC/DTA &amp; CRT</title>
+<style>
+  :root{
+    --ink:#0f172a; --ink-soft:#334155; --muted:#64748b; --line:#e2e8f0;
+    --bg:#f8fafc; --card:#ffffff;
+    --brand:#1e3a8a; --brand-2:#2563eb; --brand-soft:#eff6ff;
+    --accent:#0d9488; --accent-soft:#ecfdf5;
+    --warn:#b45309; --warn-soft:#fffbeb;
+    --danger:#b91c1c; --danger-soft:#fef2f2;
+    --radius:16px;
+    --shadow:0 1px 2px rgba(15,23,42,.04),0 12px 28px -12px rgba(15,23,42,.18);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.65;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1000px;margin:0 auto;padding:0 22px}
+  /* HEADER */
+  header.hero{
+    background:linear-gradient(135deg,#0f1e54 0%,#1e3a8a 50%,#2563eb 100%);
+    color:#fff;padding:64px 0 72px;position:relative;overflow:hidden;
+  }
+  header.hero::after{
+    content:"";position:absolute;right:-120px;top:-120px;width:420px;height:420px;
+    background:radial-gradient(circle,rgba(255,255,255,.12),transparent 70%);
+  }
+  .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);
+    border:1px solid rgba(255,255,255,.22);padding:6px 14px;border-radius:999px;
+    font-size:13px;font-weight:600;letter-spacing:.3px;backdrop-filter:blur(4px)}
+  header.hero h1{font-size:42px;line-height:1.12;margin:18px 0 10px;font-weight:800;letter-spacing:-.5px}
+  header.hero p.sub{font-size:19px;color:#dbeafe;max-width:680px;margin:0}
+  .meta{margin-top:26px;display:flex;flex-wrap:wrap;gap:10px}
+  .meta span{font-size:13px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.18);
+    padding:6px 12px;border-radius:8px;color:#eff6ff}
+  /* SECTIONS */
+  main{padding:10px 0 70px}
+  section{margin-top:54px}
+  .eyebrow{display:inline-block;font-size:12px;font-weight:700;letter-spacing:1.4px;
+    text-transform:uppercase;color:var(--brand-2);margin-bottom:6px}
+  h2{font-size:28px;font-weight:800;letter-spacing:-.4px;margin:0 0 8px;color:var(--ink)}
+  h2 .num{color:var(--brand-2);font-variant-numeric:tabular-nums}
+  .lead{color:var(--ink-soft);font-size:17px;max-width:760px}
+  h3{font-size:19px;font-weight:700;margin:26px 0 8px}
+  p{margin:10px 0}
+  /* CARDS */
+  .grid{display:grid;gap:18px;margin-top:22px}
+  .grid.two{grid-template-columns:repeat(2,1fr)}
+  .grid.three{grid-template-columns:repeat(3,1fr)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:22px;box-shadow:var(--shadow)}
+  .card h4{margin:0 0 6px;font-size:16px;font-weight:700;display:flex;align-items:center;gap:9px}
+  .card p{margin:6px 0 0;color:var(--ink-soft);font-size:15px}
+  .ico{width:34px;height:34px;border-radius:9px;display:inline-grid;place-items:center;
+    background:var(--brand-soft);color:var(--brand-2);flex:none;font-size:18px}
+  .ico.green{background:var(--accent-soft);color:var(--accent)}
+  /* CALLOUTS */
+  .callout{border-radius:14px;padding:18px 20px;margin:22px 0;border:1px solid;font-size:15px}
+  .callout.key{background:var(--brand-soft);border-color:#bfdbfe;color:#1e3a8a}
+  .callout.win{background:var(--accent-soft);border-color:#a7f3d0;color:#065f46}
+  .callout.warn{background:var(--warn-soft);border-color:#fde68a;color:#92400e}
+  .callout.danger{background:var(--danger-soft);border-color:#fecaca;color:#991b1b}
+  .callout strong{font-weight:800}
+  .callout .ct{font-weight:800;display:block;margin-bottom:3px;font-size:13px;text-transform:uppercase;letter-spacing:.6px}
+  /* TABLE */
+  .tablecard{overflow:hidden;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);margin-top:20px}
+  table{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--card)}
+  th,td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:#0f1e54;color:#fff;font-weight:600;font-size:13px;letter-spacing:.2px}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:#fbfcfe}
+  td.tag{white-space:nowrap}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
+  .pill.master{background:var(--brand-soft);color:#1d4ed8}
+  .pill.trx{background:#fef3c7;color:#92400e}
+  .pill.auto{background:var(--accent-soft);color:#047857}
+  code{background:#f1f5f9;border:1px solid var(--line);border-radius:6px;padding:1px 7px;
+    font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#0f172a}
+  /* TIMELINE / FLOW */
+  .flow{margin-top:26px;display:grid;gap:0}
+  .phase{display:grid;grid-template-columns:54px 1fr;gap:18px;position:relative;padding-bottom:26px}
+  .phase:not(:last-child)::before{content:"";position:absolute;left:26px;top:54px;bottom:0;width:2px;background:var(--line)}
+  .phase .dot{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;
+    font-weight:800;font-size:20px;color:#fff;background:linear-gradient(135deg,#1e3a8a,#2563eb);
+    box-shadow:0 8px 18px -8px rgba(37,99,235,.6);z-index:1}
+  .phase.green .dot{background:linear-gradient(135deg,#0d9488,#10b981);box-shadow:0 8px 18px -8px rgba(16,185,129,.55)}
+  .phase .body{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow)}
+  .phase .body h4{margin:0 0 4px;font-size:17px;font-weight:800}
+  .phase .body .when{font-size:12.5px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+  .phase ol{margin:10px 0 0;padding-left:20px}
+  .phase ol li{margin:6px 0;color:var(--ink-soft)}
+  /* COMPARISON */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:22px}
+  .vs .col{border-radius:var(--radius);padding:22px;border:1px solid var(--line)}
+  .vs .before{background:#fff;}
+  .vs .after{background:linear-gradient(180deg,#ecfdf5,#fff);border-color:#a7f3d0}
+  .vs h4{margin:0 0 14px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+  .vs ul{margin:0;padding-left:4px;list-style:none}
+  .vs li{padding:8px 0 8px 28px;position:relative;font-size:14.5px;border-top:1px dashed var(--line)}
+  .vs li:first-child{border-top:none}
+  .vs .before li::before{content:"✕";position:absolute;left:0;color:#dc2626;font-weight:800}
+  .vs .after li::before{content:"✓";position:absolute;left:0;color:#059669;font-weight:800}
+  .metric{display:flex;gap:24px;flex-wrap:wrap;margin-top:18px}
+  .metric .m{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 22px;box-shadow:var(--shadow);flex:1;min-width:160px}
+  .metric .m .big{font-size:30px;font-weight:800;color:var(--brand-2);line-height:1}
+  .metric .m .lbl{font-size:13px;color:var(--muted);margin-top:6px}
+  .metric .m.green .big{color:var(--accent)}
+  /* steps inline list */
+  ul.clean{list-style:none;padding:0;margin:14px 0}
+  ul.clean li{padding:9px 0 9px 30px;position:relative;border-bottom:1px solid var(--line);color:var(--ink-soft)}
+  ul.clean li:last-child{border-bottom:none}
+  ul.clean li::before{content:"›";position:absolute;left:8px;top:7px;color:var(--brand-2);font-weight:800;font-size:18px}
+  ul.clean li strong{color:var(--ink)}
+  .qbox{counter-reset:q}
+  .qbox .q{display:grid;grid-template-columns:34px 1fr;gap:14px;align-items:start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .qbox .q:last-child{border-bottom:none}
+  .qbox .q .n{counter-increment:q;width:34px;height:34px;border-radius:9px;background:var(--warn-soft);
+    color:var(--warn);font-weight:800;display:grid;place-items:center}
+  .qbox .q .n::before{content:counter(q)}
+  footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--muted);font-size:13.5px;text-align:center}
+  footer .brandline{font-weight:800;color:var(--brand);font-size:15px}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:18px 22px;margin-top:34px;box-shadow:var(--shadow)}
+  .toc h4{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+  .toc ol{margin:0;padding-left:20px;columns:2;gap:30px}
+  .toc a{color:var(--brand-2);text-decoration:none;font-weight:600;font-size:14.5px}
+  .toc a:hover{text-decoration:underline}
+  @media (max-width:760px){
+    .grid.two,.grid.three,.vs{grid-template-columns:1fr}
+    header.hero h1{font-size:32px}
+    .toc ol{columns:1}
+  }
+  /* Botón flotante de descarga */
+  .dl-btn{position:fixed;right:22px;bottom:22px;z-index:50;display:inline-flex;align-items:center;gap:9px;
+    background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border:none;cursor:pointer;
+    font-family:inherit;font-size:15px;font-weight:700;padding:13px 20px;border-radius:999px;
+    box-shadow:0 10px 26px -8px rgba(37,99,235,.7);transition:transform .15s ease,box-shadow .15s ease}
+  .dl-btn:hover{transform:translateY(-2px);box-shadow:0 16px 32px -8px rgba(37,99,235,.8)}
+  .dl-btn:active{transform:translateY(0)}
+  .dl-btn svg{width:18px;height:18px}
+  @media (max-width:760px){.dl-btn{right:14px;bottom:14px;font-size:14px;padding:11px 16px}}
+  @media print{
+    @page{margin:14mm}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{background:#fff}
+    .dl-btn{display:none !important}
+    header.hero{background:#1e3a8a !important}
+    .card,.phase .body,.tablecard,.metric .m{box-shadow:none}
+    /* no cortar bloques de contenido a mitad de página */
+    section{margin-top:30px}
+    .card,.phase,.callout,.vs .col,.metric .m,.qbox .q,.tablecard,.toc{break-inside:avoid;page-break-inside:avoid}
+    tr{break-inside:avoid;page-break-inside:avoid}
+    thead{display:table-header-group}
+    /* mantener los títulos pegados a su contenido */
+    h2,h3,h4{break-after:avoid;page-break-after:avoid}
+    .eyebrow{break-after:avoid;page-break-after:avoid}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">⬢ UcoBot · Kit Transportistas</span>
+    <h1>Automatización de MIC/DTA y CRT<br>para transporte internacional terrestre</h1>
+    <p class="sub">Propuesta técnica y de negocio: un CRM especializado + una extensión que vuelca los datos al Sistema MALVINA, eliminando la carga manual repetitiva.</p>
+    <div class="meta">
+      <span>📅 Documento para revisión conjunta</span>
+      <span>🚛 Corredor AR ↔ Chile / países ATIT</span>
+      <span>🏛️ Sistema MALVINA · SINTIA (AFIP/ARCA)</span>
+      <span>v1 · borrador</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<div class="toc">
+  <h4>Contenido</h4>
+  <ol>
+    <li><a href="#resumen">Resumen ejecutivo</a></li>
+    <li><a href="#docs">Qué son el MIC/DTA y el CRT</a></li>
+    <li><a href="#problema">El problema actual</a></li>
+    <li><a href="#propuesta">La propuesta: CRM + extensión</a></li>
+    <li><a href="#logica">Lógica de negocio que respetamos</a></li>
+    <li><a href="#datos">Qué datos vamos a trabajar</a></li>
+    <li><a href="#flujo">El flujo de trabajo (3 fases)</a></li>
+    <li><a href="#porque-extension">Por qué una extensión (y no API)</a></li>
+    <li><a href="#necesitamos">Qué necesitamos de ustedes</a></li>
+    <li><a href="#proximos">Próximos pasos</a></li>
+  </ol>
+</div>
+</div>
+
+<main class="wrap">
+
+  <!-- 1 -->
+  <section id="resumen">
+    <span class="eyebrow">01 · Resumen</span>
+    <h2>Resumen ejecutivo</h2>
+    <p class="lead">Hoy, generar un MIC/DTA y sus CRT en el Sistema MALVINA implica cargar a mano decenas de campos, transcribir el permiso de embarque desde un PDF, buscar códigos de aduanas y ciudades, calcular pesos y valores, y rezar para que la declaración no rebote por un error. Todo eso, viaje tras viaje.</p>
+    <p class="lead">La propuesta es construir un <strong>kit para transportistas</strong> sobre UcoBot: un <strong>CRM que guarda los datos que se repiten</strong> (flota, choferes, clientes, rutas), <strong>extrae con IA el permiso de embarque</strong>, <strong>valida todo antes</strong> de tocar la aduana, y una <strong>extensión de Chrome que vuelca el viaje ya armado al MALVINA</strong> en segundos. El operador solo revisa y oficializa.</p>
+    <div class="callout key">
+      <span class="ct">La idea en una frase</span>
+      No automatizamos "llenar MALVINA": <strong>armamos el viaje completo y validado por afuera, y MALVINA pasa a ser el último centímetro.</strong> Ahí está el ahorro real de tiempo.
+    </div>
+    <div class="metric">
+      <div class="m"><div class="big">~35 min</div><div class="lbl">carga manual hoy por MIC/DTA (estimado), con riesgo de rechazo</div></div>
+      <div class="m green"><div class="big">~8 min</div><div class="lbl">con el kit: armar + volcar + revisar</div></div>
+      <div class="m green"><div class="big">casi 0</div><div class="lbl">2º viaje del mismo camión (flota ya cargada)</div></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section id="docs">
+    <span class="eyebrow">02 · Contexto</span>
+    <h2>Qué son el MIC/DTA y el CRT</h2>
+    <p class="lead">Para que quede claro que entendemos el negocio antes de automatizarlo. Ambos son documentos regulados por el <strong>ATIT</strong> (Acuerdo sobre Transporte Internacional Terrestre, marco MERCOSUR/ALADI) y se cargan en el <strong>Sistema MALVINA / SINTIA</strong> de la Aduana argentina.</p>
+    <div class="grid two">
+      <div class="card">
+        <h4><span class="ico">📄</span> CRT — Carta de Porte Internacional</h4>
+        <p>Es el <strong>contrato de transporte</strong> y recibo de la mercadería. Declara remitente, destinatario, consignatario, descripción de la carga, valores (FOB) y quién paga flete y seguro. Lo emite el transportista. Puede ser a la orden, cesible por endoso, o amparar carga consolidada.</p>
+      </div>
+      <div class="card">
+        <h4><span class="ico">🧾</span> MIC/DTA — Manifiesto + Tránsito Aduanero</h4>
+        <p>Doble función: <strong>manifiesto</strong> de todo lo que lleva el camión y <strong>Declaración de Tránsito Aduanero Internacional (TAI)</strong>. Ampara el cruce de frontera. Lleva los datos del vehículo, transportista, conductor, ruta y los CRT asociados.</p>
+      </div>
+    </div>
+    <div class="callout key">
+      <span class="ct">La relación clave (el corazón del modelo de datos)</span>
+      <strong>1 vehículo + 1 viaje = 1 MIC/DTA</strong> (identificado por la <em>Clave de Manifiesto</em> <code>AAPPNNNNNN-D</code>, ej. <code>26·AR·253535·K</code>). Un MIC/DTA puede agrupar <strong>uno o varios CRT</strong>, y cada CRT se asocia a uno o varios <strong>permisos de embarque</strong> (la exportación). Por cada CRT existe una operación de tránsito (RUT).
+    </div>
+    <div class="callout warn">
+      <span class="ct">Responsabilidad legal (responde una duda que teníamos)</span>
+      El MIC/DTA y los CRT los declara el <strong>transportista a través de un ATA (Agente de Transporte Aduanero)</strong>, que actúa por cuenta de él y es el responsable de la declaración jurada. Por eso la extensión <strong>autocompleta pero NO oficializa sola</strong>: el control y la firma quedan siempre en manos del operador habilitado.
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section id="problema">
+    <span class="eyebrow">03 · Diagnóstico</span>
+    <h2>El problema actual: ¿dónde se va el tiempo?</h2>
+    <p class="lead">El tiempo no se va en "tipear rápido". Se va en <strong>juntar datos, transcribir, buscar códigos, calcular y corregir errores que rebotan</strong>. Estos son los focos reales, que son los que vamos a atacar uno por uno.</p>
+    <div class="grid three">
+      <div class="card"><h4><span class="ico">🔁</span> Re-tipear lo de siempre</h4><p>Datos del transportista, flota, chofer y póliza se cargan casi idénticos en cada viaje (~30 campos).</p></div>
+      <div class="card"><h4><span class="ico">📑</span> Transcribir el permiso</h4><p>El permiso de embarque llega en PDF y alguien lo lee y lo copia a mano: remitente, consignatario, mercadería, pesos, FOB…</p></div>
+      <div class="card"><h4><span class="ico">🔎</span> Buscar códigos</h4><p>Aduanas, ciudades, embalaje, condición de venta, divisa: códigos que hay que consultar en tablas.</p></div>
+      <div class="card"><h4><span class="ico">🧮</span> Calcular</h4><p>Peso bruto total, FOB de fraccionados, conversión a dólares, congruencia peso/cantidad.</p></div>
+      <div class="card"><h4><span class="ico">↩️</span> Errores que rebotan</h4><p>Un CUIT mal, una póliza vencida o un peso incoherente hacen rechazar la presentación y rehacer todo.</p></div>
+      <div class="card"><h4><span class="ico">✖️</span> Repetir en consolidado</h4><p>Si el MIC lleva varios CRT, todo el bloque se repite tantas veces como cartas de porte haya.</p></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section id="propuesta">
+    <span class="eyebrow">04 · Solución</span>
+    <h2>La propuesta: un CRM especializado + una extensión</h2>
+    <p class="lead">Dos piezas que trabajan juntas. El <strong>CRM es el producto</strong> (donde está el valor recurrente); la extensión es el "brazo" que vuelca los datos al MALVINA.</p>
+    <div class="grid two">
+      <div class="card">
+        <h4><span class="ico green">🗂️</span> CRM de transporte (UcoBot)</h4>
+        <p>Guarda los <strong>datos maestros</strong> (flota, choferes, pólizas, clientes, rutas). <strong>Extrae con IA</strong> el permiso de embarque desde el PDF. <strong>Valida todo</strong> (CUIT, pesos, vencimientos, obligatorios) antes de tocar la aduana. Genera un "viaje" estructurado y listo. Lleva historial, trazabilidad y alertas de vencimientos.</p>
+      </div>
+      <div class="card">
+        <h4><span class="ico green">🧩</span> Extensión de Chrome</h4>
+        <p>Lee el viaje ya armado en el CRM y lo <strong>vuelca pestaña por pestaña</strong> en MALVINA (Carátula → Países de Paso → CRT → Permiso → Contenedores → Precintos → Bultos). Dispara las validaciones propias del sistema (CNRT, número de permiso) y <strong>se detiene antes de oficializar</strong> para que el operador revise y confirme.</p>
+      </div>
+    </div>
+    <div class="callout win">
+      <span class="ct">Dato técnico que juega a favor</span>
+      MALVINA ya autocompleta solo cierta información cuando se ingresa una <strong>clave</strong>: al validar el <strong>Nº CNRT</strong> rellena todos los datos del transportista desde el padrón oficial, y al "Consultar" el <strong>Nº de permiso de embarque</strong> trae el remitente y país de destino desde la exportación. La extensión <strong>aprovecha esos automatismos</strong>: ingresa la clave, dispara la validación y completa solo lo que falta.
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section id="logica">
+    <span class="eyebrow">05 · Reglas</span>
+    <h2>La lógica de negocio que respetamos</h2>
+    <p class="lead">Estas son las reglas reales del MIC/DTA que el sistema (y la normativa) exigen. El CRM las modela para no equivocarse nunca.</p>
+
+    <h3>Consolidado vs. Fraccionado</h3>
+    <div class="grid two">
+      <div class="card">
+        <h4><span class="ico">📦</span> Consolidado</h4>
+        <p><strong>1 MIC/DTA → varios CRT</strong> (varias cargas/dueños en un mismo camión). El sistema suma automáticamente los pesos y el FOB de los distintos permisos. El consignatario suele ser el agente desconsolidador.</p>
+      </div>
+      <div class="card">
+        <h4><span class="ico">🚚</span> Fraccionado</h4>
+        <p><strong>1 CRT → varios camiones/MIC</strong> (la carga no entra en un camión). El sistema maneja "primera fracción / fracciones intermedias / última fracción" y enlaza cada envío con el Nº de MIC de la primera fracción.</p>
+      </div>
+    </div>
+
+    <h3>Validaciones que el CRM corre <em>antes</em> del MALVINA</h3>
+    <ul class="clean">
+      <li><strong>CUIT / identificación tributaria:</strong> dígito verificador; soporta extranjero ocasional (RUC Paraguay, RUT Chile, etc.).</li>
+      <li><strong>Pesos coherentes:</strong> bruto ≥ neto; el bruto total = suma de bultos; congruencia peso/cantidad (el sistema rechaza si egresás toda la cantidad pero no todo el peso, y viceversa).</li>
+      <li><strong>Embalaje contra el "precumplido":</strong> el código de embalaje debe coincidir con el de la exportación (ej. <code>05</code> contenedor); si no, no deja generar el CRT.</li>
+      <li><strong>Vigencias:</strong> pólizas de seguro y permiso internacional no vencidos a la fecha del viaje.</li>
+      <li><strong>NCM obligatoria:</strong> 8 dígitos si la mercadería es de un Estado Parte; mínimo 4 si es extrazona.</li>
+      <li><strong>Ruta informática coherente:</strong> partida → salida → (países de paso, en orden 1, 2, 3…) → entrada → destino; no se puede modificar un punto una vez que el camión pasó por él.</li>
+      <li><strong>Estado del documento:</strong> nace <code>CUR</code> (en curso) → <code>REG</code> (registrado). Un MIC en curso se borra solo a los 30 días.</li>
+    </ul>
+    <div class="callout danger">
+      <span class="ct">Principio de seguridad</span>
+      Es una <strong>declaración jurada</strong>. La extensión nunca toca las credenciales (el operador entra con su Clave Fiscal) y <strong>nunca oficializa automáticamente</strong>. Autocompletar + revisión humana = menos errores y cero pérdida de control.
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section id="datos">
+    <span class="eyebrow">06 · Modelo de datos</span>
+    <h2>Qué datos vamos a trabajar</h2>
+    <p class="lead">Separamos los datos en <span class="pill master">Maestros</span> (se cargan una vez y se reutilizan), <span class="pill trx">Por viaje</span> (cambian cada vez) y <span class="pill auto">Auto</span> (los completa el propio MALVINA al validar una clave).</p>
+    <div class="tablecard">
+      <table>
+        <thead>
+          <tr><th>Entidad / Bloque</th><th>Tipo</th><th>Campos principales</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>Transportista</strong></td><td class="tag"><span class="pill master">Maestro</span> <span class="pill auto">Auto</span></td><td>Nº CNRT, Nº Permiso Internacional, CUIT empresa, CUIT apoderado, razón social, domicilio, país, tipo (Regular/Ocasional). <em>Se autocompletan al validar el CNRT.</em></td></tr>
+          <tr><td><strong>Propietario del vehículo</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>CUIT, razón social, domicilio, país (puede ser distinto del transportista; contempla leasing y subcontratación).</td></tr>
+          <tr><td><strong>Flota — Tractor</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>País, patente (validada por formato del país), marca/número/modelo/año de chasis, capacidad de tracción (Ton).</td></tr>
+          <tr><td><strong>Flota — Semirremolque</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>País, patente.</td></tr>
+          <tr><td><strong>Pólizas de seguro</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>Nº póliza camión/semi, vencimiento camión, vencimiento semi.</td></tr>
+          <tr><td><strong>Conductores</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>Nombre, tipo de documento (DNI/Pasaporte/Cédula…), Nº de documento. Hasta 2 por viaje.</td></tr>
+          <tr><td><strong>Clientes — Remitente</strong></td><td class="tag"><span class="pill master">Maestro</span> <span class="pill auto">Auto</span></td><td>CUIT, razón social, domicilio (exportador). <em>Lo trae MALVINA al consultar el permiso de embarque.</em></td></tr>
+          <tr><td><strong>Clientes — Consignatario / Destinatario</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>CUIT/RUC/RUT, razón social, domicilio, país. "Notificar a".</td></tr>
+          <tr><td><strong>Corredores / Rutas</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>Plantillas editables: partida, salida, países de paso (orden), entrada, destino, aduanas y lugares operativos. <em>Los corredores cambian → editables.</em></td></tr>
+          <tr><td><strong>Catálogos de códigos</strong></td><td class="tag"><span class="pill master">Maestro</span></td><td>Países, aduanas, ciudades, embalaje, divisa, condición de venta, tipo de documento.</td></tr>
+          <tr><td><strong>Viaje (cabecera)</strong></td><td class="tag"><span class="pill trx">Por viaje</span></td><td>Fecha emisión, vía (4=camión), en lastre (sí/no), plazo de transporte (hs), plazo interno (días), asignación camión+chofer.</td></tr>
+          <tr><td><strong>CRT (carta de porte)</strong></td><td class="tag"><span class="pill trx">Por viaje</span></td><td>Nº CRT, partida/destino/transbordo, embalaje, cantidad, peso bruto/neto, volumen, fracción/consolidado, FOB y valor venta, condición de venta, flete/seguro (quién paga), descripción de mercadería, lugar emisión, fecha llegada tentativa.</td></tr>
+          <tr><td><strong>Permiso de embarque</strong></td><td class="tag"><span class="pill trx">Por viaje</span> <span class="pill auto">Auto</span></td><td>Nº permiso, NCM, cantidad y peso embarcado por permiso. <em>Extraído del PDF por IA + validado contra el precumplido.</em></td></tr>
+          <tr><td><strong>Contenedores · Precintos · Bultos</strong></td><td class="tag"><span class="pill trx">Por viaje</span></td><td>ID de contenedor, tara, precintos (uno o varios), tipo de embalaje y cantidad de bultos por contenedor.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout key">
+      <span class="ct">Por qué esto ahorra tiempo</span>
+      De ~15 bloques de datos, <strong>la mayoría son maestros o automáticos</strong>. Lo único genuinamente nuevo por viaje es la mercadería, los pesos/valores y el permiso — y eso lo extrae la IA del PDF. El operador termina <strong>revisando, no tipeando</strong>.
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section id="flujo">
+    <span class="eyebrow">07 · Flujo</span>
+    <h2>El flujo de trabajo: subir el permiso y listo</h2>
+    <p class="lead">El objetivo de diseño es simple: <strong>el operador sube el permiso de embarque y el sistema arma el viaje solo.</strong> Sigue valiendo el principio de oro — cuando se abre MALVINA, el viaje ya está 100% armado y validado.</p>
+
+    <h3>Dos modalidades — elegís cómo trabajar</h3>
+    <div class="grid two">
+      <div class="card">
+        <h4><span class="ico green">⬆️</span> A · Subir el permiso al CRM</h4>
+        <p><strong>Modalidad principal.</strong> El operador entra al CRM y <strong>sube el PDF del permiso de embarque</strong>. Nada más. El sistema extrae, infiere, completa desde los maestros y valida todo.</p>
+      </div>
+      <div class="card">
+        <h4><span class="ico green">💬</span> B · Por WhatsApp <span style="font-weight:600;color:#64748b;font-size:13px">(opcional)</span></h4>
+        <p>Si lo querés aún más simple, se <strong>reenvía el permiso por WhatsApp</strong> al número de UcoBot y el bot arma el viaje y responde por chat. Se puede sumar más adelante; no hace falta para arrancar.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:30px">El flujo, paso a paso</h3>
+    <div class="flow">
+      <div class="phase">
+        <div class="dot">0</div>
+        <div class="body">
+          <span class="when">Una sola vez · setup</span>
+          <h4>Cargar los maestros en el CRM</h4>
+          <ol>
+            <li>Flota (tractores/semis), choferes, pólizas, transportista.</li>
+            <li>Clientes habituales y plantillas de corredor.</li>
+            <li>Se hace una vez y se reutiliza en todos los viajes.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="phase green">
+        <div class="dot">1</div>
+        <div class="body">
+          <span class="when">Por viaje · el ÚNICO paso del operador</span>
+          <h4>Subir el permiso de embarque</h4>
+          <ol>
+            <li>Sube el PDF al CRM (o lo manda por WhatsApp).</li>
+            <li>La <strong>IA extrae</strong> todo el lado comercial y de la carga, tolerante al formato del PDF.</li>
+            <li>El número de permiso sirve de <strong>ancla</strong>: MALVINA confirma los datos oficiales del exportador y país destino.</li>
+            <li>El CRM <strong>infiere</strong> el corredor, <strong>completa</strong> desde los maestros y <strong>valida</strong> todo.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="phase">
+        <div class="dot">2</div>
+        <div class="body">
+          <span class="when">Por viaje · solo si tenés varios camiones</span>
+          <h4>Elegir camión y chofer (1 clic)</h4>
+          <ol>
+            <li>Es el único dato que el permiso no puede traer: es una decisión de despacho del mundo físico.</li>
+            <li>Si tenés un camión fijo / por defecto, este paso <strong>se saltea</strong> → queda literalmente "subir y listo".</li>
+          </ol>
+        </div>
+      </div>
+      <div class="phase green">
+        <div class="dot">3</div>
+        <div class="body">
+          <span class="when">Por viaje · cierre</span>
+          <h4>Revisar y oficializar</h4>
+          <ol>
+            <li>La extensión vuelca el viaje a MALVINA pestaña por pestaña (Carátula → Países de Paso → CRT → Permiso → Contenedores → Precintos → Bultos).</li>
+            <li>Revisás los números sensibles y <strong>oficializás vos</strong> (firma de la DDJJ — responsabilidad del ATA).</li>
+            <li>El Nº de MIC (<code>26·AR·253535·K</code>) vuelve al CRM → historial y alertas de vencimientos.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:38px">De dónde sale cada dato</h3>
+    <p class="lead">Esto es lo que hace posible "subir y listo": el permiso concentra todo el lado comercial, los maestros aportan el transporte, y el sistema infiere y calcula el resto.</p>
+
+    <h3 style="font-size:16px;color:var(--brand);margin-top:24px">📄 Del permiso de embarque — extraído automáticamente</h3>
+    <div class="tablecard">
+      <table>
+        <thead><tr><th>Dato</th><th>Qué contiene</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Nº de permiso de embarque</strong></td><td>Identificador de la exportación (ej. <code>26038EG03000591T</code>). Es el <em>ancla</em> que MALVINA usa para traer datos oficiales.</td></tr>
+          <tr><td><strong>Remitente / exportador</strong></td><td>CUIT, razón social y domicilio. <em>Además, MALVINA lo confirma al consultar el número.</em></td></tr>
+          <tr><td><strong>País de destino</strong></td><td>Destino de la mercadería (ej. Chile 208).</td></tr>
+          <tr><td><strong>Mercadería + descripción</strong></td><td>Detalle de la carga (ej. "21 pallets de vinos de distintas variedades").</td></tr>
+          <tr><td><strong>NCM (posición arancelaria)</strong></td><td>8 dígitos (zona) o mínimo 4 (extrazona).</td></tr>
+          <tr><td><strong>Embalaje · cantidad · peso bruto/neto</strong></td><td>Tipo de embalaje (ej. 05 contenedor), cantidad y pesos.</td></tr>
+          <tr><td><strong>FOB / valor de la mercadería</strong></td><td>Monto y divisa de la operación.</td></tr>
+          <tr><td><strong>Aduana de partida / registro</strong></td><td>Aduana donde se registró la exportación (ej. 038 Mendoza).</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn">
+      <span class="ct">¿El permiso viene siempre igual?</span>
+      Los <strong>datos sí</strong> (son campos obligatorios regulados, siempre existen). El <strong>formato del PDF puede variar</strong> según quién lo imprima (despachante, software, SIM). Por eso la extracción es con <strong>IA tolerante al formato</strong> y usamos el <strong>número de permiso como ancla</strong>: la propia aduana confirma los datos oficiales. No dependemos de que el PDF sea siempre idéntico.
+    </div>
+
+    <h3 style="font-size:16px;color:var(--brand);margin-top:24px">🗂️ De los maestros + inferido por el sistema — automático</h3>
+    <div class="tablecard">
+      <table>
+        <thead><tr><th>Dato</th><th>Fuente</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Transportista, CNRT, permiso internacional, póliza, propietario</strong></td><td>Dato maestro (cargado una vez). Al validar el CNRT, MALVINA rellena el resto desde el padrón oficial.</td></tr>
+          <tr><td><strong>Corredor / ruta / aduanas de salida y entrada</strong></td><td>Se <strong>infiere</strong> del origen + destino que trae el permiso.</td></tr>
+          <tr><td><strong>Plazo de transporte (hs) y plazo interno (días)</strong></td><td>De la plantilla del corredor (duración típica).</td></tr>
+          <tr><td><strong>Condición de venta, divisa, quién paga flete/seguro</strong></td><td>Aprendido por cliente/ruta y aplicado por defecto.</td></tr>
+          <tr><td><strong>Cálculos: peso bruto total, FOB fraccionados, conversión a USD</strong></td><td>Los calcula el CRM.</td></tr>
+          <tr><td><strong>Consolidado / fraccionado</strong></td><td>Se detecta solo: varios permisos al mismo camión → consolidado; carga que excede la capacidad del tractor → fraccionado.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:16px;color:var(--brand);margin-top:24px">✍️ Lo único que pone un humano</h3>
+    <div class="tablecard">
+      <table>
+        <thead><tr><th>Dato</th><th>Cuándo / por qué</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Camión + chofer del viaje</strong></td><td>Solo si tenés varios camiones. Es una decisión de despacho; el permiso no puede traerla. Con flota chica/fija, se saltea.</td></tr>
+          <tr><td><strong>Consignatario / destinatario en el exterior</strong></td><td>La <strong>primera vez</strong> con un cliente nuevo (el permiso no siempre lo trae). Después el sistema lo recuerda.</td></tr>
+          <tr><td><strong>Confirmar los números sensibles</strong></td><td>Revisión rápida de pesos y valores extraídos. Es un <em>feature</em>: atrapa errores antes de la aduana.</td></tr>
+          <tr><td><strong>Oficializar</strong></td><td>Clic humano final. Es una declaración jurada; la firma del ATA es responsabilidad legal.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Antes vs. Después</h3>
+    <div class="vs">
+      <div class="col before">
+        <h4>🐢 Hoy (manual)</h4>
+        <ul>
+          <li>Re-tipear flota, chofer y póliza en cada viaje</li>
+          <li>Leer el PDF del permiso y copiarlo campo por campo</li>
+          <li>Buscar códigos de aduanas, ciudades y embalajes</li>
+          <li>Calcular pesos y valores a mano</li>
+          <li>Descubrir los errores recién cuando la aduana rechaza</li>
+          <li>Repetir todo el bloque por cada CRT en consolidado</li>
+        </ul>
+      </div>
+      <div class="col after">
+        <h4>⚡ Con el kit</h4>
+        <ul>
+          <li>Flota, chofer y póliza: un desplegable</li>
+          <li>El permiso se extrae solo del PDF con IA</li>
+          <li>Códigos resueltos desde catálogos</li>
+          <li>El CRM calcula y verifica la congruencia</li>
+          <li>Validación previa: los errores se ven antes</li>
+          <li>Los N CRT se iteran automáticamente</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section id="porque-extension">
+    <span class="eyebrow">08 · Decisión técnica</span>
+    <h2>Por qué una extensión (y no una API)</h2>
+    <p class="lead">Investigamos si se podía integrar directo por webservice, que sería lo ideal. La conclusión es clara.</p>
+    <div class="callout warn">
+      <span class="ct">No hay API para carretera</span>
+      AFIP/ARCA <strong>sí tiene</strong> un webservice de MIC/DTA, pero es <strong>exclusivo para HIDROVÍA</strong> (transporte fluvial). Para <strong>transporte terrestre por camión, el MIC/DTA y el CRT se cargan obligatoriamente por la pantalla del MALVINA</strong>. No existe hoy un webservice público para carretera. Por eso, automatizar la interfaz con una extensión es <strong>el único camino técnico viable</strong> — no es un atajo, es la vía correcta.
+    </div>
+    <p>La digitalización viene en camino (8º Protocolo Adicional del ATIT), así que diseñamos el CRM de forma que, si en el futuro aparece un webservice oficial de carretera, <strong>migramos la pieza de "volcado" sin rehacer el producto</strong>. El valor (CRM, datos, validaciones) queda intacto.</p>
+    <h3>Riesgos que ya tenemos en cuenta</h3>
+    <ul class="clean">
+      <li><strong>DOM legacy:</strong> el MALVINA es un sistema viejo; el mapeo de campos se versiona y monitorea para repararlo rápido si cambian la pantalla.</li>
+      <li><strong>Sesión y Clave Fiscal:</strong> la extensión opera dentro de la sesión que abre el humano; nunca maneja credenciales.</li>
+      <li><strong>Responsabilidad legal:</strong> autocompleta pero no oficializa — la DDJJ la confirma siempre el operador habilitado.</li>
+    </ul>
+  </section>
+
+  <!-- 9 -->
+  <section id="necesitamos">
+    <span class="eyebrow">09 · Para avanzar</span>
+    <h2>Qué necesitamos que nos confirmen ustedes</h2>
+    <p class="lead">Para terminar de cerrar la lógica fina sin inventar nada, estas son las preguntas clave para el equipo que opera el sistema día a día.</p>
+    <div class="card qbox">
+      <div class="q"><div class="n"></div><div>¿Quién carga hoy el MIC/DTA: la propia empresa de transporte o un despachante/ATA? ¿Quién firma la declaración jurada?</div></div>
+      <div class="q"><div class="n"></div><div>¿Con qué frecuencia operan <strong>carga consolidada</strong> (varios CRT en un MIC) y <strong>fraccionada</strong> (un CRT en varios camiones)? ¿Son casos habituales o excepción?</div></div>
+      <div class="q"><div class="n"></div><div>¿Cuántos <strong>corredores/pasos fronterizos</strong> usan habitualmente? (define cuántas plantillas de ruta armamos)</div></div>
+      <div class="q"><div class="n"></div><div>El <strong>permiso de embarque</strong> en PDF: ¿llega siempre con el mismo formato/emisor? (cuanto más estándar, mejor extrae la IA)</div></div>
+      <div class="q"><div class="n"></div><div>¿En el permiso de embarque <strong>figuran el consignatario y el destinatario del exterior</strong>, o esos datos los cargan ustedes aparte (ej. desde la factura comercial)? — define si la IA los extrae del PDF o el sistema los recuerda por cliente.</div></div>
+      <div class="q"><div class="n"></div><div>¿Qué <strong>errores de rechazo</strong> son los más frecuentes hoy? (los priorizamos en la validación previa)</div></div>
+      <div class="q"><div class="n"></div><div>¿Cuántos MIC/DTA generan por semana/mes? (para dimensionar el ahorro y el modelo de cobro)</div></div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section id="proximos">
+    <span class="eyebrow">10 · Roadmap</span>
+    <h2>Próximos pasos propuestos</h2>
+    <div class="grid three">
+      <div class="card"><h4><span class="ico">1️⃣</span> Validar esta propuesta</h4><p>Que el equipo de transporte revise este documento y confirme que el entendimiento del negocio es correcto.</p></div>
+      <div class="card"><h4><span class="ico">2️⃣</span> Esquema de datos + prototipo CRM</h4><p>Modelar la base (maestros + viaje + CRT) y una primera pantalla de "armar viaje" con extracción del permiso.</p></div>
+      <div class="card"><h4><span class="ico">3️⃣</span> Mapa de campos del MALVINA</h4><p>Con acceso a una sesión real, extraer los <code>name/id</code> de cada input y construir el volcado de la extensión, pestaña por pestaña.</p></div>
+    </div>
+    <div class="callout win">
+      <span class="ct">Lo que ya tenemos resuelto</span>
+      Entendimiento completo de los documentos y su normativa · modelo de datos mapeado contra el sistema real · lógica de consolidado/fraccionado y validaciones · confirmación de que la extensión es la vía correcta. <strong>Estamos listos para arrancar el diseño en cuanto validen el documento.</strong>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="brandline">UcoBot · Kit Transportistas</div>
+    <p>Documento de trabajo para revisión conjunta · Codea Desarrollos · Basado en el instructivo oficial MIC/DTA (AFIP/ARCA), normativa ATIT/MERCOSUR y el análisis del Sistema MALVINA.</p>
+  </div>
+</footer>
+
+</body>
+</html>
