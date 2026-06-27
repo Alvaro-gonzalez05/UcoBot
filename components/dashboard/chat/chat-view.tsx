@@ -9,7 +9,8 @@ const LocationMap = dynamic(
   () => import("@/components/ui/location-map").then((m) => m.LocationMap),
   { ssr: false }
 )
-import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion"
+import { motion, useMotionValue, useTransform, PanInfo, AnimatePresence } from "framer-motion"
+import { ImageLightbox } from "./image-lightbox"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -513,6 +514,7 @@ export function ChatView({ userId }: ChatViewProps) {
   const [isFilterOpen, setIsFilterOpen] = useState(false)
   // Ubicación abierta en el diálogo del mapa (mapcn/MapLibre + CARTO)
   const [mapLocation, setMapLocation] = useState<{ lat: number; lng: number; name?: string; address?: string } | null>(null)
+  const [lightbox, setLightbox] = useState<{ items: { src: string; fallback?: string; type?: "image" | "video" }[]; index: number } | null>(null)
   const [newMessage, setNewMessage] = useState("")
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [isPauseDialogOpen, setIsPauseDialogOpen] = useState(false)
@@ -1549,6 +1551,29 @@ export function ChatView({ userId }: ChatViewProps) {
     return `/api/media/proxy?mediaId=${mediaId}&botId=${selectedConversation.bot_id}`
   }
 
+  // ---- Visor de medios (lightbox) con navegación entre archivos ----
+  const isMediaMsg = (m: Message) =>
+    (m.message_type === 'image' && !m.metadata?.is_sticker) || m.message_type === 'video'
+
+  const msgToMediaItem = (m: Message) => ({
+    src: getMediaUrl(m),
+    fallback: (m.message_type === 'video' ? m.metadata?.video?.url : m.metadata?.image?.url) as string | undefined,
+    type: (m.message_type === 'video' ? 'video' : 'image') as 'image' | 'video',
+  })
+
+  // Abre el visor desde un mensaje del chat (galería = todos los medios cargados)
+  const openChatLightbox = (msg: Message) => {
+    const gallery = messages.filter(isMediaMsg)
+    const idx = gallery.findIndex((g) => g.id === msg.id)
+    setLightbox({ items: gallery.map(msgToMediaItem), index: idx < 0 ? 0 : idx })
+  }
+
+  // Abre el visor desde el panel de archivos (galería = convMedia)
+  const openPanelLightbox = (m: Message) => {
+    const idx = convMedia.findIndex((g) => g.id === m.id)
+    setLightbox({ items: convMedia.map(msgToMediaItem), index: idx < 0 ? 0 : idx })
+  }
+
   // Convierte URLs dentro del texto en enlaces clickeables
   const renderTextWithLinks = (text: string, isClient: boolean) => {
     if (!text) return text
@@ -2317,7 +2342,8 @@ export function ChatView({ userId }: ChatViewProps) {
                             <img
                               src={getMediaUrl(msg)}
                               alt="Imagen compartida"
-                              className="rounded-md max-w-full h-auto max-h-[300px] object-cover"
+                              className="rounded-md max-w-full h-auto max-h-[300px] object-cover cursor-zoom-in transition-opacity hover:opacity-90"
+                              onClick={() => openChatLightbox(msg)}
                               onError={(e) => {
                                 // Fallback if proxy fails or ID is missing
                                 if (msg.metadata?.image?.url && e.currentTarget.src !== msg.metadata.image.url) {
@@ -2329,6 +2355,25 @@ export function ChatView({ userId }: ChatViewProps) {
                               <p className="text-sm whitespace-pre-wrap">{renderTextWithLinks(msg.content, isClient)}</p>
                             )}
                           </div>
+                        ) : msg.message_type === 'video' && msg.metadata?.video ? (
+                          <button
+                            type="button"
+                            onClick={() => openChatLightbox(msg)}
+                            className="relative block overflow-hidden rounded-md cursor-pointer"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <video
+                              src={getMediaUrl(msg)}
+                              preload="metadata"
+                              muted
+                              className="max-w-full max-h-[300px] rounded-md object-cover pointer-events-none"
+                            />
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55">
+                                <Play className="h-6 w-6 text-white" />
+                              </span>
+                            </span>
+                          </button>
                         ) : msg.message_type === 'audio' && msg.metadata?.audio ? (
                           <AudioPlayer
                             src={getMediaUrl(msg)}
@@ -2710,22 +2755,28 @@ export function ChatView({ userId }: ChatViewProps) {
                       ) : (
                         <div className="grid grid-cols-3 gap-1.5">
                           {convMedia.map((m) => (
-                            <a
-                              key={m.id}
-                              href={getMediaUrl(m)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="relative aspect-square rounded-md overflow-hidden bg-muted border block"
-                            >
-                              {m.message_type === 'video' ? (
+                            m.message_type === 'video' ? (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => openPanelLightbox(m)}
+                                className="relative aspect-square rounded-md overflow-hidden bg-muted border block cursor-pointer"
+                              >
                                 <div className="absolute inset-0 flex items-center justify-center bg-slate-800/80">
                                   <Play className="h-6 w-6 text-white" />
                                 </div>
-                              ) : (
-                                // eslint-disable-next-line @next/next/no-img-element
+                              </button>
+                            ) : (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => openPanelLightbox(m)}
+                                className="relative aspect-square rounded-md overflow-hidden bg-muted border block cursor-zoom-in"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
                                 <img src={getMediaUrl(m)} alt="media" className="w-full h-full object-cover" />
-                              )}
-                            </a>
+                              </button>
+                            )
                           ))}
                         </div>
                       )}
@@ -2811,6 +2862,16 @@ export function ChatView({ userId }: ChatViewProps) {
       )}
 
       {/* Diálogo del mapa: se abre al tocar el preview de una ubicación */}
+      <AnimatePresence>
+        {lightbox && (
+          <ImageLightbox
+            items={lightbox.items}
+            initialIndex={lightbox.index}
+            onClose={() => setLightbox(null)}
+          />
+        )}
+      </AnimatePresence>
+
       <Dialog open={!!mapLocation} onOpenChange={(o) => !o && setMapLocation(null)}>
         <DialogContent className="max-w-2xl p-0 overflow-hidden">
           <DialogHeader className="p-4 pb-2">
