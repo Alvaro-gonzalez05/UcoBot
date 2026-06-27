@@ -381,12 +381,12 @@
         <div class="dot">1</div>
         <div class="body">
           <span class="when">Por viaje · el ÚNICO paso del operador</span>
-          <h4>Subir el permiso de embarque</h4>
+          <h4>Subir el permiso (+ la factura si el cliente es nuevo)</h4>
           <ol>
-            <li>Sube el PDF al CRM (o lo manda por WhatsApp).</li>
-            <li>La <strong>IA extrae</strong> todo el lado comercial y de la carga, tolerante al formato del PDF.</li>
+            <li>Sube el PDF del permiso al CRM (o lo manda por WhatsApp). Si el cliente del exterior es nuevo, suma también la <strong>factura comercial</strong>.</li>
+            <li>La <strong>IA extrae</strong> de cada documento: del permiso, el lado comercial y de la carga; de la factura, el <strong>consignatario y destinatario del exterior</strong>.</li>
             <li>El número de permiso sirve de <strong>ancla</strong>: MALVINA confirma los datos oficiales del exportador y país destino.</li>
-            <li>El CRM <strong>infiere</strong> el corredor, <strong>completa</strong> desde los maestros y <strong>valida</strong> todo.</li>
+            <li>El sistema <strong>machea el cliente</strong> (si existe lo reutiliza, si es nuevo lo crea solo), <strong>infiere</strong> el corredor, <strong>completa</strong> desde los maestros y <strong>valida</strong> todo.</li>
           </ol>
         </div>
       </div>
@@ -416,7 +416,7 @@
     </div>
 
     <h3 style="margin-top:38px">De dónde sale cada dato</h3>
-    <p class="lead">Esto es lo que hace posible "subir y listo": el permiso concentra todo el lado comercial, los maestros aportan el transporte, y el sistema infiere y calcula el resto.</p>
+    <p class="lead">Esto es lo que hace posible "subir y listo": el permiso concentra todo el lado comercial, la factura aporta el cliente del exterior (solo si es nuevo), los maestros aportan el transporte, y el sistema infiere y calcula el resto.</p>
 
     <h3 style="font-size:16px;color:var(--brand);margin-top:24px">📄 Del permiso de embarque — extraído automáticamente</h3>
     <div class="tablecard">
@@ -425,11 +425,11 @@
         <tbody>
           <tr><td><strong>Nº de permiso de embarque</strong></td><td>Identificador de la exportación (ej. <code>26038EG03000591T</code>). Es el <em>ancla</em> que MALVINA usa para traer datos oficiales.</td></tr>
           <tr><td><strong>Remitente / exportador</strong></td><td>CUIT, razón social y domicilio. <em>Además, MALVINA lo confirma al consultar el número.</em></td></tr>
-          <tr><td><strong>País de destino</strong></td><td>Destino de la mercadería (ej. Chile 208).</td></tr>
-          <tr><td><strong>Mercadería + descripción</strong></td><td>Detalle de la carga (ej. "21 pallets de vinos de distintas variedades").</td></tr>
-          <tr><td><strong>NCM (posición arancelaria)</strong></td><td>8 dígitos (zona) o mínimo 4 (extrazona).</td></tr>
-          <tr><td><strong>Embalaje · cantidad · peso bruto/neto</strong></td><td>Tipo de embalaje (ej. 05 contenedor), cantidad y pesos.</td></tr>
-          <tr><td><strong>FOB / valor de la mercadería</strong></td><td>Monto y divisa de la operación.</td></tr>
+          <tr><td><strong>País de destino</strong></td><td>Destino <strong>aduanero / de transporte</strong> (ej. Chile 208) — el que usa el MIC. Ojo: el destino comercial final del ítem puede ser otro país (la carga sigue por barco), pero para la ruta vale el aduanero.</td></tr>
+          <tr><td><strong>Mercadería + descripción (multi-ítem)</strong></td><td>Un permiso puede tener <strong>varios ítems</strong> (cada vino con su NCM, kg y FOB). El CRM los <strong>agrega/suma</strong> en una sola descripción (ej. "vinos de distintas variedades").</td></tr>
+          <tr><td><strong>NCM (posición arancelaria)</strong></td><td>8 dígitos (zona) o mínimo 4 (extrazona). Una por ítem.</td></tr>
+          <tr><td><strong>Embalaje · cantidad · peso bruto/neto</strong></td><td>Tipo de embalaje (ej. 05 contenedor o bultos), cantidad y pesos.</td></tr>
+          <tr><td><strong>Condición de venta + FOB / valor</strong></td><td>Condición (FOB, CPT, CIF…) y monto/divisa. El <strong>FOB Total siempre está</strong>, aunque la venta sea CPT.</td></tr>
           <tr><td><strong>Aduana de partida / registro</strong></td><td>Aduana donde se registró la exportación (ej. 038 Mendoza).</td></tr>
         </tbody>
       </table>
@@ -437,6 +437,22 @@
     <div class="callout warn">
       <span class="ct">¿El permiso viene siempre igual?</span>
       Los <strong>datos sí</strong> (son campos obligatorios regulados, siempre existen). El <strong>formato del PDF puede variar</strong> según quién lo imprima (despachante, software, SIM). Por eso la extracción es con <strong>IA tolerante al formato</strong> y usamos el <strong>número de permiso como ancla</strong>: la propia aduana confirma los datos oficiales. No dependemos de que el PDF sea siempre idéntico.
+    </div>
+
+    <h3 style="font-size:16px;color:var(--brand);margin-top:24px">📑 De la factura comercial — solo cuando el cliente del exterior es nuevo</h3>
+    <div class="tablecard">
+      <table>
+        <thead><tr><th>Dato</th><th>Qué contiene</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Consignatario</strong></td><td>Identificación tributaria (RUT/RUC/CUIT), razón social y domicilio de quien recibe la carga en destino.</td></tr>
+          <tr><td><strong>Destinatario</strong></td><td>Razón social y domicilio del destinatario final.</td></tr>
+          <tr><td><strong>Corroboración de valores</strong></td><td>FOB, cantidades y pesos de la factura sirven para <strong>cruzar y validar</strong> lo extraído del permiso.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout win">
+      <span class="ct">El maestro de clientes se arma solo — machear o crear</span>
+      Al subir la factura, la IA extrae el consignatario/destinatario y el sistema lo <strong>busca por identificación tributaria</strong> (RUT/RUC/CUIT): si <strong>coincide con un cliente existente lo reutiliza</strong>; si es nuevo lo <strong>crea automáticamente</strong> en el maestro. La factura <strong>solo hace falta la primera vez</strong> con cada cliente — después, con el permiso alcanza.
     </div>
 
     <h3 style="font-size:16px;color:var(--brand);margin-top:24px">🗂️ De los maestros + inferido por el sistema — automático</h3>
@@ -460,7 +476,7 @@
         <thead><tr><th>Dato</th><th>Cuándo / por qué</th></tr></thead>
         <tbody>
           <tr><td><strong>Camión + chofer del viaje</strong></td><td>Solo si tenés varios camiones. Es una decisión de despacho; el permiso no puede traerla. Con flota chica/fija, se saltea.</td></tr>
-          <tr><td><strong>Consignatario / destinatario en el exterior</strong></td><td>La <strong>primera vez</strong> con un cliente nuevo (el permiso no siempre lo trae). Después el sistema lo recuerda.</td></tr>
+          <tr><td><strong>Confirmar un cliente nuevo del exterior</strong></td><td>La IA lo extrae de la <strong>factura comercial</strong> y lo crea solo; el humano solo <strong>confirma una vez</strong> que el cliente nuevo quedó bien (es DDJJ). Si el cliente ya existe, ni eso.</td></tr>
           <tr><td><strong>Confirmar los números sensibles</strong></td><td>Revisión rápida de pesos y valores extraídos. Es un <em>feature</em>: atrapa errores antes de la aduana.</td></tr>
           <tr><td><strong>Oficializar</strong></td><td>Clic humano final. Es una declaración jurada; la firma del ATA es responsabilidad legal.</td></tr>
         </tbody>

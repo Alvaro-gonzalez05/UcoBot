@@ -39,6 +39,20 @@ const baseNavigation: NavigationItem[] = [
   { name: "Admin", href: "/dashboard/admin", icon: "shield", requiresAdmin: true },
 ]
 
+// Navegación EXCLUSIVA del vertical "transporte" (kit transportistas).
+// No comparte secciones con los negocios generales.
+const transportNavigation: NavigationItem[] = [
+  { name: "Inicio", href: "/dashboard/transporte", icon: "dashboard" },
+  { name: "Cargar viaje", href: "/dashboard/transporte/cargar-viaje", icon: "upload_file" },
+  { name: "Viajes", href: "/dashboard/transporte/viajes", icon: "local_shipping" },
+  { name: "Flota", href: "/dashboard/transporte/flota", icon: "garage" },
+  { name: "Choferes", href: "/dashboard/transporte/choferes", icon: "badge" },
+  { name: "Corredores", href: "/dashboard/transporte/corredores", icon: "route" },
+  { name: "Clientes", href: "/dashboard/transporte/clientes", icon: "contacts" },
+  { name: "Configuración", href: "/dashboard/transporte/configuracion", icon: "settings" },
+  { name: "Admin", href: "/dashboard/admin", icon: "shield", requiresAdmin: true },
+]
+
 interface DashboardSidebarProps {
   onLinkClick?: () => void
   mode?: 'desktop' | 'mobile'
@@ -78,8 +92,20 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
       if (!userId) setUserId(authUser.id)
 
       const { data: userProfile } = await supabase
-        .from("user_profiles").select("role, sidebar_config, parent_user_id").eq("id", authUser.id).single()
+        .from("user_profiles").select("role, sidebar_config, parent_user_id, vertical").eq("id", authUser.id).single()
       const isAdmin = userProfile?.role === 'admin'
+
+      // Vertical TRANSPORTE: navegación propia y exclusiva (no usa features de bots).
+      if (userProfile?.vertical === 'transporte') {
+        setNavigation(
+          transportNavigation
+            .filter(item => !item.requiresAdmin || isAdmin)
+            .map(item => ({ ...item, visible: true }))
+        )
+        setIsNavReady(true)
+        return
+      }
+
       // Si es empleado, las funciones se calculan sobre los bots del DUEÑO.
       const ownerId = userProfile?.parent_user_id || authUser.id
 

@@ -18,6 +18,11 @@ export default async function DashboardPage({
   // Get user profile
   const { data: profile } = await supabase.from("user_profiles").select("*").eq("id", data.user.id).single()
 
+  // Vertical TRANSPORTE: su propio home/secciones, separado del dashboard general.
+  if (profile?.vertical === "transporte") {
+    redirect("/dashboard/transporte")
+  }
+
   // Si es EMPLEADO: home especial (saludo + accesos), sin métricas ni onboarding de pago.
   if (profile?.parent_user_id) {
     const allowed = Array.isArray(profile.sidebar_config)
