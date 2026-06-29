@@ -3,7 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 import { extractPermiso, extractFactura, type PermitData } from "@/lib/transporte/extraction"
 
 export const runtime = "nodejs"
-export const maxDuration = 60
+// Hobby con Fluid Compute permite hasta 300s; Pro hasta 800s. El presupuesto
+// interno (más abajo) corta antes con un error limpio.
+export const maxDuration = 300
 
 const ACCEPTED = ["application/pdf"]
 
@@ -73,10 +75,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "El permiso debe ser un PDF" }, { status: 400 })
   }
 
-  // 1) Extracción con IA
+  // 1) Extracción con IA — presupuesto de tiempo compartido (< límite de Vercel).
+  // Los PDF digitales (texto) responden en segundos; este margen es para los
+  // escaneados (visión/OCR), que son más lentos.
+  const deadline = Date.now() + 110000
   let permit: PermitData
   try {
-    permit = await extractPermiso(permisoFile)
+    permit = await extractPermiso(permisoFile, deadline)
   } catch (e: any) {
     console.error("extractPermiso error:", e)
     const s = e?.status ?? e?.response?.status
@@ -88,7 +93,7 @@ export async function POST(req: Request) {
       { status: overloaded ? 503 : 422 },
     )
   }
-  const factura = facturaFile ? await extractFactura(facturaFile).catch(() => null) : null
+  const factura = facturaFile ? await extractFactura(facturaFile, deadline).catch(() => null) : null
 
   const warnings: string[] = []
 

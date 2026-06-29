@@ -79,7 +79,19 @@ const MODEL_CHAIN = MODELS.length > 0 ? MODELS : DEFAULT_MODELS
 function shouldTryNext(err: any): boolean {
   const s = err?.status ?? err?.response?.status
   if (s === 400 || s === 401 || s === 403) return false
-  return true // 5xx, 429, saturación, errores de parseo, red → probar otro modelo
+  return true // 5xx, 429, saturación, timeout, errores de parseo, red → probar otro modelo
+}
+
+// Tope por intento de modelo y presupuesto total (para no chocar el límite de Vercel).
+const PER_ATTEMPT_MS = 40000
+const DEFAULT_BUDGET_MS = 110000
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error("model timeout"), { status: 504 })), ms)),
+  ])
 }
 
 export function num(v: any): number | null {
@@ -132,20 +144,33 @@ function parseJson(raw: string): any {
   return JSON.parse(match ? match[0] : cleaned)
 }
 
-async function callGemini(file: File, prompt: string): Promise<any> {
+// Extrae el texto del PDF de forma determinística (JS puro, sin OCR).
+// Devuelve "" si el PDF está escaneado (sin capa de texto).
+async function pdfText(ab: ArrayBuffer): Promise<string> {
+  try {
+    const { extractText, getDocumentProxy } = await import("unpdf")
+    const pdf = await getDocumentProxy(new Uint8Array(ab))
+    const { text } = await extractText(pdf, { mergePages: true })
+    return (Array.isArray(text) ? text.join("\n") : text || "").trim()
+  } catch (e) {
+    console.warn("[extraction] pdfText falló:", e)
+    return ""
+  }
+}
+
+// Corre la cadena de modelos (timeout + fallback) sobre un set de "parts".
+async function runModels(parts: any[], deadline: number): Promise<any> {
   const apiKey = process.env.GEMINI_DEMO_API_KEY
   if (!apiKey) throw new Error("IA no configurada")
-  const base64 = Buffer.from(await file.arrayBuffer()).toString("base64")
   const genAI = new GoogleGenerativeAI(apiKey)
 
   let lastErr: any
   for (const modelName of MODEL_CHAIN) {
+    const remaining = deadline - Date.now()
+    if (remaining < 4000) break // sin tiempo para otro intento
     try {
       const model = genAI.getGenerativeModel({ model: modelName })
-      const result = await model.generateContent([
-        { inlineData: { mimeType: file.type || "application/pdf", data: base64 } },
-        { text: prompt },
-      ])
+      const result = await withTimeout(model.generateContent(parts), Math.min(PER_ATTEMPT_MS, remaining))
       return parseJson(result.response.text())
     } catch (err: any) {
       lastErr = err
@@ -153,7 +178,27 @@ async function callGemini(file: File, prompt: string): Promise<any> {
       if (!shouldTryNext(err)) throw err
     }
   }
-  throw lastErr
+  throw lastErr ?? Object.assign(new Error("Servicio de IA no disponible"), { status: 503 })
+}
+
+const MIN_TEXT_CHARS = 200
+
+// Híbrido: si el PDF tiene texto -> mandamos TEXTO (rápido). Si está escaneado
+// -> mandamos la imagen y la IA hace OCR (visión, más lento pero funciona).
+async function callGemini(file: File, prompt: string, deadline: number): Promise<any> {
+  const ab = await file.arrayBuffer()
+  const text = await pdfText(ab)
+
+  if (text.length >= MIN_TEXT_CHARS) {
+    return runModels([{ text: `${prompt}\n\n=== TEXTO EXTRAÍDO DEL DOCUMENTO ===\n${text}` }], deadline)
+  }
+
+  // Escaneado / sin texto -> visión (OCR por la IA).
+  const base64 = Buffer.from(ab).toString("base64")
+  return runModels([
+    { inlineData: { mimeType: file.type || "application/pdf", data: base64 } },
+    { text: prompt },
+  ], deadline)
 }
 
 // ── Extracción del PERMISO DE EMBARQUE (OM-1993 SIM) ─────────────────────────
@@ -210,8 +255,8 @@ Reglas:
 - Si un dato no aparece, poné null. NO inventes datos.
 - Incluí TODOS los ítems de la mercadería (el permiso suele tener varios).`
 
-export async function extractPermiso(file: File): Promise<PermitData> {
-  const d = await callGemini(file, PERMIT_PROMPT)
+export async function extractPermiso(file: File, deadline = Date.now() + DEFAULT_BUDGET_MS): Promise<PermitData> {
+  const d = await callGemini(file, PERMIT_PROMPT, deadline)
   const items: PermitItem[] = Array.isArray(d?.items) ? d.items.map((it: any) => ({
     item_number: it?.item_number ?? null,
     ncm_position: it?.ncm_position ?? null,
@@ -280,8 +325,8 @@ Devolvé ÚNICAMENTE un JSON válido (sin markdown) con esta forma:
 }
 Reglas: números con punto decimal; si un dato no aparece, null; NO inventes.`
 
-export async function extractFactura(file: File): Promise<FacturaData> {
-  const d = await callGemini(file, FACTURA_PROMPT)
+export async function extractFactura(file: File, deadline = Date.now() + DEFAULT_BUDGET_MS): Promise<FacturaData> {
+  const d = await callGemini(file, FACTURA_PROMPT, deadline)
   return {
     consignatario_tax_id: d?.consignatario_tax_id ?? null,
     consignatario_tax_id_type: d?.consignatario_tax_id_type ?? null,
