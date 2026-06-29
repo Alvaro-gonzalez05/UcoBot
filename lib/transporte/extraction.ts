@@ -58,10 +58,29 @@ export interface FacturaData {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
-// Modelo configurable por env. Default: 2.5-pro (más preciso para la DDJJ;
-// la extracción es de bajo volumen). Apuntalo a otro modelo/familia si querés:
-//   GEMINI_EXTRACTION_MODEL=gemini-2.5-flash  (o un 3.x si tu API key lo soporta)
-const MODEL = process.env.GEMINI_EXTRACTION_MODEL || "gemini-2.5-pro"
+// Cadena de modelos con FALLBACK: si uno está saturado (503), lento o rota la
+// respuesta, prueba el siguiente automáticamente. NO depende de ninguna variable
+// de entorno: la lista está hardcodeada acá (mismos modelos que el CRM ya usa
+// para generar mensajes, incluyendo la familia 3.x). Se puede sobreescribir con
+// GEMINI_EXTRACTION_MODELS, pero NO hace falta.
+// Orden pensado para extracción: primero los más capaces y disponibles.
+const DEFAULT_MODELS = [
+  "gemini-3.5-flash",      // 3.x — inteligencia casi-Pro a velocidad Flash
+  "gemini-2.5-flash",      // sólido y muy disponible
+  "gemini-3.1-flash-lite", // 3.x liviano
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash",
+]
+const MODELS = (process.env.GEMINI_EXTRACTION_MODELS || process.env.GEMINI_EXTRACTION_MODEL || "")
+  .split(",").map((s) => s.trim()).filter(Boolean)
+const MODEL_CHAIN = MODELS.length > 0 ? MODELS : DEFAULT_MODELS
+
+// No reintentar en errores definitivos (API key inválida / pedido mal formado).
+function shouldTryNext(err: any): boolean {
+  const s = err?.status ?? err?.response?.status
+  if (s === 400 || s === 401 || s === 403) return false
+  return true // 5xx, 429, saturación, errores de parseo, red → probar otro modelo
+}
 
 export function num(v: any): number | null {
   if (v == null || v === "") return null
@@ -118,12 +137,23 @@ async function callGemini(file: File, prompt: string): Promise<any> {
   if (!apiKey) throw new Error("IA no configurada")
   const base64 = Buffer.from(await file.arrayBuffer()).toString("base64")
   const genAI = new GoogleGenerativeAI(apiKey)
-  const model = genAI.getGenerativeModel({ model: MODEL })
-  const result = await model.generateContent([
-    { inlineData: { mimeType: file.type || "application/pdf", data: base64 } },
-    { text: prompt },
-  ])
-  return parseJson(result.response.text())
+
+  let lastErr: any
+  for (const modelName of MODEL_CHAIN) {
+    try {
+      const model = genAI.getGenerativeModel({ model: modelName })
+      const result = await model.generateContent([
+        { inlineData: { mimeType: file.type || "application/pdf", data: base64 } },
+        { text: prompt },
+      ])
+      return parseJson(result.response.text())
+    } catch (err: any) {
+      lastErr = err
+      console.warn(`[extraction] modelo ${modelName} falló (${err?.status ?? "?"}): ${err?.message ?? err}`)
+      if (!shouldTryNext(err)) throw err
+    }
+  }
+  throw lastErr
 }
 
 // ── Extracción del PERMISO DE EMBARQUE (OM-1993 SIM) ─────────────────────────

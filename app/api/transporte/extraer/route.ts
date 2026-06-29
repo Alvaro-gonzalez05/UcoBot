@@ -77,9 +77,16 @@ export async function POST(req: Request) {
   let permit: PermitData
   try {
     permit = await extractPermiso(permisoFile)
-  } catch (e) {
+  } catch (e: any) {
     console.error("extractPermiso error:", e)
-    return NextResponse.json({ error: "No se pudo leer el permiso. Probá con un PDF más claro." }, { status: 422 })
+    const s = e?.status ?? e?.response?.status
+    const overloaded = s === 503 || s === 429 || /overload|high demand|unavailable/i.test(String(e?.message || ""))
+    return NextResponse.json(
+      { error: overloaded
+          ? "El servicio de IA está saturado en este momento. Probá de nuevo en unos segundos."
+          : "No se pudo leer el permiso. Probá con un PDF más claro." },
+      { status: overloaded ? 503 : 422 },
+    )
   }
   const factura = facturaFile ? await extractFactura(facturaFile).catch(() => null) : null
 
