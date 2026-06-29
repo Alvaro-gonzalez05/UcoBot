@@ -63,13 +63,14 @@ export interface FacturaData {
 // de entorno: la lista está hardcodeada acá (mismos modelos que el CRM ya usa
 // para generar mensajes, incluyendo la familia 3.x). Se puede sobreescribir con
 // GEMINI_EXTRACTION_MODELS, pero NO hace falta.
-// Orden pensado para VELOCIDAD: primero los más rápidos (lite); si fallan,
-// escala a los más capaces como respaldo. La revisión humana cubre la precisión.
+// Orden: rápido PERO con buen OCR primero (el flash-lite es más veloz pero
+// transcribe peor la Ñ/acentos). El gran salto de velocidad lo dio paralelizar
+// permiso+factura, no el modelo. Los lite quedan como respaldo.
 const DEFAULT_MODELS = [
-  "gemini-2.5-flash-lite", // el más rápido
-  "gemini-3.1-flash-lite", // 3.x liviano y rápido
-  "gemini-2.5-flash",      // sólido (respaldo)
-  "gemini-3.5-flash",      // 3.x casi-Pro (respaldo)
+  "gemini-2.5-flash",      // rápido y con buen OCR (lee bien Ñ/tildes)
+  "gemini-3.5-flash",      // 3.x casi-Pro
+  "gemini-2.5-flash-lite", // más rápido, OCR más flojo (respaldo)
+  "gemini-3.1-flash-lite",
   "gemini-2.0-flash",
 ]
 const MODELS = (process.env.GEMINI_EXTRACTION_MODELS || process.env.GEMINI_EXTRACTION_MODEL || "")
@@ -176,9 +177,12 @@ async function runModels(parts: any[], deadline: number): Promise<any> {
 // velocidad se optimiza aparte sin perder exactitud.
 async function callGemini(file: File, prompt: string, deadline: number): Promise<any> {
   const base64 = Buffer.from(await file.arrayBuffer()).toString("base64")
+  const fidelidad =
+    '\n\nIMPORTANTE: transcribí los nombres y razones sociales EXACTAMENTE como figuran en la imagen, ' +
+    'respetando la Ñ, las tildes y los caracteres especiales (ej. "PEÑAFLOR", nunca "PE?AFLOR"). No traduzcas ni corrijas nombres.'
   return runModels([
     { inlineData: { mimeType: file.type || "application/pdf", data: base64 } },
-    { text: prompt },
+    { text: prompt + fidelidad },
   ], deadline)
 }
 

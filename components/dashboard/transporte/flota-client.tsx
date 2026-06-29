@@ -9,8 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Truck, Plus, MoreHorizontal, Edit, Trash, ShieldCheck, ShieldAlert, Container } from "lucide-react"
+import { Truck, Plus, ShieldCheck, ShieldAlert, Container } from "lucide-react"
+import { RowActions } from "./row-actions"
 
 interface Vehicle {
   id: string
@@ -159,15 +159,7 @@ export function FlotaClient({ userId, vehicles }: { userId: string; vehicles: Ve
                     </p>
                   </div>
                 </div>
-                <DropdownMenu modal={false}>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="h-9 w-9 p-0 rounded-xl"><MoreHorizontal className="h-4 w-4" /></Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => openEdit(v)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleDelete(v)} className="text-red-600"><Trash className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <RowActions onEdit={() => openEdit(v)} onDelete={() => handleDelete(v)} />
               </div>
             )
           })}

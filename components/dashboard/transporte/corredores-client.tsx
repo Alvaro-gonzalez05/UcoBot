@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Route, Plus, MoreHorizontal, Edit, Trash, MapPin, Flag, Clock, X, Wand2, LogOut, LogIn, Milestone } from "lucide-react"
+import { Route, Plus, MapPin, Flag, Clock, X, Wand2, LogOut, LogIn, Milestone } from "lucide-react"
+import { RowActions } from "./row-actions"
 
 interface Paso { pais?: string; aduana_entrada?: string; aduana_salida?: string; ciudad?: string }
 interface Corridor {
@@ -139,15 +139,7 @@ export function CorredoresClient({ userId, corridors }: { userId: string; corrid
                   </div>
                 </div>
               </div>
-              <DropdownMenu modal={false}>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="h-9 w-9 p-0 rounded-xl"><MoreHorizontal className="h-4 w-4" /></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => openEdit(c)}><Edit className="mr-2 h-4 w-4" /> Editar</DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleDelete(c)} className="text-red-600"><Trash className="mr-2 h-4 w-4" /> Eliminar</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <RowActions onEdit={() => openEdit(c)} onDelete={() => handleDelete(c)} />
             </div>
           ))}
         </div>
