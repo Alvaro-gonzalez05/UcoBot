@@ -85,6 +85,17 @@ export async function POST(req: Request) {
 
   const warnings: string[] = []
 
+  // ⚠️ Coherencia permiso ↔ factura/proforma: se vinculan por el N° de proforma.
+  // Si ninguno de los números de 6+ dígitos coincide, alertamos (pero NO bloqueamos).
+  if (factura) {
+    const digits6 = (s?: string | null) => (s ? String(s).match(/\d{6,}/g) || [] : [])
+    const permNums = digits6(permit.nro_proforma)
+    const facNums = digits6(factura.proforma_number)
+    if (permNums.length && facNums.length && !permNums.some((n) => facNums.includes(n))) {
+      warnings.unshift("⚠️ El permiso y la factura/proforma parecen de operaciones DISTINTAS (el N° de proforma no coincide). Verificá que sean del mismo embarque antes de oficializar.")
+    }
+  }
+
   // 2) Exportador (match-or-create)
   const exporter = await findOrCreateClient(supabase, userId, {
     tax_id: permit.exporter_cuit, tax_id_type: "CUIT", tax_id_country: "200",

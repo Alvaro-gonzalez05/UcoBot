@@ -54,6 +54,7 @@ export interface FacturaData {
   destinatario_razon_social: string | null
   destinatario_domicilio: string | null
   fob_total: number | null
+  proforma_number: string | null
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -82,6 +83,28 @@ export function dateOrNull(v: any): string | null {
   const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (m) return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`
   return null
+}
+
+// Normalización de códigos: la IA suele traer el NOMBRE; los mapeamos al código.
+const PAIS_CODES: Record<string, string> = {
+  ARGENTINA: "200", CHILE: "208", BOLIVIA: "202", BRASIL: "203", BRAZIL: "203",
+  PARAGUAY: "221", PERU: "222", "PERÚ": "222", URUGUAY: "225",
+}
+export function paisCode(label?: string | null, code?: string | null): string | null {
+  const c = code ? String(code).trim() : ""
+  if (/^\d{3}$/.test(c)) return c
+  if (label) {
+    const k = label.trim().toUpperCase()
+    if (PAIS_CODES[k]) return PAIS_CODES[k]
+  }
+  return c || null
+}
+const EMBALAJE_CODES: Record<string, string> = { CONTENEDOR: "05", BULTOS: "99" }
+export function embalajeCode(v?: string | null): string | null {
+  if (!v) return null
+  const s = String(v).trim()
+  if (/^\d{2}$/.test(s)) return s
+  return EMBALAJE_CODES[s.toUpperCase()] ?? s
 }
 
 function parseJson(raw: string): any {
@@ -183,7 +206,7 @@ export async function extractPermiso(file: File): Promise<PermitData> {
     ata_razon_social: d?.ata_razon_social ?? null,
     ata_cuit: d?.ata_cuit ?? null,
     via: d?.via ?? null,
-    pais_destino_code: d?.pais_destino_code ?? null,
+    pais_destino_code: paisCode(d?.pais_destino_label, d?.pais_destino_code),
     pais_destino_label: d?.pais_destino_label ?? null,
     puerto_embarque: d?.puerto_embarque ?? null,
     aduana_salida: d?.aduana_salida ?? null,
@@ -193,7 +216,7 @@ export async function extractPermiso(file: File): Promise<PermitData> {
     flete_total: num(d?.flete_total),
     seguro_total: num(d?.seguro_total),
     cotizacion: num(d?.cotizacion),
-    embalaje_code: d?.embalaje_code ?? null,
+    embalaje_code: embalajeCode(d?.embalaje_code),
     total_bultos: d?.total_bultos != null ? Math.round(num(d?.total_bultos) ?? 0) : null,
     peso_bruto: num(d?.peso_bruto),
     peso_neto: num(d?.peso_neto),
@@ -204,18 +227,26 @@ export async function extractPermiso(file: File): Promise<PermitData> {
 }
 
 // ── Extracción de la FACTURA COMERCIAL (consignatario/destinatario) ──────────
-const FACTURA_PROMPT = `El archivo adjunto es una FACTURA COMERCIAL de exportación. Necesito identificar al comprador del exterior.
+const FACTURA_PROMPT = `El archivo adjunto es una FACTURA COMERCIAL o una PROFORMA DE EXPORTACIÓN (ej. formulario "Operación de Exportación"). Necesito identificar al cliente del exterior.
+
+Buscá específicamente estos campos (pueden estar en español/inglés):
+- "CONSIGNADO A" / "CONSIGNEE TO"  -> consignatario
+- "NOTIFICAR" / "NOTIFY"           -> destinatario / parte a notificar (si difiere del consignatario)
+- "VENDIDO POR" / "SOLD BY" / comprador -> identificación tributaria del comprador del exterior
+- identificación tributaria extranjera: RFC (México), RUT (Chile), RUC (Perú/Paraguay), u otra; también puede figurar un "CUIT" de exterior.
+- país de destino (ej. del "PUERTO DESTINO" o el domicilio del consignatario)
 
 Devolvé ÚNICAMENTE un JSON válido (sin markdown) con esta forma:
 {
-  "consignatario_tax_id": string|null,     // identificación tributaria del comprador (RUT/RUC/CUIT/etc.)
-  "consignatario_tax_id_type": string|null,// "RUT" | "RUC" | "CUIT" | "OTRO"
+  "consignatario_tax_id": string|null,
+  "consignatario_tax_id_type": string|null,// "RFC" | "RUT" | "RUC" | "CUIT" | "OTRO"
   "consignatario_pais": string|null,
   "consignatario_razon_social": string|null,
   "consignatario_domicilio": string|null,
-  "destinatario_razon_social": string|null,// si difiere del consignatario
+  "destinatario_razon_social": string|null,// de NOTIFICAR, si difiere del consignatario
   "destinatario_domicilio": string|null,
-  "fob_total": number|null
+  "fob_total": number|null,                // Gran Total / monto total
+  "proforma_number": string|null           // N° de proforma / orden de venta ("SALE ORDER", "SU ORDEN", ej "XN 6609 - 13009714")
 }
 Reglas: números con punto decimal; si un dato no aparece, null; NO inventes.`
 
@@ -230,5 +261,6 @@ export async function extractFactura(file: File): Promise<FacturaData> {
     destinatario_razon_social: d?.destinatario_razon_social ?? null,
     destinatario_domicilio: d?.destinatario_domicilio ?? null,
     fob_total: num(d?.fob_total),
+    proforma_number: d?.proforma_number ?? null,
   }
 }

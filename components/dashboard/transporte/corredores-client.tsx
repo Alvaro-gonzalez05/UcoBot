@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Route, Plus, MoreHorizontal, Edit, Trash, MapPin, Flag, Clock, X, Wand2 } from "lucide-react"
+import { Route, Plus, MoreHorizontal, Edit, Trash, MapPin, Flag, Clock, X, Wand2, LogOut, LogIn, Milestone } from "lucide-react"
 
 interface Paso { pais?: string; aduana_entrada?: string; aduana_salida?: string; ciudad?: string }
 interface Corridor {
@@ -153,85 +153,116 @@ export function CorredoresClient({ userId, corridors }: { userId: string; corrid
         </div>
       )}
 
+      {/* ── Form: constructor de ruta visual ── */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar corredor" : "Nuevo corredor"}</DialogTitle>
-            <DialogDescription>Definí la ruta y las claves para que se autoseleccione.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-5">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl p-0">
+          <div className="bg-[#1C1C28] text-white px-6 py-5 rounded-t-2xl">
+            <DialogHeader>
+              <DialogTitle className="text-white flex items-center gap-2">
+                <Route className="h-5 w-5 text-[#D1F366]" /> {editing ? "Editar corredor" : "Nuevo corredor"}
+              </DialogTitle>
+              <DialogDescription className="text-white/60">
+                Dibujá la ruta una vez. Después se reutiliza y se autoselecciona sola.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
+
+          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
+            {/* Nombre */}
             <div className="space-y-2">
-              <Label htmlFor="name">Nombre del corredor *</Label>
-              <Input id="name" name="name" defaultValue={editing?.name} placeholder="Mendoza – Los Libertadores – Chile" className="rounded-xl" />
+              <Label htmlFor="name" className="text-sm font-semibold">Nombre del corredor *</Label>
+              <Input id="name" name="name" defaultValue={editing?.name} placeholder="Ej: Mendoza – Cristo Redentor – Chile" className="rounded-xl h-11" />
             </div>
 
-            <Group title="Inferencia automática" hint="Con estos dos datos el sistema elige el corredor solo al leer el permiso.">
-              <F label="Aduana de partida" name="match_aduana_partida" def={editing?.match_aduana_partida} placeholder="038" />
-              <F label="País destino (código)" name="match_pais_destino" def={editing?.match_pais_destino} placeholder="208" />
-            </Group>
-
-            <Group title="Partida">
-              <F label="País" name="partida_pais" def={editing?.partida_pais} placeholder="200" />
-              <F label="Aduana" name="partida_aduana" def={editing?.partida_aduana} placeholder="038" />
-              <F label="Ciudad" name="partida_ciudad" def={editing?.partida_ciudad} />
-              <F label="Lugar operativo" name="partida_lugar_operativo" def={editing?.partida_lugar_operativo} />
-            </Group>
-
-            <Group title="Salida (frontera)">
-              <F label="Aduana" name="salida_aduana" def={editing?.salida_aduana} />
-              <F label="Ciudad" name="salida_ciudad" def={editing?.salida_ciudad} placeholder="Uspallata" />
-              <F label="Lugar operativo" name="salida_lugar_operativo" def={editing?.salida_lugar_operativo} />
-            </Group>
-
-            <Group title="Entrada">
-              <F label="Aduana" name="entrada_aduana" def={editing?.entrada_aduana} />
-              <F label="Ciudad" name="entrada_ciudad" def={editing?.entrada_ciudad} placeholder="Los Andes" />
-              <F label="Lugar operativo" name="entrada_lugar_operativo" def={editing?.entrada_lugar_operativo} />
-            </Group>
-
-            <Group title="Destino">
-              <F label="País" name="destino_pais" def={editing?.destino_pais} placeholder="208" />
-              <F label="Aduana" name="destino_aduana" def={editing?.destino_aduana} />
-              <F label="Ciudad" name="destino_ciudad" def={editing?.destino_ciudad} placeholder="San Antonio" />
-              <F label="Lugar operativo" name="destino_lugar_operativo" def={editing?.destino_lugar_operativo} />
-            </Group>
-
-            {/* Países de paso (repetidor) */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-bold">Países de paso</h4>
-                <Button type="button" variant="outline" size="sm" className="rounded-xl" onClick={addPaso}>
-                  <Plus className="h-3.5 w-3.5 mr-1" /> Agregar
-                </Button>
-              </div>
-              {pasos.length === 0 ? (
-                <p className="text-xs text-muted-foreground">Sin países de paso (ruta directa).</p>
-              ) : (
-                <div className="space-y-2">
-                  {pasos.map((p, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-xl border border-border p-2">
-                      <span className="text-xs font-bold text-muted-foreground w-5 text-center">{i + 1}</span>
-                      <Input value={p.pais || ""} onChange={(e) => setPaso(i, "pais", e.target.value)} placeholder="País" className="rounded-lg h-9" />
-                      <Input value={p.aduana_entrada || ""} onChange={(e) => setPaso(i, "aduana_entrada", e.target.value)} placeholder="Ad. entrada" className="rounded-lg h-9" />
-                      <Input value={p.aduana_salida || ""} onChange={(e) => setPaso(i, "aduana_salida", e.target.value)} placeholder="Ad. salida" className="rounded-lg h-9" />
-                      <button type="button" onClick={() => removePaso(i)} className="h-8 w-8 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-red-600 shrink-0">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
+            {/* Autoselección destacada */}
+            <div className="rounded-2xl border border-primary/40 bg-primary/10 p-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-primary/30 grid place-items-center"><Wand2 className="h-4 w-4 text-foreground" /></div>
+                <div>
+                  <h4 className="text-sm font-bold">Autoselección ✨</h4>
+                  <p className="text-xs text-muted-foreground">Con estos dos datos, el sistema elige este corredor solo al subir un permiso.</p>
                 </div>
-              )}
+              </div>
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <Field label="Aduana de partida" name="match_aduana_partida" def={editing?.match_aduana_partida} placeholder="038" />
+                <Field label="País destino (código)" name="match_pais_destino" def={editing?.match_pais_destino} placeholder="208" />
+              </div>
             </div>
 
-            <Group title="Plazos por defecto">
-              <F label="Transporte (horas)" name="plazo_horas" type="number" def={editing?.default_plazo_transporte_horas ?? undefined} />
-              <F label="Interno (días)" name="plazo_dias" type="number" def={editing?.default_plazo_interno_dias ?? undefined} />
-            </Group>
+            {/* Timeline del recorrido */}
+            <div>
+              <h4 className="text-sm font-bold mb-3 flex items-center gap-2"><Route className="h-4 w-4" /> Recorrido</h4>
+              <div className="relative">
+                <Stop color="bg-emerald-100 text-emerald-600" icon={<MapPin className="h-4 w-4" />} title="Partida">
+                  <Field label="País" name="partida_pais" def={editing?.partida_pais} placeholder="200" small />
+                  <Field label="Aduana" name="partida_aduana" def={editing?.partida_aduana} placeholder="038" small />
+                  <Field label="Ciudad" name="partida_ciudad" def={editing?.partida_ciudad} small />
+                  <Field label="Lugar operativo" name="partida_lugar_operativo" def={editing?.partida_lugar_operativo} small />
+                </Stop>
 
-            <DialogFooter>
+                <Stop color="bg-amber-100 text-amber-600" icon={<LogOut className="h-4 w-4" />} title="Salida (frontera)">
+                  <Field label="Aduana" name="salida_aduana" def={editing?.salida_aduana} small />
+                  <Field label="Ciudad" name="salida_ciudad" def={editing?.salida_ciudad} placeholder="Uspallata" small />
+                  <Field label="Lugar operativo" name="salida_lugar_operativo" def={editing?.salida_lugar_operativo} small />
+                </Stop>
+
+                {/* Países de paso */}
+                <div className="relative pl-12 pb-5">
+                  <span className="absolute left-[17px] top-9 bottom-0 w-0.5 bg-border" />
+                  <span className="absolute left-0 top-0.5 h-9 w-9 rounded-full grid place-items-center bg-violet-100 text-violet-600 ring-4 ring-card"><Milestone className="h-4 w-4" /></span>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Países de paso</p>
+                    <Button type="button" variant="outline" size="sm" className="rounded-lg h-7 text-xs" onClick={addPaso}>
+                      <Plus className="h-3 w-3 mr-1" /> Agregar
+                    </Button>
+                  </div>
+                  {pasos.length === 0 ? (
+                    <p className="text-xs text-muted-foreground italic">Ruta directa (sin terceros países).</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {pasos.map((p, i) => (
+                        <div key={i} className="flex items-center gap-2 rounded-xl border border-border bg-muted/30 p-2">
+                          <span className="text-xs font-bold text-violet-600 w-5 text-center shrink-0">{i + 1}</span>
+                          <Input value={p.pais || ""} onChange={(e) => setPaso(i, "pais", e.target.value)} placeholder="País" className="rounded-lg h-9" />
+                          <Input value={p.aduana_entrada || ""} onChange={(e) => setPaso(i, "aduana_entrada", e.target.value)} placeholder="Ad. entrada" className="rounded-lg h-9" />
+                          <Input value={p.aduana_salida || ""} onChange={(e) => setPaso(i, "aduana_salida", e.target.value)} placeholder="Ad. salida" className="rounded-lg h-9" />
+                          <button type="button" onClick={() => removePaso(i)} className="h-8 w-8 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-red-600 shrink-0">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <Stop color="bg-blue-100 text-blue-600" icon={<LogIn className="h-4 w-4" />} title="Entrada">
+                  <Field label="Aduana" name="entrada_aduana" def={editing?.entrada_aduana} small />
+                  <Field label="Ciudad" name="entrada_ciudad" def={editing?.entrada_ciudad} placeholder="Los Andes" small />
+                  <Field label="Lugar operativo" name="entrada_lugar_operativo" def={editing?.entrada_lugar_operativo} small />
+                </Stop>
+
+                <Stop color="bg-[#1C1C28] text-[#D1F366]" icon={<Flag className="h-4 w-4" />} title="Destino" last>
+                  <Field label="País" name="destino_pais" def={editing?.destino_pais} placeholder="208" small />
+                  <Field label="Aduana" name="destino_aduana" def={editing?.destino_aduana} placeholder="39" small />
+                  <Field label="Ciudad" name="destino_ciudad" def={editing?.destino_ciudad} placeholder="San Antonio" small />
+                  <Field label="Lugar operativo" name="destino_lugar_operativo" def={editing?.destino_lugar_operativo} small />
+                </Stop>
+              </div>
+            </div>
+
+            {/* Plazos */}
+            <div className="rounded-2xl border border-border p-4">
+              <h4 className="text-sm font-bold mb-3 flex items-center gap-2"><Clock className="h-4 w-4" /> Plazos por defecto</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Transporte (horas)" name="plazo_horas" type="number" def={editing?.default_plazo_transporte_horas ?? undefined} />
+                <Field label="Interno (días)" name="plazo_dias" type="number" def={editing?.default_plazo_interno_dias ?? undefined} />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
               <Button type="button" variant="outline" className="rounded-xl" onClick={() => setOpen(false)}>Cancelar</Button>
               <Button type="submit" disabled={loading} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C]">
-                {loading ? "Guardando…" : "Guardar"}
+                {loading ? "Guardando…" : "Guardar corredor"}
               </Button>
             </DialogFooter>
           </form>
@@ -241,21 +272,22 @@ export function CorredoresClient({ userId, corridors }: { userId: string; corrid
   )
 }
 
-function Group({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
+function Stop({ color, icon, title, children, last }: { color: string; icon: React.ReactNode; title: string; children: React.ReactNode; last?: boolean }) {
   return (
-    <div className="rounded-2xl border border-border p-4">
-      <h4 className="text-sm font-bold">{title}</h4>
-      {hint && <p className="text-xs text-muted-foreground mt-0.5 mb-3">{hint}</p>}
-      <div className={`grid grid-cols-2 gap-3 ${hint ? "" : "mt-3"}`}>{children}</div>
+    <div className="relative pl-12 pb-5">
+      {!last && <span className="absolute left-[17px] top-9 bottom-0 w-0.5 bg-border" />}
+      <span className={`absolute left-0 top-0.5 h-9 w-9 rounded-full grid place-items-center ring-4 ring-card ${color}`}>{icon}</span>
+      <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">{title}</p>
+      <div className="grid grid-cols-2 gap-3">{children}</div>
     </div>
   )
 }
 
-function F({ label, name, def, type = "text", placeholder }: { label: string; name: string; def?: string | number | null; type?: string; placeholder?: string }) {
+function Field({ label, name, def, type = "text", placeholder, small }: { label: string; name: string; def?: string | number | null; type?: string; placeholder?: string; small?: boolean }) {
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={name} className="text-xs">{label}</Label>
-      <Input id={name} name={name} type={type} defaultValue={def ?? undefined} placeholder={placeholder} className="rounded-xl h-9" />
+      <Label htmlFor={name} className="text-xs text-muted-foreground">{label}</Label>
+      <Input id={name} name={name} type={type} defaultValue={def ?? undefined} placeholder={placeholder} className={`rounded-xl ${small ? "h-9" : "h-10"}`} />
     </div>
   )
 }

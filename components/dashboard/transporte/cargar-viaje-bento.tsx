@@ -11,6 +11,7 @@ import {
 type Status = "idle" | "processing" | "done" | "error"
 
 interface TripSummary {
+  trip_id?: string
   permit_number?: string
   exporter?: string
   pais_destino?: string
@@ -155,7 +156,7 @@ export function CargarViajeBento() {
         <div className="flex flex-col gap-4">
           <Dropzone
             id="factura" file={factura} onFile={setFactura} onClear={() => setFactura(null)}
-            title="Factura comercial" subtitle="Solo si el cliente del exterior es nuevo."
+            title="Factura o proforma" subtitle="Trae el consignatario del exterior. Solo si el cliente es nuevo."
             icon={Receipt}
           />
           <Card className="p-5 rounded-2xl border-border/70 flex-1">
@@ -247,18 +248,22 @@ export function CargarViajeBento() {
                 <div className="h-11 w-11 rounded-xl bg-primary/20 grid place-items-center">
                   <Truck className="h-6 w-6 text-primary" />
                 </div>
-                <h3 className="mt-4 font-bold text-lg leading-snug">Pasar a MALVINA</h3>
+                <h3 className="mt-4 font-bold text-lg leading-snug">Completar el viaje</h3>
                 <p className="mt-1 text-sm text-white/70">
-                  Abrí el MALVINA y la extensión vuelca el viaje pestaña por pestaña. Vos revisás y oficializás.
+                  Asigná el camión y el chofer, marcá el viaje como listo y mandalo a la extensión de MALVINA.
                 </p>
               </div>
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent("ucobot:malvina-volcar", { detail: result }))}
-                className="mt-6 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground font-semibold px-5 py-3 hover:brightness-105 active:scale-95 transition"
-              >
-                Enviar a la extensión <ArrowRight className="h-4 w-4" />
-              </button>
-              <p className="mt-2 text-[11px] text-white/40 text-center">Requiere la extensión de Chrome instalada</p>
+              {result.trip_id ? (
+                <Link
+                  href={`/dashboard/transporte/viajes/${result.trip_id}`}
+                  className="mt-6 inline-flex items-center justify-center gap-2 rounded-2xl bg-primary text-primary-foreground font-semibold px-5 py-3 hover:brightness-105 active:scale-95 transition"
+                >
+                  Completar viaje <ArrowRight className="h-4 w-4" />
+                </Link>
+              ) : (
+                <p className="mt-6 text-sm text-white/50">El viaje se guardó como borrador.</p>
+              )}
+              <p className="mt-2 text-[11px] text-white/40 text-center">Después se envía a MALVINA desde el viaje</p>
             </Card>
           </div>
 

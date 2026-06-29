@@ -52,7 +52,7 @@ export default async function ViajesPage() {
             const permit = crt?.transport_shipping_permits
             const e = ESTADO[t.estado] || ESTADO.borrador
             return (
-              <div key={t.id} className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center justify-between gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all">
+              <Link key={t.id} href={`/dashboard/transporte/viajes/${t.id}`} className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center justify-between gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all">
                 <div className="flex items-center gap-5 min-w-0">
                   <div className="w-14 h-14 rounded-2xl bg-[#1C1C28] text-[#D1F366] flex items-center justify-center flex-shrink-0">
                     <FileText className="h-6 w-6" />
@@ -71,7 +71,7 @@ export default async function ViajesPage() {
                   </div>
                 </div>
                 <Package className="h-5 w-5 text-muted-foreground/40 shrink-0" />
-              </div>
+              </Link>
             )
           })}
         </div>
