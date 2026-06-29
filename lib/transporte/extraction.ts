@@ -63,12 +63,13 @@ export interface FacturaData {
 // de entorno: la lista está hardcodeada acá (mismos modelos que el CRM ya usa
 // para generar mensajes, incluyendo la familia 3.x). Se puede sobreescribir con
 // GEMINI_EXTRACTION_MODELS, pero NO hace falta.
-// Orden pensado para extracción: primero los más capaces y disponibles.
+// Orden pensado para VELOCIDAD: primero los más rápidos (lite); si fallan,
+// escala a los más capaces como respaldo. La revisión humana cubre la precisión.
 const DEFAULT_MODELS = [
-  "gemini-3.5-flash",      // 3.x — inteligencia casi-Pro a velocidad Flash
-  "gemini-2.5-flash",      // sólido y muy disponible
-  "gemini-3.1-flash-lite", // 3.x liviano
-  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash-lite", // el más rápido
+  "gemini-3.1-flash-lite", // 3.x liviano y rápido
+  "gemini-2.5-flash",      // sólido (respaldo)
+  "gemini-3.5-flash",      // 3.x casi-Pro (respaldo)
   "gemini-2.0-flash",
 ]
 const MODELS = (process.env.GEMINI_EXTRACTION_MODELS || process.env.GEMINI_EXTRACTION_MODEL || "")
@@ -122,12 +123,14 @@ const PAIS_CODES: Record<string, string> = {
   PARAGUAY: "221", PERU: "222", "PERÚ": "222", URUGUAY: "225",
 }
 export function paisCode(label?: string | null, code?: string | null): string | null {
-  const c = code ? String(code).trim() : ""
-  if (/^\d{3}$/.test(c)) return c
+  // El NOMBRE conocido manda sobre el código (la IA a veces lee mal el código del PDF,
+  // ej. "CHILE" con código 333 en vez de 208).
   if (label) {
     const k = label.trim().toUpperCase()
     if (PAIS_CODES[k]) return PAIS_CODES[k]
   }
+  const c = code ? String(code).trim() : ""
+  if (/^\d{3}$/.test(c)) return c
   return c || null
 }
 const EMBALAJE_CODES: Record<string, string> = { CONTENEDOR: "05", BULTOS: "99" }
@@ -142,20 +145,6 @@ function parseJson(raw: string): any {
   const cleaned = raw.trim().replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "")
   const match = cleaned.match(/\{[\s\S]*\}/)
   return JSON.parse(match ? match[0] : cleaned)
-}
-
-// Extrae el texto del PDF de forma determinística (JS puro, sin OCR).
-// Devuelve "" si el PDF está escaneado (sin capa de texto).
-async function pdfText(ab: ArrayBuffer): Promise<string> {
-  try {
-    const { extractText, getDocumentProxy } = await import("unpdf")
-    const pdf = await getDocumentProxy(new Uint8Array(ab))
-    const { text } = await extractText(pdf, { mergePages: true })
-    return (Array.isArray(text) ? text.join("\n") : text || "").trim()
-  } catch (e) {
-    console.warn("[extraction] pdfText falló:", e)
-    return ""
-  }
 }
 
 // Corre la cadena de modelos (timeout + fallback) sobre un set de "parts".
@@ -181,20 +170,12 @@ async function runModels(parts: any[], deadline: number): Promise<any> {
   throw lastErr ?? Object.assign(new Error("Servicio de IA no disponible"), { status: 503 })
 }
 
-const MIN_TEXT_CHARS = 200
-
-// Híbrido: si el PDF tiene texto -> mandamos TEXTO (rápido). Si está escaneado
-// -> mandamos la imagen y la IA hace OCR (visión, más lento pero funciona).
+// OCR por VISIÓN siempre: la IA "ve" el documento y lee bien la Ñ, los acentos y
+// caracteres especiales directo de la imagen, sin inventar. (Extraer el texto del
+// PDF a veces los rompe: la "Ñ" salía como "?"). Priorizamos fidelidad; la
+// velocidad se optimiza aparte sin perder exactitud.
 async function callGemini(file: File, prompt: string, deadline: number): Promise<any> {
-  const ab = await file.arrayBuffer()
-  const text = await pdfText(ab)
-
-  if (text.length >= MIN_TEXT_CHARS) {
-    return runModels([{ text: `${prompt}\n\n=== TEXTO EXTRAÍDO DEL DOCUMENTO ===\n${text}` }], deadline)
-  }
-
-  // Escaneado / sin texto -> visión (OCR por la IA).
-  const base64 = Buffer.from(ab).toString("base64")
+  const base64 = Buffer.from(await file.arrayBuffer()).toString("base64")
   return runModels([
     { inlineData: { mimeType: file.type || "application/pdf", data: base64 } },
     { text: prompt },

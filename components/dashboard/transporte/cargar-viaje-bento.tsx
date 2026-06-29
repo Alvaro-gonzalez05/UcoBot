@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef, useState, useCallback } from "react"
+import { useRef, useState, useCallback, useEffect } from "react"
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import {
@@ -9,6 +9,14 @@ import {
 } from "lucide-react"
 
 type Status = "idle" | "processing" | "done" | "error"
+
+const PROCESSING_STEPS = [
+  "Leyendo el documento…",
+  "Extrayendo mercadería y montos…",
+  "Identificando el cliente del exterior…",
+  "Infiriendo la ruta…",
+  "Armando y validando el viaje…",
+]
 
 interface TripSummary {
   trip_id?: string
@@ -106,6 +114,17 @@ export function CargarViajeBento() {
   const [status, setStatus] = useState<Status>("idle")
   const [result, setResult] = useState<TripSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [step, setStep] = useState(0)
+
+  // Progreso "simulado" por pasos mientras la IA procesa (avanza y se queda en el último).
+  useEffect(() => {
+    if (status !== "processing") { setStep(0); return }
+    setStep(0)
+    const id = setInterval(() => {
+      setStep((s) => Math.min(s + 1, PROCESSING_STEPS.length - 1))
+    }, 1800)
+    return () => clearInterval(id)
+  }, [status])
 
   const generar = async () => {
     if (!permiso) return
@@ -174,8 +193,36 @@ export function CargarViajeBento() {
         </div>
       </div>
 
+      {/* Estado de procesamiento — progreso por pasos */}
+      {status === "processing" && (
+        <Card className="p-6 rounded-2xl border-border/70">
+          <style>{`@keyframes ucoLoad{0%{transform:translateX(-110%)}100%{transform:translateX(360%)}}`}</style>
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-xl bg-primary/20 grid place-items-center shrink-0">
+              <Loader2 className="h-5 w-5 animate-spin text-foreground" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold">{PROCESSING_STEPS[step]}</p>
+              <p className="text-xs text-muted-foreground">La IA está leyendo el documento — puede tardar unos segundos.</p>
+            </div>
+          </div>
+          <div className="mt-4 h-1.5 w-full rounded-full bg-muted overflow-hidden">
+            <div className="h-full w-1/3 rounded-full bg-primary" style={{ animation: "ucoLoad 1.1s ease-in-out infinite" }} />
+          </div>
+          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
+            {PROCESSING_STEPS.map((s, i) => (
+              <span key={i} className={`text-[11px] px-2 py-0.5 rounded-full transition-colors ${
+                i < step ? "bg-emerald-100 text-emerald-700" : i === step ? "bg-primary/20 text-foreground font-semibold" : "bg-muted text-muted-foreground"
+              }`}>
+                {i < step ? "✓ " : ""}{s.replace("…", "")}
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Barra de acción */}
-      {status !== "done" && (
+      {status !== "done" && status !== "processing" && (
         <Card className="p-5 rounded-2xl border-border/70 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className={`h-2.5 w-2.5 rounded-full ${permiso ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
@@ -185,12 +232,10 @@ export function CargarViajeBento() {
           </div>
           <button
             onClick={generar}
-            disabled={!permiso || status === "processing"}
+            disabled={!permiso}
             className="inline-flex items-center gap-2 rounded-2xl bg-primary text-primary-foreground font-semibold px-6 py-3 shadow-lg shadow-primary/20 hover:brightness-105 active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
           >
-            {status === "processing"
-              ? <><Loader2 className="h-5 w-5 animate-spin" /> Procesando…</>
-              : <><Sparkles className="h-5 w-5" /> Generar viaje</>}
+            <Sparkles className="h-5 w-5" /> Generar viaje
           </button>
         </Card>
       )}

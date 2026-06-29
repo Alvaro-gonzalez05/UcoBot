@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { extractPermiso, extractFactura, type PermitData } from "@/lib/transporte/extraction"
+import { extractPermiso, extractFactura, type PermitData, type FacturaData } from "@/lib/transporte/extraction"
 
 export const runtime = "nodejs"
 // Hobby con Fluid Compute permite hasta 300s; Pro hasta 800s. El presupuesto
@@ -75,15 +75,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "El permiso debe ser un PDF" }, { status: 400 })
   }
 
-  // 1) Extracción con IA — presupuesto de tiempo compartido (< límite de Vercel).
-  // Los PDF digitales (texto) responden en segundos; este margen es para los
-  // escaneados (visión/OCR), que son más lentos.
+  // 1) Extracción con IA. Presupuesto de tiempo compartido (< límite de Vercel).
+  // Lanzamos permiso y factura EN PARALELO: si vienen los dos, ~mitad de tiempo.
   const deadline = Date.now() + 110000
+  const permitP = extractPermiso(permisoFile, deadline)
+  const facturaP: Promise<FacturaData | null> = facturaFile
+    ? extractFactura(facturaFile, deadline).catch(() => null)
+    : Promise.resolve(null)
+
   let permit: PermitData
   try {
-    permit = await extractPermiso(permisoFile, deadline)
+    permit = await permitP
   } catch (e: any) {
     console.error("extractPermiso error:", e)
+    await facturaP.catch(() => {}) // evita promesa colgada
     const s = e?.status ?? e?.response?.status
     const overloaded = s === 503 || s === 429 || /overload|high demand|unavailable/i.test(String(e?.message || ""))
     return NextResponse.json(
@@ -93,7 +98,7 @@ export async function POST(req: Request) {
       { status: overloaded ? 503 : 422 },
     )
   }
-  const factura = facturaFile ? await extractFactura(facturaFile, deadline).catch(() => null) : null
+  const factura = await facturaP
 
   const warnings: string[] = []
 
