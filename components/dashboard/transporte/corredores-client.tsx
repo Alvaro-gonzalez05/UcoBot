@@ -33,9 +33,10 @@ export function CorredoresClient({ userId, corridors }: { userId: string; corrid
   const [editing, setEditing] = useState<Corridor | null>(null)
   const [pasos, setPasos] = useState<Paso[]>([])
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const openNew = () => { setEditing(null); setPasos([]); setOpen(true) }
-  const openEdit = (c: Corridor) => { setEditing(c); setPasos(Array.isArray(c.paises_paso) ? c.paises_paso : []); setOpen(true) }
+  const openNew = () => { setEditing(null); setPasos([]); setErrors({}); setOpen(true) }
+  const openEdit = (c: Corridor) => { setEditing(c); setPasos(Array.isArray(c.paises_paso) ? c.paises_paso : []); setErrors({}); setOpen(true) }
 
   const addPaso = () => setPasos((p) => [...p, {}])
   const removePaso = (i: number) => setPasos((p) => p.filter((_, idx) => idx !== i))
@@ -59,7 +60,8 @@ export function CorredoresClient({ userId, corridors }: { userId: string; corrid
       default_plazo_transporte_horas: f.get("plazo_horas") ? Number(f.get("plazo_horas")) : null,
       default_plazo_interno_dias: f.get("plazo_dias") ? Number(f.get("plazo_dias")) : null,
     }
-    if (!payload.name) { toast.error("El nombre del corredor es obligatorio."); setLoading(false); return }
+    if (!payload.name) { setErrors({ name: "Ponele un nombre al corredor." }); setLoading(false); return }
+    setErrors({})
     try {
       const res = editing
         ? await supabase.from("transport_corridors").update(payload).eq("id", editing.id)
@@ -161,9 +163,12 @@ export function CorredoresClient({ userId, corridors }: { userId: string; corrid
 
           <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5">
             {/* Nombre */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="name" className="text-sm font-semibold">Nombre del corredor *</Label>
-              <Input id="name" name="name" defaultValue={editing?.name} placeholder="Ej: Mendoza – Cristo Redentor – Chile" className="rounded-xl h-11" />
+              <Input id="name" name="name" defaultValue={editing?.name} placeholder="Ej: Mendoza, Cristo Redentor, Chile"
+                aria-invalid={!!errors.name} aria-describedby={errors.name ? "name-err" : undefined}
+                className={`rounded-xl h-11 ${errors.name ? "border-red-400 focus-visible:ring-red-400" : ""}`} />
+              {errors.name && <p id="name-err" className="text-xs text-red-600">{errors.name}</p>}
             </div>
 
             {/* Autoselección destacada */}

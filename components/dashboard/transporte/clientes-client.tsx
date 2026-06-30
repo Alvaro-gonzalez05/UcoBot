@@ -40,9 +40,10 @@ export function ClientesClient({ userId, clients }: { userId: string; clients: C
   const [editing, setEditing] = useState<Client | null>(null)
   const [taxType, setTaxType] = useState("CUIT")
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const openNew = () => { setEditing(null); setTaxType("CUIT"); setOpen(true) }
-  const openEdit = (c: Client) => { setEditing(c); setTaxType(c.tax_id_type || "CUIT"); setOpen(true) }
+  const openNew = () => { setEditing(null); setTaxType("CUIT"); setErrors({}); setOpen(true) }
+  const openEdit = (c: Client) => { setEditing(c); setTaxType(c.tax_id_type || "CUIT"); setErrors({}); setOpen(true) }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -57,7 +58,8 @@ export function ClientesClient({ userId, clients }: { userId: string; clients: C
       domicilio: f.get("domicilio") || null,
       pais_code: f.get("pais_code") || null,
     }
-    if (!payload.razon_social) { toast.error("La razón social es obligatoria."); setLoading(false); return }
+    if (!payload.razon_social) { setErrors({ razon_social: "Ingresá la razón social." }); setLoading(false); return }
+    setErrors({})
     try {
       const res = editing
         ? await supabase.from("transport_clients").update(payload).eq("id", editing.id)
@@ -144,9 +146,12 @@ export function ClientesClient({ userId, clients }: { userId: string; clients: C
             <DialogDescription>Datos del exportador o del cliente del exterior.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="razon_social">Razón social *</Label>
-              <Input id="razon_social" name="razon_social" defaultValue={editing?.razon_social} className="rounded-xl" />
+              <Input id="razon_social" name="razon_social" defaultValue={editing?.razon_social}
+                aria-invalid={!!errors.razon_social} aria-describedby={errors.razon_social ? "razon-err" : undefined}
+                className={`rounded-xl ${errors.razon_social ? "border-red-400 focus-visible:ring-red-400" : ""}`} />
+              {errors.razon_social && <p id="razon-err" className="text-xs text-red-600">{errors.razon_social}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

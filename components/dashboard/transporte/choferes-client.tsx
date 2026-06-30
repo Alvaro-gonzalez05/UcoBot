@@ -32,9 +32,10 @@ export function ChoferesClient({ userId, drivers }: { userId: string; drivers: D
   const [editing, setEditing] = useState<Driver | null>(null)
   const [tipoDoc, setTipoDoc] = useState("DNI")
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const openNew = () => { setEditing(null); setTipoDoc("DNI"); setOpen(true) }
-  const openEdit = (d: Driver) => { setEditing(d); setTipoDoc(d.tipo_documento || "DNI"); setOpen(true) }
+  const openNew = () => { setEditing(null); setTipoDoc("DNI"); setErrors({}); setOpen(true) }
+  const openEdit = (d: Driver) => { setEditing(d); setTipoDoc(d.tipo_documento || "DNI"); setErrors({}); setOpen(true) }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -47,7 +48,8 @@ export function ChoferesClient({ userId, drivers }: { userId: string; drivers: D
       numero_documento: f.get("numero_documento") || null,
       pais_code: f.get("pais_code") || null,
     }
-    if (!payload.nombre) { toast.error("El nombre es obligatorio."); setLoading(false); return }
+    if (!payload.nombre) { setErrors({ nombre: "Ingresá el nombre del chofer." }); setLoading(false); return }
+    setErrors({})
     try {
       const res = editing
         ? await supabase.from("transport_drivers").update(payload).eq("id", editing.id)
@@ -124,9 +126,12 @@ export function ChoferesClient({ userId, drivers }: { userId: string; drivers: D
             <DialogDescription>Hasta dos conductores pueden asignarse a un viaje.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="nombre">Nombre completo *</Label>
-              <Input id="nombre" name="nombre" defaultValue={editing?.nombre} className="rounded-xl" placeholder="Juan Pérez" />
+              <Input id="nombre" name="nombre" defaultValue={editing?.nombre} placeholder="Juan Pérez"
+                aria-invalid={!!errors.nombre} aria-describedby={errors.nombre ? "nombre-err" : undefined}
+                className={`rounded-xl ${errors.nombre ? "border-red-400 focus-visible:ring-red-400" : ""}`} />
+              {errors.nombre && <p id="nombre-err" className="text-xs text-red-600">{errors.nombre}</p>}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

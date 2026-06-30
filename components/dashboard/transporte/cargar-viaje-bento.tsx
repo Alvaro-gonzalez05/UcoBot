@@ -58,12 +58,18 @@ function Dropzone({
 
   return (
     <div
+      role="button"
+      tabIndex={file ? -1 : 0}
+      aria-label={`Subir ${title}`}
       onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
       onDragLeave={() => setDrag(false)}
       onDrop={handleDrop}
       onClick={() => !file && inputRef.current?.click()}
+      onKeyDown={(e) => { if (!file && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); inputRef.current?.click() } }}
       className={[
-        "relative rounded-2xl border-2 border-dashed p-5 transition cursor-pointer select-none",
+        "relative rounded-2xl border-2 border-dashed p-5 cursor-pointer select-none",
+        "transition-colors duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
+        "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         tall ? "min-h-[260px]" : "min-h-[150px]",
         drag ? "border-primary bg-primary/10" : file ? "border-emerald-300 bg-emerald-50/60" : "border-border hover:border-primary/60 hover:bg-muted/40",
       ].join(" ")}
@@ -203,7 +209,7 @@ export function CargarViajeBento() {
             </div>
             <div className="min-w-0">
               <p className="font-semibold">{PROCESSING_STEPS[step]}</p>
-              <p className="text-xs text-muted-foreground">La IA está leyendo el documento — puede tardar unos segundos.</p>
+              <p className="text-xs text-muted-foreground">La IA está leyendo el documento. Puede tardar unos segundos.</p>
             </div>
           </div>
           <div className="mt-4 h-1.5 w-full rounded-full bg-muted overflow-hidden">
@@ -233,7 +239,7 @@ export function CargarViajeBento() {
           <button
             onClick={generar}
             disabled={!permiso}
-            className="inline-flex items-center gap-2 rounded-2xl bg-primary text-primary-foreground font-semibold px-6 py-3 shadow-lg shadow-primary/20 hover:brightness-105 active:scale-95 transition disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
+            className="inline-flex items-center gap-2 rounded-2xl bg-primary text-primary-foreground font-semibold px-6 py-3 shadow-lg shadow-primary/20 transition-[transform,filter] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] hover:brightness-105 active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
           >
             <Sparkles className="h-5 w-5" /> Generar viaje
           </button>
@@ -272,7 +278,7 @@ export function CargarViajeBento() {
                 <Users className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">Consignatario:</span>
                 <span className="text-sm font-medium">{result.consignatario || "—"}</span>
-                {result.client_status === "nuevo" && <span className="text-[10px] font-bold uppercase bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">cliente nuevo — creado</span>}
+                {result.client_status === "nuevo" && <span className="text-[10px] font-bold uppercase bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">cliente nuevo · creado</span>}
                 {result.client_status === "existente" && <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5">cliente existente</span>}
                 {result.client_status === "pendiente" && <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 rounded-full px-2 py-0.5">subí la factura</span>}
               </div>

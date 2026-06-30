@@ -47,13 +47,14 @@ export function FlotaClient({ userId, vehicles }: { userId: string; vehicles: Ve
   const [editing, setEditing] = useState<Vehicle | null>(null)
   const [kind, setKind] = useState("tractor")
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const tractores = vehicles.filter((v) => v.kind === "tractor").length
   const semis = vehicles.filter((v) => v.kind === "semirremolque").length
   const porVencer = vehicles.filter((v) => ["soon", "expired"].includes(vencStatus(v.poliza_vencimiento))).length
 
-  const openNew = () => { setEditing(null); setKind("tractor"); setOpen(true) }
-  const openEdit = (v: Vehicle) => { setEditing(v); setKind(v.kind); setOpen(true) }
+  const openNew = () => { setEditing(null); setKind("tractor"); setErrors({}); setOpen(true) }
+  const openEdit = (v: Vehicle) => { setEditing(v); setKind(v.kind); setErrors({}); setOpen(true) }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -74,7 +75,8 @@ export function FlotaClient({ userId, vehicles }: { userId: string; vehicles: Ve
       owner_razon_social: f.get("owner_razon_social") || null,
       owner_cuit: f.get("owner_cuit") || null,
     }
-    if (!payload.patente) { toast.error("La patente es obligatoria."); setLoading(false); return }
+    if (!payload.patente) { setErrors({ patente: "Ingresá la patente del vehículo." }); setLoading(false); return }
+    setErrors({})
     try {
       const res = editing
         ? await supabase.from("transport_vehicles").update(payload).eq("id", editing.id)
@@ -185,7 +187,7 @@ export function FlotaClient({ userId, vehicles }: { userId: string; vehicles: Ve
                   </SelectContent>
                 </Select>
               </div>
-              <Field label="Patente *" name="patente" def={editing?.patente} placeholder="AB123CD" />
+              <Field label="Patente *" name="patente" def={editing?.patente} placeholder="AB123CD" error={errors.patente} />
               <Field label="País (código)" name="pais_code" def={editing?.pais_code} placeholder="200" />
               <Field label="Capacidad tracción (t)" name="capacidad" type="number" def={editing?.capacidad_traccion_ton ?? undefined} />
             </div>
@@ -230,11 +232,16 @@ function Stat({ icon, color, label, value }: { icon: React.ReactNode; color: str
   )
 }
 
-function Field({ label, name, def, type = "text", placeholder }: { label: string; name: string; def?: string | number | null; type?: string; placeholder?: string }) {
+function Field({ label, name, def, type = "text", placeholder, error }: { label: string; name: string; def?: string | number | null; type?: string; placeholder?: string; error?: string }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1.5">
       <Label htmlFor={name}>{label}</Label>
-      <Input id={name} name={name} type={type} defaultValue={def ?? undefined} placeholder={placeholder} className="rounded-xl" />
+      <Input
+        id={name} name={name} type={type} defaultValue={def ?? undefined} placeholder={placeholder}
+        aria-invalid={!!error} aria-describedby={error ? `${name}-err` : undefined}
+        className={`rounded-xl ${error ? "border-red-400 focus-visible:ring-red-400" : ""}`}
+      />
+      {error && <p id={`${name}-err`} className="text-xs text-red-600">{error}</p>}
     </div>
   )
 }
