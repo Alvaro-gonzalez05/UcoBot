@@ -170,12 +170,16 @@ export function FlotaClient({ userId, vehicles }: { userId: string; vehicles: Ve
 
       {/* Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar vehículo" : "Agregar vehículo"}</DialogTitle>
-            <DialogDescription>Estos datos se reutilizan al armar cada viaje.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <DialogContent className="max-h-[90vh] overflow-y-auto p-0">
+          <div className="bg-[#1C1C28] text-white px-6 py-5">
+            <DialogHeader>
+              <DialogTitle className="text-white flex items-center gap-2">
+                <Truck className="h-5 w-5 text-[#D1F366]" /> {editing ? "Editar vehículo" : "Agregar vehículo"}
+              </DialogTitle>
+              <DialogDescription className="text-white/60">Estos datos se reutilizan al armar cada viaje.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Tipo</Label>

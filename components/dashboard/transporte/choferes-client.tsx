@@ -120,12 +120,16 @@ export function ChoferesClient({ userId, drivers }: { userId: string; drivers: D
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{editing ? "Editar chofer" : "Agregar chofer"}</DialogTitle>
-            <DialogDescription>Hasta dos conductores pueden asignarse a un viaje.</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <DialogContent className="p-0">
+          <div className="bg-[#1C1C28] text-white px-6 py-5">
+            <DialogHeader>
+              <DialogTitle className="text-white flex items-center gap-2">
+                <Users className="h-5 w-5 text-[#D1F366]" /> {editing ? "Editar chofer" : "Agregar chofer"}
+              </DialogTitle>
+              <DialogDescription className="text-white/60">Hasta dos conductores pueden asignarse a un viaje.</DialogDescription>
+            </DialogHeader>
+          </div>
+          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="nombre">Nombre completo *</Label>
               <Input id="nombre" name="nombre" defaultValue={editing?.nombre} placeholder="Juan Pérez"
