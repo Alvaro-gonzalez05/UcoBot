@@ -36,13 +36,14 @@ const ESTADO: Record<string, { label: string; cls: string }> = {
   anulado: { label: "Anulado", cls: "bg-red-100 text-red-700 border-red-200" },
 }
 
-export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitItems = [] }: {
+export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitItems = [], fracciones = [] }: {
   userId: string
   trip: any
   vehicles: { id: string; patente: string; kind: string; capacidad_traccion_ton?: number | null }[]
   drivers: { id: string; nombre: string }[]
   settings: any
   permitItems?: PermitItem[]
+  fracciones?: any[]
 }) {
   const supabase = createClient()
   const router = useRouter()
@@ -69,6 +70,19 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
   const isReady = ["listo", "volcado", "oficializado"].includes(estado)
   const isFraccionado = !!crt?.fraccion || !!trip.fraccionado
 
+  // Base para fraccionar: si este viaje ES el "resto" de una fracción anterior,
+  // las cantidades disponibles son las restantes (guardadas en comentarios),
+  // no las totales del permiso. Permite encadenar 3, 4, N camiones.
+  const restanteBase: { id: string; descripcion: string | null; cantidad: number | null }[] | null =
+    crt?.comentarios && Array.isArray(crt.comentarios.fraccion_restante) && crt.comentarios.fraccion_restante.length > 0
+      ? crt.comentarios.fraccion_restante
+      : null
+  const fracItems: { id: string; descripcion: string | null; cantidad: number | null }[] =
+    restanteBase ?? permitItems.map((it) => ({ id: it.id, descripcion: it.descripcion, cantidad: it.cantidad }))
+  const puedeFraccionar =
+    (!isFraccionado && permitItems.length > 0) ||
+    (crt?.fraccion_tipo === "ultima" && !!restanteBase)
+
   // Sugerencia: la carga supera la capacidad del tractor asignado
   const tractorSel = vehicles.find((v) => v.id === (tractor === NONE ? null : tractor))
   const capacidadKg = tractorSel?.capacidad_traccion_ton != null ? Number(tractorSel.capacidad_traccion_ton) * 1000 : null
@@ -77,7 +91,7 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
 
   const openFraccionar = () => {
     const init: Record<string, string> = {}
-    permitItems.forEach((it) => { init[it.id] = it.cantidad != null ? String(it.cantidad) : "" })
+    fracItems.forEach((it) => { init[it.id] = it.cantidad != null ? String(it.cantidad) : "" })
     setFracQty(init); setFracBultos(""); setFracPeso(""); setFracOpen(true)
   }
 
@@ -87,7 +101,7 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
   }
 
   const guardarFraccion = async () => {
-    const rows = permitItems.map((it) => ({
+    const rows = fracItems.map((it) => ({
       item: it,
       enCamion: Math.max(0, Number(fracQty[it.id] || 0)),
       total: it.cantidad != null ? Number(it.cantidad) : 0,
@@ -98,23 +112,31 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
 
     setFracLoading(true)
     try {
-      const detalleFraccion = buildDetalle(fracBultos, cargados.map((r) => ({ cantidad: r.enCamion, descripcion: (r.item.descripcion || "").trim() })))
-      const restantes = rows.filter((r) => r.total - r.enCamion > 0)
+      // ¿Es la primera vez que se fracciona, o estamos re-fraccionando el "resto"?
+      const esRefraccion = !!crt?.fraccion
+      const detalleTotal = crt.descripcion_fraccionados ?? crt.descripcion_mercaderia
+      const pesoTotal = crt.peso_bruto_total ?? crt.peso_bruto
 
-      // 1) Este viaje pasa a ser la PRIMERA fracción
+      const detalleFraccion = buildDetalle(fracBultos, cargados.map((r) => ({ cantidad: r.enCamion, descripcion: (r.item.descripcion || "").trim() })))
+      const restantes = rows
+        .filter((r) => r.total - r.enCamion > 0)
+        .map((r) => ({ id: r.item.id, descripcion: r.item.descripcion, cantidad: r.total - r.enCamion }))
+
+      // 1) Este viaje pasa a ser una fracción (primera, o intermedia si venía del resto)
       const { error: crtErr } = await supabase.from("transport_crts").update({
         fraccion: true,
-        fraccion_tipo: "primera",
+        fraccion_tipo: esRefraccion ? (restantes.length > 0 ? "intermedia" : "ultima") : "primera",
         cantidad: Number(fracBultos),
         peso_bruto: fracPeso ? Number(fracPeso) : crt.peso_bruto,
-        peso_bruto_total: crt.peso_bruto,
-        descripcion_fraccionados: crt.descripcion_mercaderia,
+        peso_bruto_total: pesoTotal,
+        descripcion_fraccionados: detalleTotal,
         descripcion_mercaderia: detalleFraccion,
+        comentarios: {}, // este camión ya tiene su parte asignada
       }).eq("id", crt.id)
       if (crtErr) throw crtErr
       await supabase.from("transport_trips").update({ fraccionado: true }).eq("id", trip.id)
 
-      // 2) Crear el viaje con el RESTO (si queda carga)
+      // 2) Crear el viaje con el RESTO (si queda carga sin asignar)
       if (restantes.length > 0) {
         const { data: nextTrip } = await supabase.from("transport_trips").insert({
           user_id: userId, corridor_id: trip.corridor_id ?? null,
@@ -123,27 +145,29 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
           metadata: { fraccion_de: trip.id },
         }).select("id").single()
         if (nextTrip?.id) {
-          const detalleResto = buildDetalle("", restantes.map((r) => ({ cantidad: r.total - r.enCamion, descripcion: (r.item.descripcion || "").trim() })))
+          const detalleResto = buildDetalle("", restantes.map((r) => ({ cantidad: r.cantidad, descripcion: (r.descripcion || "").trim() })))
           await supabase.from("transport_crts").insert({
             user_id: userId, trip_id: nextTrip.id, permit_id: crt.permit_id,
             remitente_client_id: crt.remitente_client_id, consignatario_client_id: crt.consignatario_client_id,
             destinatario_client_id: crt.destinatario_client_id, destino_pais: crt.destino_pais,
             embalaje_code: crt.embalaje_code, cond_venta: crt.cond_venta, divisa: crt.divisa,
             fraccion: true, fraccion_tipo: "ultima",
-            peso_bruto_total: crt.peso_bruto,
-            descripcion_fraccionados: crt.descripcion_mercaderia,
+            peso_bruto_total: pesoTotal,
+            descripcion_fraccionados: detalleTotal,
             descripcion_mercaderia: detalleResto,
+            // Guarda las cantidades restantes para poder volver a fraccionar (3+, N camiones)
+            comentarios: { fraccion_restante: restantes },
           })
         }
       }
 
       await supabase.from("transport_trip_events").insert({
         user_id: userId, trip_id: trip.id, event_type: "fraccionado",
-        detail: { bultos_fraccion: Number(fracBultos), con_resto: restantes.length > 0 },
+        detail: { bultos_fraccion: Number(fracBultos), con_resto: restantes.length > 0, refraccion: esRefraccion },
       })
       toast.success(restantes.length > 0
         ? "Fracción guardada. Se creó el viaje con el resto de la carga."
-        : "Fracción guardada.")
+        : "Fracción guardada. La carga quedó completa.")
       setFracOpen(false); router.refresh()
     } catch {
       toast.error("No se pudo guardar la fracción.")
@@ -232,9 +256,9 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
               <span>La carga ({pesoCarga?.toLocaleString("es-AR")} kg) supera la capacidad del tractor asignado ({capacidadKg?.toLocaleString("es-AR")} kg). Te conviene <strong>fraccionarla</strong> en más de un camión.</span>
             </div>
           )}
-          {!isFraccionado && permitItems.length > 0 && (
+          {puedeFraccionar && (
             <Button onClick={openFraccionar} variant="outline" className="mt-4 rounded-xl">
-              <Scissors className="h-4 w-4 mr-1.5" /> Fraccionar carga
+              <Scissors className="h-4 w-4 mr-1.5" /> {restanteBase ? "Fraccionar de nuevo (no entra en un camión)" : "Fraccionar carga"}
             </Button>
           )}
         </div>
@@ -278,6 +302,28 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
         </div>
       </div>
 
+      {/* ── Fracciones de esta carga: un camión por card, asignable acá mismo ── */}
+      {fracciones.length > 1 && (
+        <div>
+          <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+            <Scissors className="h-5 w-5 text-violet-500" /> Fracciones de esta carga
+            <span className="text-sm font-medium text-muted-foreground">({fracciones.length} camiones)</span>
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {fracciones.map((f: any, i: number) => (
+              <FraccionCard
+                key={f.id}
+                frac={f}
+                numero={i + 1}
+                esEste={f.trip?.id === trip.id}
+                vehicles={vehicles}
+                drivers={drivers}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* CTA MALVINA cuando está listo */}
       {isReady && (
         <div className="bg-[#1C1C28] text-white rounded-3xl p-6 flex items-center justify-between gap-4 flex-wrap">
@@ -318,9 +364,9 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
               <div className="grid grid-cols-[1fr_90px_110px] gap-2 text-[11px] font-bold uppercase tracking-wide text-muted-foreground px-1">
                 <span>Ítem</span><span className="text-right">Total</span><span className="text-right">En este camión</span>
               </div>
-              {permitItems.map((it) => (
+              {fracItems.map((it) => (
                 <div key={it.id} className="grid grid-cols-[1fr_90px_110px] gap-2 items-center bg-card border border-border rounded-xl px-3 py-2">
-                  <span className="text-sm truncate" title={it.descripcion || ""}>{it.descripcion || `Ítem ${it.item_number ?? ""}`}</span>
+                  <span className="text-sm truncate" title={it.descripcion || ""}>{it.descripcion || "Ítem"}</span>
                   <span className="text-sm text-muted-foreground text-right tabular-nums">{it.cantidad != null ? Number(it.cantidad).toLocaleString("es-AR") : "—"}</span>
                   <Input
                     type="number" min={0} max={it.cantidad ?? undefined}
@@ -362,6 +408,83 @@ function Field({ label, value }: { label: string; value?: string | null }) {
     <div>
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-semibold mt-0.5 truncate">{value || "—"}</p>
+    </div>
+  )
+}
+
+function FraccionCard({ frac, numero, esEste, vehicles, drivers }: {
+  frac: any
+  numero: number
+  esEste: boolean
+  vehicles: { id: string; patente: string; kind: string }[]
+  drivers: { id: string; nombre: string }[]
+}) {
+  const supabase = createClient()
+  const router = useRouter()
+  const t = frac.trip || {}
+  const [tractor, setTractor] = useState(sel(t.tractor_id))
+  const [semi, setSemi] = useState(sel(t.semi_id))
+  const [driver, setDriver] = useState(sel(t.driver_id))
+  const [saving, setSaving] = useState(false)
+
+  const est = ESTADO[t.estado] || ESTADO.borrador
+  const tractores = vehicles.filter((v) => v.kind === "tractor")
+  const semis = vehicles.filter((v) => v.kind === "semirremolque")
+  const tipo = frac.fraccion_tipo && frac.fraccion_tipo !== "none" ? frac.fraccion_tipo : null
+
+  const guardar = async () => {
+    setSaving(true)
+    const { error } = await supabase.from("transport_trips").update({
+      tractor_id: toNull(tractor), semi_id: toNull(semi), driver_id: toNull(driver),
+    }).eq("id", t.id)
+    setSaving(false)
+    if (error) return toast.error("No se pudo guardar.")
+    toast.success(`Fracción ${numero} actualizada.`)
+    router.refresh()
+  }
+
+  return (
+    <div className={`bg-card rounded-3xl p-5 card-elevated border ${esEste ? "border-primary" : "border-border/60"}`}>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center justify-center h-8 px-3 rounded-xl bg-violet-100 text-violet-700 font-bold text-sm">
+            Fracción {numero}
+          </span>
+          {tipo && <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{tipo}</span>}
+          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${est.cls}`}>{est.label}</span>
+          {esEste && <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary/20 text-foreground">este viaje</span>}
+        </div>
+        {!esEste && (
+          <Link href={`/dashboard/transporte/viajes/${t.id}`} className="text-xs font-semibold text-muted-foreground hover:text-foreground underline underline-offset-4">
+            Abrir viaje
+          </Link>
+        )}
+      </div>
+
+      <p className="mt-3 text-sm text-muted-foreground">
+        {frac.cantidad != null ? `${Number(frac.cantidad).toLocaleString("es-AR")} bultos` : "Bultos a definir"}
+        {frac.peso_bruto != null ? ` · ${Number(frac.peso_bruto).toLocaleString("es-AR")} kg` : ""}
+      </p>
+      {frac.descripcion_mercaderia && (
+        <p className="mt-1.5 text-xs text-muted-foreground whitespace-pre-line line-clamp-4">{frac.descripcion_mercaderia}</p>
+      )}
+
+      {esEste ? (
+        <p className="mt-4 pt-3 border-t border-border/60 text-xs text-muted-foreground">
+          El camión y el chofer de esta fracción se asignan en el panel de arriba.
+        </p>
+      ) : (
+        <div className="mt-4 pt-4 border-t border-border/60">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <AssignSelect label="Tractor" icon={<Truck className="h-4 w-4" />} value={tractor} onChange={setTractor} options={tractores.map((v) => ({ id: v.id, label: v.patente }))} empty="Sin asignar" />
+            <AssignSelect label="Semi" icon={<Container className="h-4 w-4" />} value={semi} onChange={setSemi} options={semis.map((v) => ({ id: v.id, label: v.patente }))} empty="Sin asignar" />
+            <AssignSelect label="Chofer" icon={<IdCard className="h-4 w-4" />} value={driver} onChange={setDriver} options={drivers.map((d) => ({ id: d.id, label: d.nombre }))} empty="Sin asignar" />
+          </div>
+          <Button onClick={guardar} disabled={saving} size="sm" className="mt-3 rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C]">
+            {saving ? "Guardando…" : `Guardar fracción ${numero}`}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
