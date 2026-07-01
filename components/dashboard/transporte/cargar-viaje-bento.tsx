@@ -184,7 +184,7 @@ export function CargarViajeBento() {
             title="Factura o proforma" subtitle="Trae el consignatario del exterior. Solo si el cliente es nuevo."
             icon={Receipt}
           />
-          <Card className="p-5 rounded-2xl border-border/70 flex-1">
+          <Card className="p-5 rounded-2xl border-border/70 card-elevated flex-1">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               <h3 className="font-semibold text-sm">Qué hacemos por vos</h3>
@@ -201,7 +201,7 @@ export function CargarViajeBento() {
 
       {/* Estado de procesamiento — progreso por pasos */}
       {status === "processing" && (
-        <Card className="p-6 rounded-2xl border-border/70">
+        <Card className="p-6 rounded-2xl border-border/70 card-elevated">
           <style>{`@keyframes ucoLoad{0%{transform:translateX(-110%)}100%{transform:translateX(360%)}}`}</style>
           <div className="flex items-center gap-3">
             <div className="h-11 w-11 rounded-xl bg-primary/20 grid place-items-center shrink-0">
@@ -229,7 +229,7 @@ export function CargarViajeBento() {
 
       {/* Barra de acción */}
       {status !== "done" && status !== "processing" && (
-        <Card className="p-5 rounded-2xl border-border/70 flex items-center justify-between gap-4 flex-wrap">
+        <Card className="p-5 rounded-2xl border-border/70 card-elevated flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div className={`h-2.5 w-2.5 rounded-full ${permiso ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
             <p className="text-sm text-muted-foreground">
@@ -261,7 +261,7 @@ export function CargarViajeBento() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <Card className="lg:col-span-2 p-5 rounded-2xl border-border/70">
+            <Card className="lg:col-span-2 p-5 rounded-2xl border-border/70 card-elevated">
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-4">
                 <Field label="Permiso" value={result.permit_number} />
                 <Field label="Exportador" value={result.exporter} />

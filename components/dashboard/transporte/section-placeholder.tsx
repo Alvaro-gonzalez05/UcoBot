@@ -23,7 +23,7 @@ export function SectionPlaceholder({
         <p className="text-muted-foreground mt-1">{description}</p>
       </div>
 
-      <Card className="p-8 rounded-2xl border-border/70">
+      <Card className="p-8 rounded-2xl border-border/70 card-elevated">
         <div className="flex items-start gap-5 flex-col sm:flex-row">
           <div className="h-14 w-14 rounded-2xl bg-primary/15 grid place-items-center shrink-0">
             <Icon className="h-7 w-7 text-foreground" />

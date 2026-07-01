@@ -96,7 +96,7 @@ export default async function TransporteHome() {
       {/* Bento grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {metrics.map((m) => (
-          <Card key={m.label} className="p-5 rounded-2xl border-border/70">
+          <Card key={m.label} className="p-5 rounded-2xl border-border/70 card-elevated">
             <div className="flex items-center justify-between">
               <div className={`h-10 w-10 rounded-xl grid place-items-center ${m.accent ? "bg-primary/20 text-foreground" : "bg-muted text-muted-foreground"}`}>
                 <m.icon className="h-5 w-5" />
@@ -111,7 +111,7 @@ export default async function TransporteHome() {
 
       {/* Fila: gráfico + CTA hero */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card className="lg:col-span-2 p-5 rounded-2xl border-border/70">
+        <Card className="lg:col-span-2 p-5 rounded-2xl border-border/70 card-elevated">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold">Viajes por mes</h3>
@@ -157,7 +157,7 @@ export default async function TransporteHome() {
       {/* Fila: vencimientos + actividad reciente */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Vencimientos */}
-        <Card className="p-5 rounded-2xl border-border/70">
+        <Card className="p-5 rounded-2xl border-border/70 card-elevated">
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
             <h3 className="font-semibold">Vencimientos próximos (30 días)</h3>
@@ -180,7 +180,7 @@ export default async function TransporteHome() {
         </Card>
 
         {/* Actividad reciente */}
-        <Card className="p-5 rounded-2xl border-border/70">
+        <Card className="p-5 rounded-2xl border-border/70 card-elevated">
           <div className="flex items-center gap-2 mb-4">
             <Clock className="h-5 w-5 text-muted-foreground" />
             <h3 className="font-semibold">Viajes recientes</h3>

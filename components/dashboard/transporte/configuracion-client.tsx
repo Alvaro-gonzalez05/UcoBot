@@ -94,14 +94,15 @@ export function ConfiguracionClient({
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       <div className="mb-6 px-1 pt-2">
-        <h2 className="text-3xl font-bold">Configuración del kit</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Configuración del kit</h2>
         <p className="text-muted-foreground text-sm mt-1">Datos del transportista y preferencias de la operación.</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="grid lg:grid-cols-3 gap-4 items-start">
         {/* Transportista */}
+        <div className="lg:col-span-2">
         <Card icon={<Building2 className="h-5 w-5" />} title="Transportista" desc="Lo que MALVINA autocompleta al validar el CNRT.">
           <div className="grid sm:grid-cols-2 gap-4">
             <F label="Razón social" name="razon_social" def={carrier?.razon_social} placeholder="Mi Transporte S.A." />
@@ -122,16 +123,31 @@ export function ConfiguracionClient({
             </div>
           </div>
         </Card>
+        </div>
+
+        {/* Columna derecha: MALVINA + guardar */}
+        <div className="space-y-4">
+          <Card icon={<ShieldCheck className="h-5 w-5" />} title="MALVINA" desc="Solo el usuario. La contraseña nunca se guarda.">
+            <F label="Usuario de MALVINA" name="malvina_username" def={settings?.malvina_username} />
+            <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
+              <Lock className="h-3.5 w-3.5" /> La contraseña se ingresa siempre a mano en MALVINA.
+            </p>
+          </Card>
+          <Button type="submit" disabled={loading} className="w-full rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C] h-12">
+            <Save className="h-4 w-4 mr-1.5" /> {loading ? "Guardando…" : "Guardar configuración"}
+          </Button>
+        </div>
 
         {/* Valores por defecto */}
+        <div className="lg:col-span-3">
         <Card icon={<Truck className="h-5 w-5" />} title="Valores por defecto" desc="Se usan al armar cada viaje para ir más rápido.">
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <SelectField label="Tractor por defecto" value={tractor} onChange={setTractor} options={tractores.map((v) => ({ id: v.id, label: v.patente }))} />
             <SelectField label="Semirremolque por defecto" value={semi} onChange={setSemi} options={semis.map((v) => ({ id: v.id, label: v.patente }))} />
             <SelectField label="Chofer por defecto" value={driver} onChange={setDriver} options={drivers.map((d) => ({ id: d.id, label: d.nombre }))} />
             <SelectField label="Corredor por defecto" value={corridor} onChange={setCorridor} options={corridors.map((c) => ({ id: c.id, label: c.name }))} />
           </div>
-          <div className="mt-4 flex items-center justify-between rounded-2xl border border-border p-4">
+          <div className="mt-4 flex items-center justify-between rounded-2xl bg-muted/40 p-4">
             <div>
               <p className="font-medium text-sm">Modo "un solo camión"</p>
               <p className="text-xs text-muted-foreground">Saltea el paso de elegir camión al cargar un viaje (queda "subir y listo").</p>
@@ -139,21 +155,6 @@ export function ConfiguracionClient({
             <Switch checked={singleTruck} onCheckedChange={setSingleTruck} />
           </div>
         </Card>
-
-        {/* MALVINA */}
-        <Card icon={<ShieldCheck className="h-5 w-5" />} title="MALVINA" desc="Solo el usuario. La contraseña nunca se guarda.">
-          <div className="grid sm:grid-cols-2 gap-4">
-            <F label="Usuario de MALVINA" name="malvina_username" def={settings?.malvina_username} />
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
-            <Lock className="h-3.5 w-3.5" /> Por seguridad, la contraseña se ingresa siempre a mano en MALVINA.
-          </p>
-        </Card>
-
-        <div className="flex justify-end">
-          <Button type="submit" disabled={loading} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C]">
-            <Save className="h-4 w-4 mr-1.5" /> {loading ? "Guardando…" : "Guardar configuración"}
-          </Button>
         </div>
       </form>
     </div>
@@ -162,7 +163,7 @@ export function ConfiguracionClient({
 
 function Card({ icon, title, desc, children }: { icon: React.ReactNode; title: string; desc: string; children: React.ReactNode }) {
   return (
-    <div className="bg-card rounded-3xl p-6 shadow-sm border border-border">
+    <div className="bg-card rounded-3xl p-6 card-elevated border border-border/60">
       <div className="flex items-center gap-3 mb-4">
         <div className="h-10 w-10 rounded-xl bg-primary/15 text-foreground grid place-items-center">{icon}</div>
         <div>

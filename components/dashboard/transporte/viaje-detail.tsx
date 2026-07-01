@@ -98,7 +98,7 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings }: {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Resumen */}
-        <div className="lg:col-span-2 bg-card rounded-3xl p-6 shadow-sm border border-border">
+        <div className="lg:col-span-2 bg-card rounded-3xl p-6 card-elevated border border-border/60">
           <h3 className="font-bold mb-4 flex items-center gap-2"><FileText className="h-4 w-4" /> Datos del viaje</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-4">
             <Field label="Permiso" value={permit?.permit_number} />
@@ -120,7 +120,7 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings }: {
         </div>
 
         {/* Asignación */}
-        <div className="bg-card rounded-3xl p-6 shadow-sm border border-border">
+        <div className="bg-card rounded-3xl p-6 card-elevated border border-border/60">
           <h3 className="font-bold mb-4 flex items-center gap-2"><Truck className="h-4 w-4" /> Asignación</h3>
           <div className="space-y-4">
             <AssignSelect label="Tractor" icon={<Truck className="h-4 w-4" />} value={tractor} onChange={setTractor} options={tractores.map((v) => ({ id: v.id, label: v.patente }))} empty="Sin asignar" />
