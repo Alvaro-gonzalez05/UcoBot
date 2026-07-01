@@ -30,7 +30,88 @@ interface TripSummary {
   fob?: string | number
   cond_venta?: string
   crts?: number
+  consolidado?: boolean
   warnings?: string[]
+}
+
+/** Dropzone que acepta VARIOS permisos: subir 2+ = carga consolidada (automático). */
+function PermisosDropzone({ files, onAdd, onRemove }: {
+  files: File[]
+  onAdd: (fs: File[]) => void
+  onRemove: (i: number) => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [drag, setDrag] = useState(false)
+  const accept = (list: FileList | File[]) => {
+    const pdfs = Array.from(list).filter((f) => f.type === "application/pdf")
+    if (pdfs.length) onAdd(pdfs)
+  }
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label="Subir permisos de embarque"
+      onDragOver={(e) => { e.preventDefault(); setDrag(true) }}
+      onDragLeave={() => setDrag(false)}
+      onDrop={(e) => { e.preventDefault(); setDrag(false); accept(e.dataTransfer.files) }}
+      onClick={() => inputRef.current?.click()}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); inputRef.current?.click() } }}
+      className={[
+        "relative rounded-2xl border-2 border-dashed p-6 cursor-pointer select-none min-h-[190px]",
+        "transition-colors duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
+        "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        drag ? "border-primary bg-primary/10" : files.length ? "border-emerald-300 bg-emerald-50/60" : "border-border hover:border-primary/60 hover:bg-muted/40",
+      ].join(" ")}
+    >
+      <input ref={inputRef} type="file" accept="application/pdf" multiple className="hidden"
+        onChange={(e) => { if (e.target.files) accept(e.target.files); e.target.value = "" }} />
+
+      {files.length === 0 ? (
+        <div className="flex flex-col items-center justify-center text-center h-full">
+          <div className="w-14 h-14 rounded-2xl bg-muted text-muted-foreground grid place-items-center mb-3">
+            <FileText className="h-7 w-7" />
+          </div>
+          <p className="text-sm font-semibold">
+            Permiso de embarque
+            <span className="ml-2 align-middle text-[10px] font-bold uppercase tracking-wide text-primary-foreground bg-primary rounded-full px-2 py-0.5">Requerido</span>
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Subí varios permisos si el camión lleva carga consolidada.</p>
+          <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-foreground">
+            <UploadCloud className="h-4 w-4" /> Arrastrá los PDF o hacé clic
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col h-full">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2 text-emerald-600">
+              <FileCheck2 className="h-5 w-5" />
+              <p className="text-sm font-semibold">{files.length === 1 ? "Permiso de embarque" : `${files.length} permisos`}</p>
+            </div>
+            {files.length > 1 && (
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-blue-100 text-blue-700 rounded-full px-2 py-0.5">consolidado</span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {files.map((f, i) => (
+              <div key={`${f.name}-${i}`} className="flex items-center gap-3 rounded-xl bg-card border border-border px-3 py-2">
+                <FileText className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span className="text-sm font-medium truncate flex-1">{f.name}</span>
+                <span className="text-[11px] text-muted-foreground shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onRemove(i) }}
+                  aria-label={`Quitar ${f.name}`}
+                  className="h-7 w-7 rounded-lg grid place-items-center text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground mt-2 inline-flex items-center gap-1"><UploadCloud className="h-3.5 w-3.5" /> Podés agregar otro permiso (consolidado)</p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function Dropzone({
@@ -148,7 +229,7 @@ function ExtractedField({ label, value }: { label: string; value?: string }) {
 }
 
 export function CargarViajeBento() {
-  const [permiso, setPermiso] = useState<File | null>(null)
+  const [permisos, setPermisos] = useState<File[]>([])
   const [factura, setFactura] = useState<File | null>(null)
   const [status, setStatus] = useState<Status>("idle")
   const [result, setResult] = useState<TripSummary | null>(null)
@@ -166,11 +247,11 @@ export function CargarViajeBento() {
   }, [status])
 
   const generar = async () => {
-    if (!permiso) return
+    if (permisos.length === 0) return
     setStatus("processing"); setError(null); setResult(null)
     try {
       const fd = new FormData()
-      fd.append("permiso", permiso)
+      permisos.forEach((p) => fd.append("permiso", p))
       if (factura) fd.append("factura", factura)
       const res = await fetch("/api/transporte/extraer", { method: "POST", body: fd })
       if (!res.ok) throw new Error("No se pudo procesar el documento")
@@ -183,7 +264,7 @@ export function CargarViajeBento() {
     }
   }
 
-  const reset = () => { setPermiso(null); setFactura(null); setResult(null); setStatus("idle"); setError(null) }
+  const reset = () => { setPermisos([]); setFactura(null); setResult(null); setStatus("idle"); setError(null) }
 
   const progressPct = Math.round(((step + 1) / PROCESSING_STEPS.length) * 100)
 
@@ -218,10 +299,10 @@ export function CargarViajeBento() {
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4">
-              <Dropzone
-                file={permiso} onFile={setPermiso} onClear={() => setPermiso(null)}
-                title="Permiso de embarque" subtitle="De acá sale el lado comercial y la carga."
-                required icon={FileText}
+              <PermisosDropzone
+                files={permisos}
+                onAdd={(fs) => setPermisos((prev) => [...prev, ...fs])}
+                onRemove={(i) => setPermisos((prev) => prev.filter((_, idx) => idx !== i))}
               />
               <Dropzone
                 file={factura} onFile={setFactura} onClear={() => setFactura(null)}
@@ -342,17 +423,23 @@ export function CargarViajeBento() {
               <h3 className="text-lg font-bold mb-6">Generación de documentos</h3>
               <div className="space-y-4 mb-8">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-white/70">Permiso de embarque</span>
-                  <DocToggle on={!!permiso} />
+                  <span className="text-sm font-medium text-white/70">
+                    Permiso de embarque{permisos.length > 1 ? ` (${permisos.length})` : ""}
+                  </span>
+                  <DocToggle on={permisos.length > 0} />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-white/70">Factura o proforma</span>
                   <DocToggle on={!!factura} />
                 </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-white/70">Carga consolidada</span>
+                  <DocToggle on={permisos.length > 1} />
+                </div>
               </div>
               <button
                 onClick={generar}
-                disabled={!permiso || status === "processing"}
+                disabled={permisos.length === 0 || status === "processing"}
                 className="w-full py-4 bg-primary text-primary-foreground rounded-xl font-bold text-lg hover:brightness-105 transition-[transform,filter] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] shadow-lg shadow-primary/20 flex items-center justify-center gap-2 outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-[#1C1C28] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
               >
                 {status === "processing"
@@ -360,7 +447,9 @@ export function CargarViajeBento() {
                   : <><span>Generar viaje</span><ArrowRight className="h-5 w-5" /></>}
               </button>
               <p className="text-center text-xs text-white/40 mt-4">
-                {permiso ? 'El viaje se crea en estado "Borrador"' : "Subí el permiso de embarque para continuar"}
+                {permisos.length > 0
+                  ? `El viaje se crea en estado "Borrador"${permisos.length > 1 ? ` con ${permisos.length} CRT (consolidado)` : ""}`
+                  : "Subí el permiso de embarque para continuar"}
               </p>
               {error && (
                 <div className="mt-4 rounded-xl bg-red-500/10 border border-red-400/20 px-4 py-3 text-sm text-red-300 flex items-center gap-2">

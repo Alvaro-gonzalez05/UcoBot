@@ -42,6 +42,7 @@ export interface PermitData {
   peso_neto: number | null
   vto_embarque: string | null
   nro_proforma: string | null
+  nros_facturas: string | null
   items: PermitItem[]
 }
 
@@ -55,6 +56,7 @@ export interface FacturaData {
   destinatario_domicilio: string | null
   fob_total: number | null
   proforma_number: string | null
+  invoice_number: string | null
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -218,6 +220,7 @@ Extraé los datos y devolvé ÚNICAMENTE un JSON válido (sin markdown) con esta
   "peso_neto": number|null,
   "vto_embarque": string|null,            // formato YYYY-MM-DD
   "nro_proforma": string|null,
+  "nros_facturas": string|null,           // campo "Nros. Facturas" si figura (ej "9994-00004366")
   "items": [
     {
       "item_number": number|null,
@@ -238,7 +241,8 @@ Reglas:
 - Devolvé los NÚMEROS como números con punto decimal (ej 10400.72), sin separador de miles ni símbolos.
 - Las fechas en formato YYYY-MM-DD.
 - Si un dato no aparece, poné null. NO inventes datos.
-- Incluí TODOS los ítems de la mercadería (el permiso suele tener varios).`
+- Incluí TODOS los ítems de la mercadería (el permiso suele tener varios).
+- En "descripcion" de cada ítem devolvé SOLO lo esencial (producto, variedad/tipo y presentación, máx ~150 caracteres). NO copies el texto legal/arancelario completo.`
 
 export async function extractPermiso(file: File, deadline = Date.now() + DEFAULT_BUDGET_MS): Promise<PermitData> {
   const d = await callGemini(file, PERMIT_PROMPT, deadline)
@@ -282,6 +286,7 @@ export async function extractPermiso(file: File, deadline = Date.now() + DEFAULT
     peso_neto: num(d?.peso_neto),
     vto_embarque: dateOrNull(d?.vto_embarque),
     nro_proforma: d?.nro_proforma ?? null,
+    nros_facturas: d?.nros_facturas ?? null,
     items,
   }
 }
@@ -306,7 +311,8 @@ Devolvé ÚNICAMENTE un JSON válido (sin markdown) con esta forma:
   "destinatario_razon_social": string|null,// de NOTIFICAR, si difiere del consignatario
   "destinatario_domicilio": string|null,
   "fob_total": number|null,                // Gran Total / monto total
-  "proforma_number": string|null           // N° de proforma / orden de venta ("SALE ORDER", "SU ORDEN", ej "XN 6609 - 13009714")
+  "proforma_number": string|null,          // N° de proforma / orden de venta ("SALE ORDER", "SU ORDEN", ej "XN 6609 - 13009714")
+  "invoice_number": string|null            // N° de factura ("FACTURA EXPORTACION Nro", ej "9994-00004366")
 }
 Reglas: números con punto decimal; si un dato no aparece, null; NO inventes.`
 
@@ -322,5 +328,6 @@ export async function extractFactura(file: File, deadline = Date.now() + DEFAULT
     destinatario_domicilio: d?.destinatario_domicilio ?? null,
     fob_total: num(d?.fob_total),
     proforma_number: d?.proforma_number ?? null,
+    invoice_number: d?.invoice_number ?? null,
   }
 }

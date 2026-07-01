@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UcoBot Transporte · Propuesta para CATARA — CODEA DESARROLLOS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --lime:#D1F366; --lime-dark:#B3D93C; --lime-ink:#5c6b1a;
+    --ink:#1C1C28; --ink-soft:#3d3d4e; --muted:#8A8A99;
+    --bg:#F5F5F7; --card:#FFFFFF; --line:#e7e7ee;
+    --ok:#0d9488; --ok-soft:#ecfdf5;
+    --warn:#b45309; --warn-soft:#fffbeb;
+    --shadow:
+      0 1px 2px rgba(15,23,42,.05),
+      0 4px 10px -2px rgba(15,23,42,.07),
+      0 14px 34px -10px rgba(15,23,42,.14);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    line-height:1.65;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+
+  /* HERO */
+  header.hero{
+    background:linear-gradient(150deg,#14141d 0%,#1C1C28 55%,#26263a 100%);
+    color:#fff;padding:64px 0 72px;position:relative;overflow:hidden;
+  }
+  header.hero::before{
+    content:"";position:absolute;right:-140px;top:-140px;width:460px;height:460px;border-radius:50%;
+    background:radial-gradient(circle,rgba(209,243,102,.22),transparent 65%);
+  }
+  header.hero::after{
+    content:"";position:absolute;left:-100px;bottom:-180px;width:380px;height:380px;border-radius:50%;
+    background:radial-gradient(circle,rgba(209,243,102,.10),transparent 65%);
+  }
+  .brandline{display:flex;align-items:center;gap:12px;margin-bottom:26px}
+  .logo-mark{width:44px;height:44px;border-radius:14px;background:var(--lime);color:var(--ink);
+    display:grid;place-items:center;font-weight:900;font-size:22px}
+  .brandline .t b{display:block;font-size:17px;letter-spacing:.3px}
+  .brandline .t span{font-size:10px;letter-spacing:2.5px;color:rgba(255,255,255,.55);text-transform:uppercase;font-weight:700}
+  .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(209,243,102,.12);
+    border:1px solid rgba(209,243,102,.3);padding:7px 16px;border-radius:999px;
+    font-size:12.5px;font-weight:700;color:var(--lime);letter-spacing:.4px}
+  .badge .dot{width:8px;height:8px;border-radius:50%;background:var(--lime)}
+  header.hero h1{font-size:clamp(30px,5vw,44px);line-height:1.1;margin:20px 0 12px;font-weight:900;letter-spacing:-1px}
+  header.hero h1 em{font-style:normal;color:var(--lime)}
+  header.hero p.sub{font-size:18px;color:rgba(255,255,255,.75);max-width:700px;margin:0}
+  .meta{margin-top:28px;display:flex;flex-wrap:wrap;gap:10px;position:relative}
+  .meta span{font-size:12.5px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+    padding:7px 14px;border-radius:10px;color:rgba(255,255,255,.85);font-weight:500}
+
+  /* SECTIONS */
+  main{padding:14px 0 70px;position:relative}
+  section{margin-top:56px}
+  .eyebrow{display:inline-block;font-size:11px;font-weight:800;letter-spacing:2px;
+    text-transform:uppercase;color:var(--lime-ink);background:rgba(209,243,102,.35);
+    padding:5px 12px;border-radius:999px;margin-bottom:10px}
+  h2{font-size:29px;font-weight:800;letter-spacing:-.5px;margin:0 0 10px}
+  .lead{color:var(--ink-soft);font-size:16.5px;max-width:780px}
+  p{margin:10px 0}
+
+  /* CARDS */
+  .card{background:var(--card);border-radius:24px;padding:26px;box-shadow:var(--shadow);border:1px solid rgba(231,231,238,.6)}
+  .grid{display:grid;gap:16px;margin-top:24px}
+  .grid.two{grid-template-columns:repeat(2,1fr)}
+  .grid.three{grid-template-columns:repeat(3,1fr)}
+  .card h4{margin:0 0 6px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:10px}
+  .card p{margin:6px 0 0;color:var(--ink-soft);font-size:14.5px}
+  .ico{width:38px;height:38px;border-radius:12px;display:inline-grid;place-items:center;flex:none;font-size:19px;background:#f1f1f5}
+  .ico.lime{background:rgba(209,243,102,.4)}
+  .ico.dark{background:var(--ink);color:var(--lime)}
+
+  /* DARK FEATURE CARD */
+  .dark-card{background:var(--ink);color:#fff;border-radius:24px;padding:30px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .dark-card::before{content:"";position:absolute;right:-70px;top:-70px;width:230px;height:230px;border-radius:50%;
+    background:radial-gradient(circle,rgba(209,243,102,.25),transparent 65%)}
+  .dark-card h3{margin:0 0 8px;font-size:20px;font-weight:800;position:relative}
+  .dark-card p{color:rgba(255,255,255,.72);position:relative}
+  .dark-card ul{margin:16px 0 0;padding:0;list-style:none;position:relative}
+  .dark-card ul li{padding:9px 0;display:flex;gap:12px;align-items:flex-start;font-size:14.5px;color:rgba(255,255,255,.85);border-top:1px solid rgba(255,255,255,.08)}
+  .dark-card ul li:first-child{border-top:none}
+  .dark-card ul li .tick{color:var(--lime);font-weight:900;flex:none}
+
+  /* METRICS */
+  .metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+  .metric{background:var(--card);border-radius:24px;padding:24px;box-shadow:var(--shadow);border:1px solid rgba(231,231,238,.6)}
+  .metric .big{font-size:38px;font-weight:900;letter-spacing:-1.5px;line-height:1}
+  .metric .big.lime{color:var(--lime-ink)}
+  .metric .lbl{font-size:13px;color:var(--muted);margin-top:8px;font-weight:500}
+  .metric.dark{background:var(--ink);color:#fff;border:none}
+  .metric.dark .big{color:var(--lime)}
+  .metric.dark .lbl{color:rgba(255,255,255,.6)}
+
+  /* FLOW STEPS */
+  .flow{margin-top:26px;display:grid;gap:14px}
+  .step{display:grid;grid-template-columns:52px 1fr;gap:18px;background:var(--card);border-radius:24px;
+    padding:22px 24px;box-shadow:var(--shadow);border:1px solid rgba(231,231,238,.6);align-items:start}
+  .step .n{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;font-weight:900;font-size:20px;
+    background:var(--ink);color:var(--lime)}
+  .step.lime .n{background:var(--lime);color:var(--ink)}
+  .step h4{margin:2px 0 4px;font-size:16.5px;font-weight:800}
+  .step p{margin:0;color:var(--ink-soft);font-size:14.5px}
+  .step .who{display:inline-block;font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px;
+    color:var(--lime-ink);background:rgba(209,243,102,.35);border-radius:999px;padding:3px 10px;margin-bottom:6px}
+  .step .who.auto{color:#0f766e;background:var(--ok-soft)}
+
+  /* COMPARISON */
+  .vs{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px}
+  .vs .col{border-radius:24px;padding:24px;box-shadow:var(--shadow)}
+  .vs .before{background:var(--card);border:1px solid rgba(231,231,238,.6)}
+  .vs .after{background:linear-gradient(170deg,rgba(209,243,102,.35),var(--card) 60%);border:1px solid rgba(209,243,102,.5)}
+  .vs h4{margin:0 0 14px;font-size:15.5px;font-weight:800}
+  .vs ul{margin:0;padding:0;list-style:none}
+  .vs li{padding:9px 0 9px 28px;position:relative;font-size:14px;border-top:1px dashed var(--line);color:var(--ink-soft)}
+  .vs li:first-child{border-top:none}
+  .vs .before li::before{content:"✕";position:absolute;left:2px;color:#dc2626;font-weight:800}
+  .vs .after li::before{content:"✓";position:absolute;left:2px;color:#15803d;font-weight:800}
+
+  /* CALLOUTS */
+  .callout{border-radius:20px;padding:20px 22px;margin:24px 0;font-size:14.5px;box-shadow:var(--shadow)}
+  .callout .ct{font-weight:800;display:block;margin-bottom:4px;font-size:12px;text-transform:uppercase;letter-spacing:1px}
+  .callout.lime{background:rgba(209,243,102,.3);border:1px solid rgba(179,217,60,.5);color:#3d4a10}
+  .callout.dark{background:var(--ink);color:rgba(255,255,255,.85)}
+  .callout.dark .ct{color:var(--lime)}
+  .callout.warn{background:var(--warn-soft);border:1px solid #fde68a;color:#92400e}
+
+  /* ASK LIST */
+  .asks{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:24px}
+  .ask{background:var(--card);border-radius:24px;padding:24px;box-shadow:var(--shadow);border:1px solid rgba(231,231,238,.6)}
+  .ask .k{width:38px;height:38px;border-radius:12px;background:var(--lime);color:var(--ink);
+    display:grid;place-items:center;font-weight:900;font-size:17px;margin-bottom:12px}
+  .ask h4{margin:0 0 6px;font-size:15.5px;font-weight:800}
+  .ask p{margin:0;font-size:14px;color:var(--ink-soft)}
+
+  /* TABLE */
+  .tablecard{overflow:hidden;border-radius:24px;box-shadow:var(--shadow);margin-top:22px;border:1px solid rgba(231,231,238,.6)}
+  table{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}
+  th,td{text-align:left;padding:13px 18px;border-bottom:1px solid var(--line);vertical-align:top}
+  thead th{background:var(--ink);color:#fff;font-weight:700;font-size:12.5px;letter-spacing:.3px}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:nth-child(even){background:#fafafc}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800}
+  .pill.ok{background:var(--ok-soft);color:#047857}
+  .pill.lime{background:rgba(209,243,102,.45);color:#3d4a10}
+
+  /* FOOTER */
+  footer{background:var(--ink);color:rgba(255,255,255,.7);padding:44px 0;margin-top:70px}
+  footer .frow{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap}
+  footer .fb b{color:#fff;font-size:16px;display:block}
+  footer .fb span{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--lime)}
+  footer .contact{font-size:13.5px;text-align:right}
+  footer .contact a{color:var(--lime);text-decoration:none;font-weight:600}
+
+  /* Botón flotante de descarga */
+  .dl-btn{position:fixed;right:24px;bottom:24px;z-index:50;display:inline-flex;align-items:center;gap:9px;
+    background:var(--lime);color:var(--ink);border:none;cursor:pointer;
+    font-family:inherit;font-size:15px;font-weight:800;padding:14px 22px;border-radius:999px;
+    box-shadow:0 10px 28px -8px rgba(209,243,102,.9),0 4px 12px rgba(15,23,42,.15);
+    transition:transform .15s ease,filter .15s ease}
+  .dl-btn:hover{transform:translateY(-2px);filter:brightness(1.05)}
+  .dl-btn:active{transform:scale(.97)}
+  .dl-btn svg{width:18px;height:18px}
+  @media (max-width:760px){
+    .grid.two,.grid.three,.vs,.asks,.metrics{grid-template-columns:1fr}
+    footer .contact{text-align:left}
+    .dl-btn{right:14px;bottom:14px;font-size:14px;padding:12px 18px}
+  }
+  @media print{
+    @page{size:A4;margin:10mm}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{background:#fff}
+    .dl-btn{display:none !important}
+    /* Sin sombras al exportar: en PDF se ven como halos grises sucios.
+       Se reemplazan por un borde fino y limpio. */
+    .card,.step,.metric,.ask,.callout,.vs .col,.tablecard{box-shadow:none !important;border:1px solid var(--line)}
+    .dark-card,.metric.dark,.callout.dark{box-shadow:none !important;border:none}
+    /* Cada punto (sección) arranca en su propia hoja… */
+    section{break-before:page;page-break-before:always;margin-top:10px}
+    /* …excepto el punto 01, que acompaña a la portada en la primera hoja */
+    main section:first-of-type{break-before:auto;page-break-before:auto;margin-top:24px}
+    /* Mantener las grillas en columnas (el ancho de impresión activaba el modo móvil) */
+    .grid.two,.vs,.asks{grid-template-columns:repeat(2,1fr) !important}
+    .grid.three,.metrics{grid-template-columns:repeat(3,1fr) !important}
+    /* Cortes de página SOLO entre bloques: ninguna tarjeta/tabla se parte */
+    .card,.step,.metric,.ask,.dark-card,.callout,.vs .col,.tablecard,.metrics,.asks{break-inside:avoid;page-break-inside:avoid}
+    tr{break-inside:avoid;page-break-inside:avoid}
+    thead{display:table-header-group}
+    h2,h3,h4,.eyebrow{break-after:avoid;page-break-after:avoid}
+    header.hero{padding:34px 0 40px}
+    footer{margin-top:28px}
+  }
+</style>
+</head>
+<body>
+
+<button class="dl-btn" onclick="descargarPdf()" title="Exportar como PDF (una sola página continua)" aria-label="Descargar PDF">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+  Descargar PDF
+</button>
+
+<header class="hero">
+  <div class="wrap" style="position:relative">
+    <div class="brandline">
+      <div class="logo-mark">C</div>
+      <div class="t"><b>CODEA DESARROLLOS</b><span>Software · Mendoza, Argentina</span></div>
+    </div>
+    <span class="badge"><span class="dot"></span> Propuesta institucional para C.A.T.A.R.A.</span>
+    <h1>Automatización inteligente del <em>MIC/DTA y CRT</em> para los Agentes de Transporte Aduanero</h1>
+    <p class="sub">Una herramienta tecnológica que reduce la carga documental en el Sistema MALVINA de más de 30 minutos a menos de 10, elimina errores de tipeo y profesionaliza la operación diaria del ATA. Buscamos el aval y el acompañamiento de CATARA para impulsarla en el sector.</p>
+    <div class="meta">
+      <span>🚛 Transporte internacional terrestre · ATIT</span>
+      <span>🏛️ Sistema MALVINA / SINTIA (ARCA-AFIP)</span>
+      <span>🤖 Extracción de documentos con IA</span>
+      <span>📄 Documento para revisión de CATARA</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- 1. EL PROBLEMA -->
+  <section>
+    <span class="eyebrow">01 · El problema del sector</span>
+    <h2>La carga del MIC/DTA sigue siendo manual, lenta y propensa a errores</h2>
+    <p class="lead">Cada viaje internacional exige transcribir a mano decenas de campos en el Sistema MALVINA: datos del permiso de embarque, del transportista, del vehículo, de la mercadería y de las partes. El tiempo del profesional se va en tipear, buscar códigos y corregir rechazos.</p>
+    <div class="grid three">
+      <div class="card"><h4><span class="ico">🔁</span> Re-tipeo constante</h4><p>Los datos del transportista, la flota, el chofer y la póliza se cargan casi idénticos viaje tras viaje.</p></div>
+      <div class="card"><h4><span class="ico">📑</span> Transcripción de PDFs</h4><p>El permiso de embarque y la factura llegan en PDF y se copian campo por campo a mano.</p></div>
+      <div class="card"><h4><span class="ico">↩️</span> Errores que rebotan</h4><p>Un CUIT mal tipeado, un peso incoherente o una póliza vencida hacen rechazar la presentación y rehacer el trabajo.</p></div>
+    </div>
+  </section>
+
+  <!-- 2. LA SOLUCIÓN -->
+  <section>
+    <span class="eyebrow">02 · La solución</span>
+    <h2>UcoBot Transporte: el viaje se arma solo, el ATA revisa y oficializa</h2>
+    <p class="lead">Desarrollamos una plataforma donde el operador <strong>sube el permiso de embarque (y la factura o proforma si el cliente es nuevo)</strong> y el sistema hace el resto: extrae los datos con inteligencia artificial, arma el MIC/DTA y los CRT, valida todo, y una extensión de navegador vuelca la información en MALVINA pestaña por pestaña.</p>
+
+    <div class="grid two">
+      <div class="dark-card">
+        <h3>Qué hace el sistema</h3>
+        <p>De dos PDFs a un viaje completo y validado.</p>
+        <ul>
+          <li><span class="tick">✓</span> Extrae con IA la mercadería, pesos, NCM, FOB y condición de venta del permiso de embarque</li>
+          <li><span class="tick">✓</span> Identifica al consignatario y destinatario desde la factura o proforma, y crea la ficha del cliente automáticamente</li>
+          <li><span class="tick">✓</span> Reutiliza los datos maestros: flota, choferes, pólizas, transportista y corredores habituales</li>
+          <li><span class="tick">✓</span> Infiere la ruta (corredor) según la aduana de partida y el país de destino</li>
+          <li><span class="tick">✓</span> Valida CUIT, pesos, vigencias y coherencia entre documentos antes de tocar MALVINA</li>
+          <li><span class="tick">✓</span> Vuelca el viaje en MALVINA con una extensión de Chrome, pestaña por pestaña</li>
+        </ul>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:16px">
+          <h4><span class="ico lime">🛡️</span> El ATA nunca pierde el control</h4>
+          <p>El sistema <strong>autocompleta pero jamás oficializa</strong>. La revisión final y la firma de la declaración jurada quedan siempre en manos del profesional habilitado. La extensión tampoco toca credenciales: el operador ingresa a MALVINA con su propia Clave Fiscal.</p>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <h4><span class="ico lime">🔔</span> Alertas que evitan problemas</h4>
+          <p>Vencimientos de pólizas y permisos, incoherencias entre el permiso y la factura, pesos que no cierran: el sistema avisa <strong>antes</strong> de presentar, no después del rechazo.</p>
+        </div>
+        <div class="card">
+          <h4><span class="ico lime">📊</span> Trazabilidad completa</h4>
+          <p>Historial de viajes con su estado (borrador, listo, volcado, oficializado), clientes de comercio exterior y reportes de la operación.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. EL FLUJO -->
+  <section>
+    <span class="eyebrow">03 · El flujo de trabajo</span>
+    <h2>De los PDFs al MALVINA en cuatro pasos</h2>
+    <div class="flow">
+      <div class="step lime">
+        <div class="n">1</div>
+        <div>
+          <span class="who">Operador · 30 segundos</span>
+          <h4>Subir los documentos</h4>
+          <p>El permiso de embarque en PDF. Si el cliente del exterior es nuevo, también la factura o proforma. Nada más.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n">2</div>
+        <div>
+          <span class="who auto">Automático · IA</span>
+          <h4>Extracción y armado del viaje</h4>
+          <p>La IA lee ambos documentos, extrae todos los datos, machea o crea el cliente, infiere el corredor, arma el MIC/DTA con sus CRT y valida la coherencia de todo.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n">3</div>
+        <div>
+          <span class="who">Operador · 1 clic</span>
+          <h4>Asignar camión y chofer</h4>
+          <p>El único dato que no está en los documentos: qué unidad hace el viaje. Se elige de la flota ya cargada (o se saltea si la empresa opera con un camión por defecto).</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="n">4</div>
+        <div>
+          <span class="who">ATA · revisión final</span>
+          <h4>Volcado a MALVINA y oficialización</h4>
+          <p>La extensión completa el formulario pestaña por pestaña (Carátula → Países de Paso → CRT → Permiso → Contenedores → Precintos → Bultos) y <strong>se detiene antes de oficializar</strong>: el profesional revisa y confirma.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. NÚMEROS -->
+  <section>
+    <span class="eyebrow">04 · El impacto</span>
+    <h2>Menos tiempo, menos errores, menos costo operativo</h2>
+    <div class="metrics">
+      <div class="metric"><div class="big">~35 min</div><div class="lbl">carga manual actual por MIC/DTA (estimado), con riesgo de rechazo</div></div>
+      <div class="metric dark"><div class="big">&lt;10 min</div><div class="lbl">con el sistema: subir, revisar y oficializar</div></div>
+      <div class="metric"><div class="big lime">–70%</div><div class="lbl">de tiempo operativo por viaje, y validación previa que reduce rechazos</div></div>
+    </div>
+
+    <div class="vs">
+      <div class="col before">
+        <h4>🐢 Hoy (manual)</h4>
+        <ul>
+          <li>Re-tipear flota, chofer y póliza en cada viaje</li>
+          <li>Leer el PDF del permiso y copiarlo campo por campo</li>
+          <li>Buscar códigos de aduanas, ciudades y embalajes</li>
+          <li>Calcular pesos y valores a mano</li>
+          <li>Descubrir los errores recién cuando la aduana rechaza</li>
+        </ul>
+      </div>
+      <div class="col after">
+        <h4>⚡ Con UcoBot Transporte</h4>
+        <ul>
+          <li>Flota, chofer y póliza: un desplegable</li>
+          <li>El permiso y la factura se extraen solos con IA</li>
+          <li>Códigos resueltos desde catálogos</li>
+          <li>El sistema calcula y verifica la congruencia</li>
+          <li>Validación previa: los errores se ven antes de presentar</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. ESTADO -->
+  <section>
+    <span class="eyebrow">05 · Estado del desarrollo</span>
+    <h2>No es una idea: el sistema ya funciona</h2>
+    <p class="lead">La plataforma está construida y probada con documentación real de operaciones de exportación (permisos de embarque OM-1993 SIM y proformas de un exportador de primera línea de Mendoza).</p>
+    <div class="tablecard">
+      <table>
+        <thead><tr><th>Componente</th><th>Estado</th><th>Detalle</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Plataforma CRM de transporte</strong></td><td><span class="pill ok">Operativa</span></td><td>Panel con analíticas, flota, choferes, corredores, clientes y viajes</td></tr>
+          <tr><td><strong>Extracción IA del permiso de embarque</strong></td><td><span class="pill ok">Operativa</span></td><td>Probada con permisos reales: lee cabecera y todos los ítems (NCM, pesos, FOB)</td></tr>
+          <tr><td><strong>Extracción IA de factura / proforma</strong></td><td><span class="pill ok">Operativa</span></td><td>Identifica consignatario, destinatario y comprador del exterior; crea el cliente solo</td></tr>
+          <tr><td><strong>Validaciones y alertas</strong></td><td><span class="pill ok">Operativa</span></td><td>Coherencia permiso↔factura, vencimientos, pesos, códigos de país y aduana</td></tr>
+          <tr><td><strong>Extensión Chrome para MALVINA</strong></td><td><span class="pill lime">En desarrollo</span></td><td>Última etapa: el volcado automático pestaña por pestaña</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="callout warn">
+      <span class="ct">Base normativa</span>
+      El sistema respeta el marco del ATIT y la operatoria del SINTIA: relación 1 vehículo = 1 MIC/DTA, manejo de carga consolidada (varios CRT) y fraccionada (varias fracciones), y la responsabilidad del ATA como declarante. Fue diseñado estudiando el instructivo oficial de usuarios externos de ARCA-AFIP.
+    </div>
+  </section>
+
+  <!-- 6. QUÉ PEDIMOS -->
+  <section>
+    <span class="eyebrow">06 · Nuestra propuesta a CATARA</span>
+    <h2>Qué le pedimos al Centro, y qué ofrecemos a cambio</h2>
+    <p class="lead">Queremos que esta herramienta nazca <strong>con el sector, no a espaldas del sector</strong>. CATARA representa exactamente a los profesionales para quienes está pensada, y su mirada puede hacerla mejor.</p>
+    <div class="asks">
+      <div class="ask"><div class="k">1</div><h4>Aval institucional</h4><p>Que CATARA evalúe el sistema y, si lo considera valioso, lo avale como herramienta tecnológica para la profesionalización de la actividad del ATA.</p></div>
+      <div class="ask"><div class="k">2</div><h4>Mesa técnica / feedback</h4><p>Una instancia de revisión con profesionales del Centro para validar la operatoria fina (consolidados, fraccionados, casos especiales) y priorizar mejoras.</p></div>
+      <div class="ask"><div class="k">3</div><h4>Prueba piloto con socios</h4><p>Seleccionar un grupo de agentes o empresas socias para un piloto acompañado, con soporte directo de nuestro equipo y sin costo durante la prueba.</p></div>
+      <div class="ask"><div class="k">4</div><h4>Difusión entre los socios</h4><p>Si el piloto demuestra el valor, acompañar la difusión de la herramienta entre los asociados, con condiciones preferenciales para socios de CATARA.</p></div>
+    </div>
+    <div class="callout dark">
+      <span class="ct">Qué gana el sector</span>
+      Profesionales que dedican su tiempo al criterio y al control (lo que no se puede automatizar) en lugar de al tipeo. Menos rechazos y demoras en frontera. Una generación de ATAs trabajando con herramientas del nivel de las grandes plataformas logísticas, desarrollada en Argentina y pensada para la normativa argentina.
+    </div>
+  </section>
+
+  <!-- 7. QUIENES SOMOS -->
+  <section>
+    <span class="eyebrow">07 · Quiénes somos</span>
+    <h2>CODEA DESARROLLOS</h2>
+    <p class="lead">Somos una empresa de software de Mendoza. Desarrollamos <strong>UcoBot</strong>, una plataforma SaaS de gestión y automatización con inteligencia artificial para pymes, sobre la cual construimos este kit especializado para el transporte internacional de cargas junto a una empresa transportista mendocina que opera el corredor a Chile.</p>
+    <div class="grid three">
+      <div class="card"><h4><span class="ico dark">🧠</span> IA aplicada</h4><p>Extracción de documentos, chatbots y automatización de procesos con modelos de última generación.</p></div>
+      <div class="card"><h4><span class="ico dark">🚛</span> Conocimiento del dominio</h4><p>El kit nació de la operación real: se diseñó con transportistas, sobre documentos reales y el instructivo oficial del MIC/DTA.</p></div>
+      <div class="card"><h4><span class="ico dark">🤝</span> Desarrollo cercano</h4><p>Equipo argentino, iteración rápida y soporte directo. La herramienta evoluciona con el feedback de quienes la usan.</p></div>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap frow">
+    <div class="fb">
+      <span>Codea Desarrollos</span>
+      <b>UcoBot · Kit Transporte Internacional</b>
+      <p style="margin:6px 0 0;font-size:12.5px">Propuesta presentada al Centro de Agentes de Transporte Aduanero de la República Argentina (C.A.T.A.R.A.)</p>
+    </div>
+    <div class="contact">
+      Contacto comercial<br>
+      <a href="mailto:alvarogonzalez7070@gmail.com">alvarogonzalez7070@gmail.com</a><br>
+      Mendoza, Argentina
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Exporta como PDF en A4: los cortes de página caen SOLO entre bloques
+  // (ninguna tarjeta, tabla o título queda partido) gracias al CSS de impresión.
+  function descargarPdf() {
+    window.print();
+  }
+</script>
+
+</body>
+</html>

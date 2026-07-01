@@ -18,10 +18,15 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
 
   if (!trip) notFound()
 
-  const [{ data: vehicles }, { data: drivers }, { data: settings }] = await Promise.all([
-    supabase.from("transport_vehicles").select("id, patente, kind").eq("user_id", user.id).eq("is_active", true),
+  const crt = Array.isArray(trip.transport_crts) ? trip.transport_crts[0] : trip.transport_crts
+
+  const [{ data: vehicles }, { data: drivers }, { data: settings }, itemsRes] = await Promise.all([
+    supabase.from("transport_vehicles").select("id, patente, kind, capacidad_traccion_ton").eq("user_id", user.id).eq("is_active", true),
     supabase.from("transport_drivers").select("id, nombre").eq("user_id", user.id).eq("is_active", true),
     supabase.from("transport_settings").select("default_tractor_id, default_semi_id, default_driver_id").eq("user_id", user.id).maybeSingle(),
+    crt?.permit_id
+      ? supabase.from("transport_permit_items").select("id, item_number, descripcion, cantidad, kg_neto, unidad").eq("permit_id", crt.permit_id).order("item_number")
+      : Promise.resolve({ data: [] } as any),
   ])
 
   return (
@@ -31,6 +36,7 @@ export default async function ViajeDetailPage({ params }: { params: { id: string
       vehicles={vehicles || []}
       drivers={drivers || []}
       settings={settings || null}
+      permitItems={itemsRes.data || []}
     />
   )
 }
