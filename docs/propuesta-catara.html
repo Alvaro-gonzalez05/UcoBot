@@ -249,7 +249,7 @@
         <p>De dos PDFs a un viaje completo y validado.</p>
         <ul>
           <li><span class="tick">✓</span> Extrae con IA la mercadería, pesos, NCM, FOB y condición de venta del permiso de embarque</li>
-          <li><span class="tick">✓</span> Identifica al consignatario y destinatario desde la factura o proforma, y crea la ficha del cliente automáticamente</li>
+          <li><span class="tick">✓</span> Identifica al consignatario y destinatario desde la factura o proforma que el operador sube <strong>a nuestra plataforma</strong> (una sola vez por cliente nuevo), y crea la ficha del cliente automáticamente</li>
           <li><span class="tick">✓</span> Reutiliza los datos maestros: flota, choferes, pólizas, transportista y corredores habituales</li>
           <li><span class="tick">✓</span> Infiere la ruta (corredor) según la aduana de partida y el país de destino</li>
           <li><span class="tick">✓</span> Valida CUIT, pesos, vigencias y coherencia entre documentos antes de tocar MALVINA</li>
@@ -283,7 +283,7 @@
         <div>
           <span class="who">Operador · 30 segundos</span>
           <h4>Subir los documentos</h4>
-          <p>El permiso de embarque en PDF. Si el cliente del exterior es nuevo, también la factura o proforma. Nada más.</p>
+          <p>El permiso de embarque en PDF. Si el cliente del exterior es nuevo, también la factura o proforma. Ambos se suben <strong>dentro de nuestra plataforma</strong>: sirven para captar los datos que el permiso no contiene (consignatario, destinatario, identificación tributaria del comprador). <strong>No se agrega ningún paso ni documento al trámite aduanero oficial.</strong></p>
         </div>
       </div>
       <div class="step">
@@ -370,9 +370,40 @@
     </div>
   </section>
 
-  <!-- 6. QUÉ PEDIMOS -->
+  <!-- 6. MARCO LEGAL Y DATOS -->
   <section>
-    <span class="eyebrow">06 · Nuestra propuesta a CATARA</span>
+    <span class="eyebrow">06 · Confianza, marco legal y datos</span>
+    <h2>Reglas claras: responsabilidad profesional y tratamiento de datos</h2>
+    <p class="lead">Sabemos que para CATARA la confiabilidad no se declama: se demuestra. Estos son los compromisos sobre los que se construye el sistema, disponibles por escrito en nuestros términos de servicio.</p>
+
+    <div class="grid two">
+      <div class="card">
+        <h4><span class="ico lime">⚖️</span> La responsabilidad del ATA no se toca</h4>
+        <p>El sistema es una herramienta de <strong>asistencia a la carga de datos</strong>: nunca oficializa, nunca firma, nunca opera sin revisión humana. No intermedia ni altera los sistemas de ARCA-AFIP. La extensión funciona dentro de la sesión que el propio usuario abre con su Clave Fiscal (que <strong>jamás se almacena</strong>), y toda acción queda registrada con trazabilidad.</p>
+      </div>
+      <div class="card">
+        <h4><span class="ico lime">🔒</span> Los datos pertenecen a cada empresa</h4>
+        <p>Arquitectura multi-tenant con <strong>aislamiento a nivel de base de datos</strong>: ninguna cuenta puede ver los datos de otra. Codea no vende ni comparte datos, y no usa los de un cliente en beneficio de otro. Cada cliente puede exportar o eliminar sus datos cuando quiera. Tratamiento conforme a la <strong>Ley 25.326</strong> de Protección de Datos Personales.</p>
+      </div>
+      <div class="card">
+        <h4><span class="ico lime">🤖</span> IA con límites definidos</h4>
+        <p>Los documentos se procesan con IA <strong>exclusivamente para extraer los datos de esa operación</strong>, mediante APIs cuyos términos establecen que los datos <strong>no se usan para entrenar modelos</strong>. Todo dato extraído pasa por revisión humana antes de usarse en una declaración.</p>
+      </div>
+      <div class="card">
+        <h4><span class="ico lime">🔍</span> Transparencia verificable</h4>
+        <p>Ofrecemos a CATARA: una <strong>cuenta de demostración propia</strong> para probar todo el sistema con datos de ejemplo, <strong>auditoría de procesos y seguridad bajo NDA</strong> (sin exponer datos de clientes), y <strong>métricas agregadas y anónimas del piloto</strong> con consentimiento de los participantes. No podemos mostrar los datos de un cliente a terceros — y esa negativa es exactamente la garantía de que tampoco mostraríamos los suyos.</p>
+      </div>
+    </div>
+
+    <div class="callout dark">
+      <span class="ct">Responsable del servicio y del tratamiento de datos</span>
+      GONZALEZ VICARIO ALVARO SANTINO · CUIT 20-46866708-9 · Nombre comercial: <strong>Codea Desarrollos / UcoBot</strong> · Loria Oeste 165, Gobernador Benegas, Mendoza, Argentina · desarrolloscodeade@gmail.com. Términos de servicio, política de tratamiento de datos y acuerdos de confidencialidad (NDA) disponibles por escrito para revisión de CATARA.
+    </div>
+  </section>
+
+  <!-- 7. QUÉ PEDIMOS -->
+  <section>
+    <span class="eyebrow">07 · Nuestra propuesta a CATARA</span>
     <h2>Qué le pedimos al Centro, y qué ofrecemos a cambio</h2>
     <p class="lead">Queremos que esta herramienta nazca <strong>con el sector, no a espaldas del sector</strong>. CATARA representa exactamente a los profesionales para quienes está pensada, y su mirada puede hacerla mejor.</p>
     <div class="asks">
@@ -381,15 +412,49 @@
       <div class="ask"><div class="k">3</div><h4>Prueba piloto con socios</h4><p>Seleccionar un grupo de agentes o empresas socias para un piloto acompañado, con soporte directo de nuestro equipo y sin costo durante la prueba.</p></div>
       <div class="ask"><div class="k">4</div><h4>Difusión entre los socios</h4><p>Si el piloto demuestra el valor, acompañar la difusión de la herramienta entre los asociados, con condiciones preferenciales para socios de CATARA.</p></div>
     </div>
+    <h2 style="font-size:22px;margin-top:36px">Un camino escalonado: cada paso, sin riesgo para el Centro</h2>
+    <p class="lead">No pedimos un salto de fe. Proponemos avanzar por etapas, donde CATARA decide en cada una si sigue — y puede retirarse en cualquier momento.</p>
+    <div class="tablecard">
+      <table>
+        <thead><tr><th>Etapa</th><th>Qué hace CATARA</th><th>Qué aporta Codea</th><th>Riesgo para CATARA</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>1 · Demostración técnica</strong></td>
+            <td>Una reunión con su mesa técnica</td>
+            <td>Demo en vivo con documentos reales + cuenta de prueba propia para CATARA</td>
+            <td><span class="pill ok">Ninguno</span></td>
+          </tr>
+          <tr>
+            <td><strong>2 · Carta de intención</strong></td>
+            <td>Firma una LOI simple, sin exclusividad ni compromiso económico</td>
+            <td>Piloto <strong>sin costo y sin permanencia</strong> para los socios que CATARA elija, con soporte directo</td>
+            <td><span class="pill ok">Ninguno</span></td>
+          </tr>
+          <tr>
+            <td><strong>3 · Convenio de colaboración</strong></td>
+            <td>Convenio marco: mesa técnica conjunta y feedback normativo</td>
+            <td>Condiciones preferenciales permanentes para socios + prioridad de sus pedidos en el desarrollo</td>
+            <td><span class="pill lime">Reputacional acotado</span></td>
+          </tr>
+          <tr>
+            <td><strong>4 · Aval institucional</strong></td>
+            <td>Declara la herramienta como recomendada para la profesionalización del ATA</td>
+            <td><strong>Cláusula de retiro del aval</strong>: CATARA puede retirarlo en cualquier momento si la herramienta deja de cumplir</td>
+            <td><span class="pill lime">Reputacional, con salida garantizada</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
     <div class="callout dark">
       <span class="ct">Qué gana el sector</span>
       Profesionales que dedican su tiempo al criterio y al control (lo que no se puede automatizar) en lugar de al tipeo. Menos rechazos y demoras en frontera. Una generación de ATAs trabajando con herramientas del nivel de las grandes plataformas logísticas, desarrollada en Argentina y pensada para la normativa argentina.
     </div>
   </section>
 
-  <!-- 7. QUIENES SOMOS -->
+  <!-- 8. QUIENES SOMOS -->
   <section>
-    <span class="eyebrow">07 · Quiénes somos</span>
+    <span class="eyebrow">08 · Quiénes somos</span>
     <h2>CODEA DESARROLLOS</h2>
     <p class="lead">Somos una empresa de software de Mendoza. Desarrollamos <strong>UcoBot</strong>, una plataforma SaaS de gestión y automatización con inteligencia artificial para pymes, sobre la cual construimos este kit especializado para el transporte internacional de cargas junto a una empresa transportista mendocina que opera el corredor a Chile.</p>
     <div class="grid three">
@@ -409,9 +474,10 @@
       <p style="margin:6px 0 0;font-size:12.5px">Propuesta presentada al Centro de Agentes de Transporte Aduanero de la República Argentina (C.A.T.A.R.A.)</p>
     </div>
     <div class="contact">
-      Contacto comercial<br>
-      <a href="mailto:alvarogonzalez7070@gmail.com">alvarogonzalez7070@gmail.com</a><br>
-      Mendoza, Argentina
+      Contacto<br>
+      <a href="mailto:desarrolloscodeade@gmail.com">desarrolloscodeade@gmail.com</a><br>
+      Codea Desarrollos · CUIT 20-46866708-9<br>
+      Loria Oeste 165, Gob. Benegas, Mendoza, Argentina
     </div>
   </div>
 </footer>
