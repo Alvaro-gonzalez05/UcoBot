@@ -242,7 +242,7 @@ Reglas:
 - Las fechas en formato YYYY-MM-DD.
 - Si un dato no aparece, poné null. NO inventes datos.
 - Incluí TODOS los ítems de la mercadería (el permiso suele tener varios).
-- En "descripcion" de cada ítem devolvé SOLO lo esencial (producto, variedad/tipo y presentación, máx ~150 caracteres). NO copies el texto legal/arancelario completo.`
+- En "descripcion" de cada ítem devolvé el nombre COMERCIAL del producto, claro y breve, en este estilo: "Producto. Marca: X. Tipo/Corte: Y. Presentación: Z". Por ejemplo: "Papas Prefritas Supercongeladas. Marca: Simplot Extra Crunch. Corte: fino. Presentación: 6 bolsas de 2,5kg c/u". Usá los campos codificados del permiso si están (AI=producto, AA=marca, AJ=presentación, ZA=cosecha). NO copies el texto legal/arancelario largo. Máx ~180 caracteres.`
 
 export async function extractPermiso(file: File, deadline = Date.now() + DEFAULT_BUDGET_MS): Promise<PermitData> {
   const d = await callGemini(file, PERMIT_PROMPT, deadline)

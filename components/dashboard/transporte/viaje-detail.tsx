@@ -97,7 +97,11 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
 
   const buildDetalle = (bultos: string, rows: { cantidad: number; descripcion: string }[]) => {
     const header = bultos ? `${bultos} BULTOS DICIENDO CONTENER:` : "DICIENDO CONTENER:"
-    return [header, ...rows.map((r) => `${r.cantidad.toLocaleString("es-AR")} ${r.descripcion}`)].join("\n").slice(0, 2000)
+    const body = rows.map((r) => `${r.cantidad.toLocaleString("es-AR")} ${r.descripcion}`)
+    // Reusar COMMODITY CODE y SEGÚN DETALLE FACTURA del detalle total del CRT
+    const orig = String(crt?.descripcion_fraccionados || crt?.descripcion_mercaderia || "").split("\n")
+    const footer = orig.filter((l: string) => /^(COMMODITY CODE:|SEGÚN DETALLE FACTURA)/i.test(l.trim()))
+    return [header, ...body, ...footer].join("\n").slice(0, 2000)
   }
 
   const guardarFraccion = async () => {

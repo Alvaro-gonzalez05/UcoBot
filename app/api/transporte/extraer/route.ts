@@ -52,16 +52,49 @@ async function findOrCreateClient(
 //   "93 BULTOS DICIENDO CONTENER:
 //    3.240 PY ST E 10 1200 2400 BR (90)
 //    ..."
-function buildDescripcion(p: PermitData): string {
+// Nombre del embalaje para la descripción (código -> plural). "PALLETS", "BULTOS", etc.
+function embalajeLabel(code: string | null | undefined): string {
+  if (!code) return "BULTOS"
+  const c = String(code).trim().toUpperCase()
+  const map: Record<string, string> = { "05": "CONTENEDORES", "99": "BULTOS", "04": "PALLETS" }
+  return map[c] || c
+}
+
+// Detalle de la mercadería con el formato del CRT/MIC:
+//   28 PALLETS DICIENDO CONTENER 1.512 cjs con:
+//   Papas Prefritas Supercongeladas. Marca: Simplot. Presentación: 6 bolsas de 2,5kg c/u
+//   COMMODITY CODE: 2004.10.00
+//   SEGÚN DETALLE FACTURA EXPORTACION NRO 0006E00016052
+//   Peso neto: 22.680 KG
+function buildDescripcion(p: PermitData, invoiceFallback?: string | null): string {
   if (p.items.length === 0) return ""
   const fmt = (n: number | null) => n != null ? n.toLocaleString("es-AR") : ""
-  const header = p.total_bultos != null
-    ? `${p.total_bultos} ${(p.embalaje_code === "05" ? "CONTENEDORES" : "BULTOS")} DICIENDO CONTENER:`
-    : "DICIENDO CONTENER:"
-  const lines = p.items.map((it) =>
-    [fmt(it.cantidad), (it.descripcion || "").trim()].filter(Boolean).join(" ")
-  ).filter(Boolean)
-  return [header, ...lines].join("\n").slice(0, 2000)
+  const emb = embalajeLabel(p.embalaje_code)
+  const totalCant = p.items.reduce((a, it) => a + (it.cantidad ?? 0), 0)
+  const unidad = (p.items[0]?.unidad || "unid.").toLowerCase()
+
+  // Header: "28 PALLETS DICIENDO CONTENER 1.512 cjs con:"
+  const bultos = p.total_bultos != null ? `${fmt(p.total_bultos)} ` : ""
+  const contiene = totalCant > 0 ? ` ${fmt(totalCant)} ${unidad} con:` : ":"
+  const header = `${bultos}${emb} DICIENDO CONTENER${contiene}`
+
+  // Cuerpo: 1 ítem => solo la descripción; varios => "cantidad descripción"
+  const body = p.items.map((it) => {
+    const desc = (it.descripcion || "").trim()
+    if (!desc) return ""
+    return p.items.length > 1 ? `${fmt(it.cantidad)} ${desc}`.trim() : desc
+  }).filter(Boolean)
+
+  const ncms = [...new Set(p.items.map((it) => it.ncm_position).filter(Boolean))]
+  const factura = p.nros_facturas || invoiceFallback || null
+
+  return [
+    header,
+    ...body,
+    ncms.length ? `COMMODITY CODE: ${ncms.join(", ")}` : "",
+    factura ? `SEGÚN DETALLE FACTURA EXPORTACION NRO ${factura}` : "",
+    p.peso_neto != null ? `Peso neto: ${fmt(p.peso_neto)} KG` : "",
+  ].filter(Boolean).join("\n").slice(0, 2000)
 }
 
 const digits5 = (s?: string | null) => (s ? String(s).match(/\d{5,}/g) || [] : [])
@@ -249,7 +282,7 @@ export async function POST(req: Request) {
         peso_bruto: permit.peso_bruto, peso_neto: permit.peso_neto, fob: permit.fob_total,
         cond_venta: permit.cond_venta, divisa: permit.fob_divisa,
         consolidado,
-        descripcion_mercaderia: buildDescripcion(permit),
+        descripcion_mercaderia: buildDescripcion(permit, i === facturaPermitIdx ? factura?.invoice_number : null),
       })
       crtsCreados++
     }
