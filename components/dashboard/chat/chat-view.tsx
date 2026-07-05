@@ -1220,6 +1220,49 @@ export function ChatView({ userId }: ChatViewProps) {
     setFilterReview(false)
   }
 
+  // Reactiva la IA en TODAS las conversaciones que están pausadas (con confirmación).
+  const reactivateAllPaused = () => {
+    const count = conversations.filter((c) => c.status === "paused").length
+    if (count === 0) {
+      toast.info("No hay clientes con la IA pausada")
+      return
+    }
+    toast(`¿Reactivar la IA en ${count} ${count === 1 ? "conversación" : "conversaciones"}?`, {
+      description: "La IA volverá a responder automáticamente a todos los que estén pausados.",
+      action: {
+        label: "Reactivar",
+        onClick: () => performReactivateAllPaused(),
+      },
+    })
+  }
+
+  const performReactivateAllPaused = async () => {
+    const pausedIds = conversations.filter((c) => c.status === "paused").map((c) => c.id)
+    if (pausedIds.length === 0) return
+
+    // Optimistic: todas las pausadas pasan a activas
+    setConversations((prev) =>
+      prev.map((c) => (c.status === "paused" ? { ...c, status: "active", paused_until: null, needs_attention: false } : c))
+    )
+    setSelectedConversation((prev) =>
+      prev && prev.status === "paused" ? { ...prev, status: "active", paused_until: null, needs_attention: false } : prev
+    )
+
+    try {
+      const { error } = await supabase
+        .from("conversations")
+        .update({ status: "active", paused_until: null, needs_attention: false })
+        .eq("user_id", userId)
+        .eq("status", "paused")
+      if (error) throw error
+      toast.success(`IA reactivada en ${pausedIds.length} ${pausedIds.length === 1 ? "conversación" : "conversaciones"}`)
+    } catch (error) {
+      console.error("Error reactivating all paused conversations:", error)
+      toast.error("No se pudieron reactivar todas las conversaciones")
+      setRefreshKey((prev) => prev + 1) // resync desde la base
+    }
+  }
+
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation) return
 
@@ -1995,15 +2038,28 @@ export function ChatView({ userId }: ChatViewProps) {
                 )}
               </PopoverContent>
             </Popover>
-            <Button
-              variant="outline"
-              size="icon"
-              className="flex-shrink-0"
-              title="Importar chats de WhatsApp (.txt)"
-              onClick={() => setIsImportOpen(true)}
-            >
-              <Upload className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="flex-shrink-0"
+                  title="Más acciones"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={reactivateAllPaused}>
+                  <PlayCircle className="mr-2 h-4 w-4 text-green-600" />
+                  Reactivar IA a los pausados
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsImportOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Importar chats de WhatsApp
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         

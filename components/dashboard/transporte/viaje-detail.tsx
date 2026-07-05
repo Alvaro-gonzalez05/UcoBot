@@ -12,8 +12,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   ArrowLeft, Truck, Container, IdCard, FileText, CheckCircle2, Send, RotateCcw,
-  Package, Building2, Route, AlertTriangle, Scissors,
+  Package, Building2, Route, AlertTriangle, Scissors, Wand2,
 } from "lucide-react"
+
+// Reparte un total en n partes enteras (el resto se distribuye en las primeras).
+function splitInt(total: number, n: number): number[] {
+  const base = Math.floor(total / n)
+  const rem = total - base * n
+  return Array.from({ length: n }, (_, i) => base + (i < rem ? 1 : 0))
+}
 
 interface PermitItem {
   id: string
@@ -120,6 +127,11 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
       const esRefraccion = !!crt?.fraccion
       const detalleTotal = crt.descripcion_fraccionados ?? crt.descripcion_mercaderia
       const pesoTotal = crt.peso_bruto_total ?? crt.peso_bruto
+      const bultosBase = crt.cantidad != null ? Number(crt.cantidad) : null
+
+      // Peso de esta fracción: el ingresado, o proporcional a los bultos que lleva
+      const pesoFraccion = fracPeso ? Number(fracPeso)
+        : (pesoTotal != null && bultosBase ? Math.round(Number(pesoTotal) * Number(fracBultos) / bultosBase) : null)
 
       const detalleFraccion = buildDetalle(fracBultos, cargados.map((r) => ({ cantidad: r.enCamion, descripcion: (r.item.descripcion || "").trim() })))
       const restantes = rows
@@ -131,7 +143,7 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
         fraccion: true,
         fraccion_tipo: esRefraccion ? (restantes.length > 0 ? "intermedia" : "ultima") : "primera",
         cantidad: Number(fracBultos),
-        peso_bruto: fracPeso ? Number(fracPeso) : crt.peso_bruto,
+        peso_bruto: pesoFraccion,
         peso_bruto_total: pesoTotal,
         descripcion_fraccionados: detalleTotal,
         descripcion_mercaderia: detalleFraccion,
@@ -149,13 +161,18 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
           metadata: { fraccion_de: trip.id },
         }).select("id").single()
         if (nextTrip?.id) {
-          const detalleResto = buildDetalle("", restantes.map((r) => ({ cantidad: r.cantidad, descripcion: (r.descripcion || "").trim() })))
+          // Bultos del resto = bultos de esta carga − los que van en este camión
+          const restoBultos = bultosBase != null ? Math.max(0, bultosBase - Number(fracBultos)) : null
+          const restoPeso = pesoTotal != null && pesoFraccion != null ? Number(pesoTotal) - pesoFraccion : null
+          const detalleResto = buildDetalle(restoBultos != null ? String(restoBultos) : "", restantes.map((r) => ({ cantidad: r.cantidad, descripcion: (r.descripcion || "").trim() })))
           await supabase.from("transport_crts").insert({
             user_id: userId, trip_id: nextTrip.id, permit_id: crt.permit_id,
             remitente_client_id: crt.remitente_client_id, consignatario_client_id: crt.consignatario_client_id,
             destinatario_client_id: crt.destinatario_client_id, destino_pais: crt.destino_pais,
             embalaje_code: crt.embalaje_code, cond_venta: crt.cond_venta, divisa: crt.divisa,
             fraccion: true, fraccion_tipo: "ultima",
+            cantidad: restoBultos,
+            peso_bruto: restoPeso,
             peso_bruto_total: pesoTotal,
             descripcion_fraccionados: detalleTotal,
             descripcion_mercaderia: detalleResto,
@@ -175,6 +192,104 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
       setFracOpen(false); router.refresh()
     } catch {
       toast.error("No se pudo guardar la fracción.")
+    } finally { setFracLoading(false) }
+  }
+
+  // Deshace el fraccionamiento: borra las otras fracciones y restaura la carga completa acá.
+  const deshacerFraccion = async () => {
+    setFracLoading(true)
+    try {
+      const { data: sibs } = await supabase.from("transport_crts")
+        .select("trip_id").eq("permit_id", crt.permit_id).eq("fraccion", true).neq("trip_id", trip.id)
+      const others = [...new Set((sibs || []).map((s: any) => s.trip_id).filter(Boolean))]
+      if (others.length) await supabase.from("transport_trips").delete().in("id", others)
+
+      const totalDesc = crt.descripcion_fraccionados ?? crt.descripcion_mercaderia
+      const m = String(totalDesc || "").match(/^(\d[\d.]*)/)
+      const totalBultos = m ? Number(m[1].replace(/\./g, "")) : null
+
+      await supabase.from("transport_crts").update({
+        fraccion: false, fraccion_tipo: "none", fraccion_mic_primera: null,
+        descripcion_mercaderia: totalDesc, descripcion_fraccionados: null,
+        cantidad: totalBultos, peso_bruto: crt.peso_bruto_total ?? crt.peso_bruto,
+        peso_bruto_total: null, comentarios: {},
+      }).eq("id", crt.id)
+      await supabase.from("transport_trips").update({ fraccionado: false }).eq("id", trip.id)
+      toast.success("Fraccionamiento deshecho. La carga volvió a estar completa.")
+      router.refresh()
+    } catch {
+      toast.error("No se pudo deshacer.")
+    } finally { setFracLoading(false) }
+  }
+
+  // ── Auto-fraccionar por capacidad del tractor asignado ──
+  const fraccionarAuto = () => {
+    if (!capacidadKg) { toast.error("Asigná un tractor con capacidad para calcular la división."); return }
+    const W = pesoCarga ?? (crt?.peso_bruto_total != null ? Number(crt.peso_bruto_total) : null)
+    if (!W) { toast.error("No se conoce el peso de la carga."); return }
+    const N = Math.ceil(W / capacidadKg)
+    if (N <= 1) { toast("La carga entra en un solo camión, no hace falta fraccionar."); return }
+    const B = crt?.cantidad != null ? Number(crt.cantidad) : null
+    toast(`¿Dividir automáticamente en ${N} camiones?`, {
+      description: `≈ ${Math.round(W / N).toLocaleString("es-AR")} kg por camión (capacidad ${capacidadKg.toLocaleString("es-AR")} kg). Después ajustás y asignás cada uno.`,
+      action: { label: `Dividir en ${N}`, onClick: () => doAutoSplit(N, W, B) },
+    })
+  }
+
+  const doAutoSplit = async (N: number, W: number, B: number | null) => {
+    setFracLoading(true)
+    try {
+      const items = fracItems.filter((it) => (it.cantidad ?? 0) > 0)
+      const detalleTotal = crt.descripcion_fraccionados ?? crt.descripcion_mercaderia
+      const itemSplits = items.map((it) => ({ it, parts: splitInt(Number(it.cantidad), N) }))
+      const bultosSplit = B != null ? splitInt(B, N) : Array(N).fill(null)
+      const pesoSplit = splitInt(Math.round(W), N)
+
+      const detalleTruck = (i: number) => {
+        const rows = itemSplits
+          .map((s) => ({ cantidad: s.parts[i], descripcion: (s.it.descripcion || "").trim() }))
+          .filter((r) => r.cantidad > 0)
+        return buildDetalle(bultosSplit[i] != null ? String(bultosSplit[i]) : "", rows)
+      }
+
+      // Camión 1 = este viaje (primera fracción)
+      const { error: e0 } = await supabase.from("transport_crts").update({
+        fraccion: true, fraccion_tipo: "primera",
+        cantidad: bultosSplit[0], peso_bruto: pesoSplit[0], peso_bruto_total: W,
+        descripcion_fraccionados: detalleTotal, descripcion_mercaderia: detalleTruck(0),
+        comentarios: {},
+      }).eq("id", crt.id)
+      if (e0) throw e0
+      await supabase.from("transport_trips").update({ fraccionado: true }).eq("id", trip.id)
+
+      // Camiones 2..N = nuevos viajes
+      for (let i = 1; i < N; i++) {
+        const { data: nt } = await supabase.from("transport_trips").insert({
+          user_id: userId, corridor_id: trip.corridor_id ?? null,
+          fecha_emision: new Date().toISOString().slice(0, 10),
+          estado: "borrador", via_transporte: 4, fraccionado: true,
+          metadata: { fraccion_de: trip.id },
+        }).select("id").single()
+        if (nt?.id) {
+          await supabase.from("transport_crts").insert({
+            user_id: userId, trip_id: nt.id, permit_id: crt.permit_id,
+            remitente_client_id: crt.remitente_client_id, consignatario_client_id: crt.consignatario_client_id,
+            destinatario_client_id: crt.destinatario_client_id, destino_pais: crt.destino_pais,
+            embalaje_code: crt.embalaje_code, cond_venta: crt.cond_venta, divisa: crt.divisa,
+            fraccion: true, fraccion_tipo: i === N - 1 ? "ultima" : "intermedia",
+            cantidad: bultosSplit[i], peso_bruto: pesoSplit[i], peso_bruto_total: W,
+            descripcion_fraccionados: detalleTotal, descripcion_mercaderia: detalleTruck(i),
+          })
+        }
+      }
+
+      await supabase.from("transport_trip_events").insert({
+        user_id: userId, trip_id: trip.id, event_type: "fraccionado_auto", detail: { camiones: N },
+      })
+      toast.success(`Carga dividida en ${N} camiones. Asigná el vehículo de cada fracción abajo.`)
+      router.refresh()
+    } catch {
+      toast.error("No se pudo dividir automáticamente.")
     } finally { setFracLoading(false) }
   }
 
@@ -260,11 +375,23 @@ export function ViajeDetail({ userId, trip, vehicles, drivers, settings, permitI
               <span>La carga ({pesoCarga?.toLocaleString("es-AR")} kg) supera la capacidad del tractor asignado ({capacidadKg?.toLocaleString("es-AR")} kg). Te conviene <strong>fraccionarla</strong> en más de un camión.</span>
             </div>
           )}
-          {puedeFraccionar && (
-            <Button onClick={openFraccionar} variant="outline" className="mt-4 rounded-xl">
-              <Scissors className="h-4 w-4 mr-1.5" /> {restanteBase ? "Fraccionar de nuevo (no entra en un camión)" : "Fraccionar carga"}
-            </Button>
-          )}
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            {puedeFraccionar && capacidadKg && (
+              <Button onClick={fraccionarAuto} disabled={fracLoading} className="rounded-xl bg-[#1C1C28] text-[#D1F366] hover:bg-[#2a2a3a]">
+                <Wand2 className="h-4 w-4 mr-1.5" /> Sugerir división automática
+              </Button>
+            )}
+            {puedeFraccionar && (
+              <Button onClick={openFraccionar} variant="outline" className="rounded-xl">
+                <Scissors className="h-4 w-4 mr-1.5" /> {restanteBase ? "Fraccionar de nuevo (no entra en un camión)" : "Fraccionar manualmente"}
+              </Button>
+            )}
+            {isFraccionado && crt?.fraccion_tipo === "primera" && (
+              <Button onClick={deshacerFraccion} disabled={fracLoading} variant="ghost" className="rounded-xl text-muted-foreground hover:text-red-600">
+                <RotateCcw className="h-4 w-4 mr-1.5" /> Deshacer fraccionamiento
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Asignación */}
