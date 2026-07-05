@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ShoppingBag } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ShoppingBag, LayoutGrid, LayoutList, Tag } from "lucide-react"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
@@ -99,6 +100,8 @@ export function PedidosClient({
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [filterStatuses, setFilterStatuses] = useState<string[]>([])
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list")
   // Estado editable del pedido en la vista previa
   const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null }[]>([])
   const [editStatus, setEditStatus] = useState("pending")
@@ -179,20 +182,37 @@ export function PedidosClient({
     }
   }, [orders])
 
-  // Filter orders based on selected tags
+  // Filter orders based on selected tags + status
   const filteredOrders = orders.filter(order => {
+    if (filterStatuses.length > 0 && !filterStatuses.includes(order.status)) return false
     if (selectedTags.length === 0) return true
     if (!order.tags) return false
     return selectedTags.every(tag => order.tags?.includes(tag))
   })
 
+  const activeFilterCount = selectedTags.length + filterStatuses.length
+
   const toggleTag = (tag: string) => {
-    setSelectedTags(prev => 
-      prev.includes(tag) 
+    setSelectedTags(prev =>
+      prev.includes(tag)
         ? prev.filter(t => t !== tag)
         : [...prev, tag]
     )
   }
+
+  const toggleStatusFilter = (status: string) => {
+    setFilterStatuses(prev =>
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    )
+  }
+
+  const clearAllFilters = () => {
+    setSelectedTags([])
+    setFilterStatuses([])
+  }
+
+  // Estados disponibles para filtrar
+  const ALL_STATUSES = ["pending", "confirmed", "preparing", "ready", "delivered", "completed", "cancelled"]
 
   const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>(
     initialDeliverySettings || {
@@ -506,51 +526,86 @@ export function PedidosClient({
           {/* Filters row */}
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xl font-bold dark:text-white">Órdenes Recientes</h3>
-            <div className="flex items-center gap-3">
-              {selectedTags.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={() => setSelectedTags([])} className="text-muted-foreground">
-                  Limpiar filtros <X className="ml-1 h-3 w-3" />
+            <div className="flex items-center gap-2">
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-muted-foreground">
+                  Limpiar <X className="ml-1 h-3 w-3" />
                 </Button>
               )}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="rounded-full border-dashed">
-                    <Filter className="mr-2 h-4 w-4" />
-                    Etiquetas
-                    {selectedTags.length > 0 && (
-                      <span className="ml-2 rounded-full bg-[#D1F366] text-[#1C1C28] text-xs font-bold px-1.5 py-0.5">
-                        {selectedTags.length}
+
+              {/* Menú de filtros (3 puntitos): Estado + Etiquetas */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="icon" className="rounded-full relative">
+                    <MoreHorizontal className="h-4 w-4" />
+                    {activeFilterCount > 0 && (
+                      <span className="absolute -top-1.5 -right-1.5 h-4 w-4 rounded-full bg-[#D1F366] text-[#1C1C28] text-[10px] flex items-center justify-center font-bold">
+                        {activeFilterCount}
                       </span>
                     )}
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[200px]">
-                  <DropdownMenuLabel>Filtrar por etiquetas</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {allTags.length === 0 ? (
-                    <div className="p-2 text-sm text-muted-foreground text-center">No hay etiquetas</div>
-                  ) : (
-                    allTags.map((tag) => (
-                      <DropdownMenuCheckboxItem key={tag} checked={selectedTags.includes(tag)} onCheckedChange={() => toggleTag(tag)}>
-                        {tag}
-                      </DropdownMenuCheckboxItem>
-                    ))
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">Filtros</p>
+                    {activeFilterCount > 0 && (
+                      <button onClick={clearAllFilters} className="text-xs text-muted-foreground hover:text-foreground">Limpiar</button>
+                    )}
+                  </div>
+
+                  {/* Estado del pedido */}
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Estado del pedido</p>
+                  <div className="space-y-1">
+                    {ALL_STATUSES.map((st) => (
+                      <label key={st} className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
+                        <input type="checkbox" checked={filterStatuses.includes(st)} onChange={() => toggleStatusFilter(st)} className="accent-[#B3D93C]" />
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${getStatusBadgeClass(st)}`}>{getStatusText(st).toUpperCase()}</span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Etiquetas */}
+                  {allTags.length > 0 && (
+                    <div className="mt-3 pt-3 border-t">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">Etiquetas</p>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {allTags.map((tag) => (
+                          <label key={tag} className="flex items-center gap-2 text-sm cursor-pointer rounded-md px-1 py-1 hover:bg-muted">
+                            <input type="checkbox" checked={selectedTags.includes(tag)} onChange={() => toggleTag(tag)} className="accent-violet-500" />
+                            <Tag className="h-3.5 w-3.5 text-violet-500 flex-shrink-0" />
+                            <span className="truncate">{tag}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                  {selectedTags.length > 0 && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onSelect={() => setSelectedTags([])} className="justify-center text-center">
-                        Limpiar filtros
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </PopoverContent>
+              </Popover>
+
+              {/* Cambiar vista lista / tarjetas */}
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full"
+                title={viewMode === "list" ? "Ver como tarjetas" : "Ver como lista"}
+                onClick={() => setViewMode((v) => (v === "list" ? "grid" : "list"))}
+              >
+                {viewMode === "list" ? <LayoutGrid className="h-4 w-4" /> : <LayoutList className="h-4 w-4" />}
+              </Button>
             </div>
           </div>
 
-          {selectedTags.length > 0 && (
+          {/* Chips de filtros activos */}
+          {(selectedTags.length > 0 || filterStatuses.length > 0) && (
             <div className="flex flex-wrap gap-2 px-1">
+              {filterStatuses.map(st => (
+                <Badge key={st} variant="secondary" className="rounded-full font-normal">
+                  {getStatusText(st)}
+                  <button className="ml-1 rounded-full" onClick={() => toggleStatusFilter(st)}>
+                    <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                </Badge>
+              ))}
               {selectedTags.map(tag => (
                 <Badge key={tag} variant="secondary" className="rounded-full font-normal">
                   {tag}
@@ -575,8 +630,106 @@ export function PedidosClient({
               <p className="text-muted-foreground">No hay pedidos con los filtros seleccionados.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {filteredOrders.map((order, index) => (
+            <div className={cn(
+              viewMode === "grid"
+                ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
+                : "grid grid-cols-1 gap-4"
+            )}>
+              {filteredOrders.map((order, index) => viewMode === "grid" ? (
+                /* ── Vista tarjeta vertical ── */
+                <div
+                  key={order.id}
+                  ref={(el) => {
+                    if (order.status === 'pending') {
+                      pendingCardsRef.current[index] = el
+                    } else {
+                      pendingCardsRef.current[index] = null
+                    }
+                  }}
+                  onClick={() => openDetail(order)}
+                  className={cn(
+                    "rounded-3xl p-4 shadow-sm border transition-all hover:shadow-md cursor-pointer flex flex-col gap-3",
+                    getCardStyle(order.status)
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-base font-bold dark:text-white">#{order.id.slice(0, 8).toUpperCase()}</span>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {formatDistanceToNow(new Date(order.created_at), { addSuffix: true, locale: es })}
+                      </p>
+                    </div>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${getStatusBadgeClass(order.status)}`}>
+                      {getStatusText(order.status).toUpperCase()}
+                    </span>
+                  </div>
+
+                  <div className="flex-1 rounded-2xl bg-background/50 dark:bg-muted/20 p-3">
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Detalle</span>
+                    <div className="mt-1 space-y-0.5">
+                      {Array.isArray(order.items) && order.items.length > 0 ? (
+                        <>
+                          {order.items.slice(0, 4).map((item: any, i: number) => (
+                            <p key={i} className="text-sm font-semibold text-foreground truncate">
+                              {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
+                            </p>
+                          ))}
+                          {order.items.length > 4 && (
+                            <p className="text-xs text-muted-foreground">+{order.items.length - 4} más</p>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">Sin detalle</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 text-sm font-medium">
+                      {getPlatformIcon(order.conversation?.platform)}
+                      <span className="truncate">{order.client?.name || order.delivery_phone || 'Cliente Anónimo'}</span>
+                    </div>
+                    <span className="font-bold whitespace-nowrap">${order.total_amount}</span>
+                  </div>
+
+                  {order.tags && order.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {order.tags.map((tag, i) => (
+                        <span key={i} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-medium dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 border-t border-border pt-3" onClick={(e) => e.stopPropagation()}>
+                    {nextStatusOf(order.status) && (
+                      <Button
+                        onClick={() => advanceOrderStatus(order)}
+                        className="flex-1 h-9 rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold text-xs shadow-sm hover:bg-[#B3D93C] transition-colors whitespace-nowrap gap-1"
+                      >
+                        {getStatusText(nextStatusOf(order.status)!)}
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <DropdownMenu modal={false}>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-9 w-9 p-0 rounded-xl">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => openDetail(order)}>
+                          <Edit className="mr-2 h-4 w-4" /> Ver / Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDeleteOrder(order.id)} className="text-red-600">
+                          <Trash2 className="mr-2 h-4 w-4" /> Eliminar
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              ) : (
                 <div
                   key={order.id}
                   ref={(el) => {

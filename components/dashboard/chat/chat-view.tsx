@@ -1575,6 +1575,9 @@ export function ChatView({ userId }: ChatViewProps) {
   }
 
   const getMediaUrl = (msg: Message) => {
+    // Preferimos la copia permanente en nuestro storage (no expira).
+    if (msg.metadata?.stored_url) return msg.metadata.stored_url as string
+
     if (!selectedConversation) return ''
 
     let mediaId: string | undefined

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getWhatsAppToken, getGraphVersion } from '@/lib/meta/credentials'
+import { storeMediaBuffer } from '@/lib/meta/store-media'
 
 export async function POST(request: NextRequest) {
   try {
@@ -131,13 +132,28 @@ export async function POST(request: NextRequest) {
     const sendData = await sendRes.json()
     const whatsappMessageId = sendData.messages?.[0]?.id
 
+    // Guardar una copia permanente en nuestro storage (ya tenemos el archivo).
+    let storedUrl: string | null = null
+    try {
+      const buffer = Buffer.from(await file.arrayBuffer())
+      storedUrl = await storeMediaBuffer({
+        buffer,
+        contentType: file.type || 'application/octet-stream',
+        userId: bot.user_id,
+        kind: messageType,
+      })
+    } catch (e) {
+      console.error('No se pudo guardar copia de la media saliente:', e)
+    }
+
     // 3. Save to Database
     const metadata: any = {
       sent_by: 'agent',
       whatsapp_message_id: whatsappMessageId,
       status: 'sent'
     }
-    
+
+    if (storedUrl) metadata.stored_url = storedUrl
     if (messageType === 'image') metadata.image = { id: mediaId, caption }
     if (messageType === 'audio') metadata.audio = { id: mediaId }
     if (messageType === 'document') metadata.document = { id: mediaId, caption, filename: file.name }

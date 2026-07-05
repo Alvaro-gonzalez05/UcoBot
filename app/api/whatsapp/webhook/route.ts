@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
+import { getWhatsAppToken } from '@/lib/meta/credentials'
+import { storeWhatsAppMedia } from '@/lib/meta/store-media'
 
 // Webhook verification (GET request)
 export async function GET(request: NextRequest) {
@@ -404,9 +406,30 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         // Los stickers se almacenan como 'image' (CHECK-safe) y se distinguen por metadata.is_sticker
         internalMessageType = 'image';
       }
-      // Treat buttons and interactive messages as text for storage purposes, 
+      // Treat buttons and interactive messages as text for storage purposes,
       // but keep the original type in metadata
-      
+
+      // Persistir la media en nuestro storage: Meta borra la media pasado un tiempo
+      // y su URL expira, así que la descargamos y guardamos una URL permanente.
+      let storedUrl: string | null = null
+      const mediaObj: any =
+        (messageContent as any).image ||
+        (messageContent as any).video ||
+        (messageContent as any).audio ||
+        (messageContent as any).document ||
+        (messageContent as any).sticker
+      if (mediaObj?.id) {
+        const token = getWhatsAppToken(integration)
+        if (token) {
+          storedUrl = await storeWhatsAppMedia({
+            mediaId: mediaObj.id,
+            accessToken: token,
+            userId: integration.user_id,
+            kind: messageType,
+          })
+        }
+      }
+
       const { data: storedMessage, error: messageError } = await supabase
         .from('messages')
         .insert({
@@ -418,7 +441,8 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
             whatsapp_message_id: whatsappMessageId,
             original_type: messageType,
             context, // Store context in metadata
-            ...messageContent
+            ...messageContent,
+            ...(storedUrl ? { stored_url: storedUrl } : {}),
           }
         })
         .select()
