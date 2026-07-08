@@ -1,8 +1,8 @@
-// Impresión de tickets (58/80mm).
-// Método robusto para cualquier dispositivo (incluido el webview del POSNET
-// Android): imprimimos la propia página con window.print() pero ocultando TODO
-// menos el ticket vía @media print. Así nunca sale la pantalla/preview, solo el
-// ticket, y respeta el tamaño del papel con @page.
+// Impresión de tickets (58/80mm) vía iframe oculto.
+// Se imprime SOLO cuando el documento del iframe terminó de cargar (onload):
+// disparar antes de tiempo hacía que algunos webviews (POSNET Android)
+// mandaran la página de atrás en vez del ticket. Sin pantallazos: la UI
+// no se toca, el iframe es invisible.
 
 export interface TicketItem {
   name: string
@@ -44,9 +44,6 @@ export function cleanTicketNotes(notes?: string | null): string {
 
 const money = (v: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2 }).format(v)
-
-const CONTAINER_ID = "__ticket_print"
-const STYLE_ID = "__ticket_print_style"
 
 /** Contenido interno del ticket (mismo look que la vista previa). */
 function buildTicketInner(t: TicketData): string {
@@ -90,86 +87,99 @@ function buildTicketInner(t: TicketData): string {
     <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`
 }
 
-/**
- * CSS "modo impresión": mientras está activo, la PANTALLA ENTERA muestra solo
- * el ticket (todo lo demás se oculta también en pantalla, no solo en print).
- * Motivo: muchos webviews de POSNET Android imprimen una captura de lo que se
- * ve en pantalla e ignoran @media print — si el diálogo/preview está visible,
- * eso es lo que sale impreso. Con esto, lo único visible ES el ticket.
- */
-function buildScopedStyle(widthMm: TicketWidth): string {
+/** Documento standalone del ticket (para el iframe de impresión). */
+function buildTicketDocument(t: TicketData, widthMm: TicketWidth): string {
   const bodyW = widthMm === 58 ? 54 : 72
   const baseFont = widthMm === 58 ? 15 : 17
   const bigFont = widthMm === 58 ? 19 : 23
   const smallFont = widthMm === 58 ? 12 : 13
 
-  return `
-    html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
-    body > *:not(#${CONTAINER_ID}) { display: none !important; }
-    #${CONTAINER_ID} {
-      display: block !important;
-      width: ${bodyW}mm;
-      margin: 0 auto;
-      padding: 3mm 2mm;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-      font-size: ${baseFont}px;
-      font-weight: 600;
-      color: #000;
-      line-height: 1.4;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-    #${CONTAINER_ID} * { box-sizing: border-box; margin: 0; padding: 0; }
-    #${CONTAINER_ID} .center { text-align: center; }
-    #${CONTAINER_ID} .biz { font-size: ${bigFont}px; font-weight: 700; text-transform: uppercase; }
-    #${CONTAINER_ID} .muted { font-size: ${smallFont}px; font-weight: 500; }
-    #${CONTAINER_ID} .bold { font-weight: 700; }
-    #${CONTAINER_ID} .sep { border-top: 1px dashed #000; margin: 8px 0; }
-    #${CONTAINER_ID} .row, #${CONTAINER_ID} .item { display: flex; justify-content: space-between; gap: 8px; }
-    #${CONTAINER_ID} .iname { min-width: 0; word-break: break-word; }
-    #${CONTAINER_ID} .iprice { white-space: nowrap; flex-shrink: 0; }
-    #${CONTAINER_ID} .total { font-size: ${bigFont}px; font-weight: 700; }
-    #${CONTAINER_ID} .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
-    #${CONTAINER_ID} .footer { margin-top: 10px; }
-    @page { size: ${widthMm}mm auto; margin: 0; }`
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title> </title>
+<style>
+  @page { size: ${widthMm}mm auto; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body {
+    width: ${bodyW}mm;
+    margin: 0 auto;
+    padding: 3mm 2mm;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: ${baseFont}px;
+    font-weight: 600;
+    color: #000;
+    line-height: 1.4;
+  }
+  .center { text-align: center; }
+  .biz { font-size: ${bigFont}px; font-weight: 700; text-transform: uppercase; }
+  .muted { font-size: ${smallFont}px; font-weight: 500; }
+  .bold { font-weight: 700; }
+  .sep { border-top: 1px dashed #000; margin: 8px 0; }
+  .row, .item { display: flex; justify-content: space-between; gap: 8px; }
+  .iname { min-width: 0; word-break: break-word; }
+  .iprice { white-space: nowrap; flex-shrink: 0; }
+  .total { font-size: ${bigFont}px; font-weight: 700; }
+  .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
+  .footer { margin-top: 10px; }
+</style>
+</head>
+<body>${buildTicketInner(t)}</body>
+</html>`
 }
+
+const IFRAME_ID = "__ticket_print_frame"
 
 export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
   // Evitar doble impresión si ya hay una en curso
-  if (document.getElementById(CONTAINER_ID)) return
+  if (document.getElementById(IFRAME_ID)) return
 
-  const style = document.createElement("style")
-  style.id = STYLE_ID
-  style.textContent = buildScopedStyle(widthMm)
-
-  const container = document.createElement("div")
-  container.id = CONTAINER_ID
-  container.innerHTML = buildTicketInner(t)
-
-  // Activar "modo impresión": la pantalla pasa a mostrar SOLO el ticket
-  document.body.appendChild(container)
-  document.head.appendChild(style)
+  // Iframe con el ticket standalone: es lo único que se manda a imprimir.
+  const iframe = document.createElement("iframe")
+  iframe.id = IFRAME_ID
+  iframe.style.position = "fixed"
+  iframe.style.right = "0"
+  iframe.style.bottom = "0"
+  iframe.style.width = "0"
+  iframe.style.height = "0"
+  iframe.style.border = "0"
+  document.body.appendChild(iframe)
 
   let cleaned = false
   const cleanup = () => {
     if (cleaned) return
     cleaned = true
-    container.remove()
-    style.remove()
-    window.removeEventListener("afterprint", cleanup)
+    iframe.remove()
   }
-  window.addEventListener("afterprint", cleanup)
 
-  // Espera a que el navegador pinte el ticket en pantalla antes de imprimir
-  // (los webviews que rasterizan capturan lo visible; necesita estar pintado).
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        window.print()
-        // Fallback: algunos webviews no disparan afterprint. Le damos tiempo
-        // de sobra para que el servicio de impresión capture el contenido.
-        setTimeout(cleanup, 8000)
-      }, 250)
-    })
-  })
+  const doc = iframe.contentWindow?.document
+  if (!doc) {
+    cleanup()
+    return
+  }
+
+  let printed = false
+  const doPrint = () => {
+    if (printed) return
+    printed = true
+    try {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+    } finally {
+      // El diálogo ya capturó el contenido; damos margen de sobra en webviews lentos
+      setTimeout(cleanup, 8000)
+    }
+  }
+
+  // Imprimir recién cuando el documento del iframe terminó de cargar.
+  // (La intermitencia venía de imprimir antes de tiempo: el webview del POSNET
+  // todavía no tenía el ticket listo y mandaba la página de atrás.)
+  iframe.onload = () => setTimeout(doPrint, 200)
+  doc.open()
+  doc.write(buildTicketDocument(t, widthMm))
+  doc.close()
+  // Fallback tardío por si onload nunca dispara en este webview
+  setTimeout(doPrint, 2500)
 }
