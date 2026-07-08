@@ -48,10 +48,12 @@ export function buildTicketHtml(t: TicketData, widthMm: TicketWidth = 80): strin
   // Siempre la fecha/hora exacta del momento de impresión (no la del pedido)
   const fechaStr = new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" })
 
-  // Medidas según el ancho de papel del negocio (el área imprimible es ~6-8mm menor)
+  // Medidas según el ancho de papel del negocio (el área imprimible es ~6-8mm menor).
+  // Fuentes grandes + negrita: las térmicas marcan mejor con texto grueso.
   const bodyW = widthMm === 58 ? 54 : 72
-  const baseFont = widthMm === 58 ? 11 : 12
-  const bigFont = widthMm === 58 ? 13 : 15
+  const baseFont = widthMm === 58 ? 15 : 17
+  const bigFont = widthMm === 58 ? 19 : 23
+  const smallFont = widthMm === 58 ? 12 : 13
 
   const itemRows = t.items
     .map(
@@ -87,21 +89,22 @@ export function buildTicketHtml(t: TicketData, widthMm: TicketWidth = 80): strin
     padding: 3mm 2mm;
     font-family: "Courier New", ui-monospace, monospace;
     font-size: ${baseFont}px;
+    font-weight: 700;
     color: #000;
-    line-height: 1.35;
+    line-height: 1.4;
   }
   .center { text-align: center; }
-  .biz { font-size: ${bigFont}px; font-weight: 700; text-transform: uppercase; }
-  .muted { font-size: 10px; }
-  .sep { border-top: 1px dashed #000; margin: 6px 0; }
+  .biz { font-size: ${bigFont}px; font-weight: 800; text-transform: uppercase; }
+  .muted { font-size: ${smallFont}px; font-weight: 600; }
+  .sep { border-top: 2px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
   td { vertical-align: top; padding: 1px 0; }
   .qty { width: 24px; white-space: nowrap; }
   .name { padding-right: 4px; word-break: break-word; }
   .price { text-align: right; white-space: nowrap; }
   .row { display: flex; justify-content: space-between; gap: 8px; }
-  .total { font-size: ${bigFont}px; font-weight: 700; }
-  .notes { font-size: 10px; margin-top: 4px; word-break: break-word; }
+  .total { font-size: ${bigFont}px; font-weight: 800; }
+  .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
   .footer { margin-top: 10px; }
 </style>
 </head>
@@ -140,18 +143,26 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
     iframe.remove()
     return
   }
-  doc.open()
-  doc.write(html)
-  doc.close()
-
-  // Pequeña espera para que el iframe renderice antes de abrir el diálogo de impresión
-  setTimeout(() => {
+  let printed = false
+  const doPrint = () => {
+    if (printed) return
+    printed = true
     try {
       iframe.contentWindow?.focus()
       iframe.contentWindow?.print()
+    } catch {
+      /* noop */
     } finally {
       // Se limpia después: el diálogo de impresión ya capturó el contenido
-      setTimeout(() => iframe.remove(), 3000)
+      setTimeout(() => iframe.remove(), 4000)
     }
-  }, 150)
+  }
+
+  // Imprimimos recién cuando el contenido del iframe está listo (más confiable
+  // en webviews lentos como el POSNET Android). Fallback por si onload no dispara.
+  iframe.onload = () => setTimeout(doPrint, 200)
+  doc.open()
+  doc.write(html)
+  doc.close()
+  setTimeout(doPrint, 600)
 }
