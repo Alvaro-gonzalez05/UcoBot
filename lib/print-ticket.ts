@@ -122,6 +122,7 @@ export function buildTicketHtml(t: TicketData, widthMm: TicketWidth = 80): strin
   ${paymentRows}
   ${cleanTicketNotes(t.notes) ? `<div class="notes">Nota: ${esc(cleanTicketNotes(t.notes))}</div>` : ""}
   <div class="center muted footer">¡Gracias por su compra!</div>
+  <div class="center muted">No válido como factura</div>
   <div class="center muted" style="margin-top:4px;font-weight:700;">UCOBOT - CODEA DESARROLLOS</div>
 </body>
 </html>`

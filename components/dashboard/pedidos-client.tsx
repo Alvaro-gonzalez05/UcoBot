@@ -1348,6 +1348,7 @@ export function PedidosClient({
                         )}
                         {cleanTicketNotes(editNotes) && <p className="mt-2 text-[10px] text-neutral-600 break-words">Nota: {cleanTicketNotes(editNotes)}</p>}
                         <p className="mt-3 text-center text-[10px] text-neutral-500">¡Gracias por su compra!</p>
+                        <p className="text-center text-[10px] text-neutral-500">No válido como factura</p>
                         <p className="mt-1 text-center text-[9px] font-bold text-neutral-500">UCOBOT - CODEA DESARROLLOS</p>
                       </div>
                     </div>
