@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { NumberInput } from "@/components/ui/number-input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ShoppingBag, LayoutGrid, LayoutList, Tag } from "lucide-react"
@@ -17,6 +18,7 @@ import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
 import { ProductImportWizard } from "./product-import-wizard"
 import { ProductEditForm } from "./product-edit-form"
+import { OrderCheckoutDialog } from "./order-checkout-dialog"
 import { toast } from "sonner"
 import { DashboardPagination } from "./dashboard-pagination"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -101,7 +103,7 @@ export function PedidosClient({
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [filterStatuses, setFilterStatuses] = useState<string[]>([])
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list")
+  const [viewMode, setViewMode] = useState<"list" | "grid">("grid")
   // Estado editable del pedido en la vista previa
   const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null }[]>([])
   const [editStatus, setEditStatus] = useState("pending")
@@ -109,6 +111,7 @@ export function PedidosClient({
   const [editNotes, setEditNotes] = useState("")
   const [addSearch, setAddSearch] = useState("")
   const [showAddProduct, setShowAddProduct] = useState(false)
+  const [checkoutOrder, setCheckoutOrder] = useState<Order | null>(null)
   const supabase = createClient()
   const router = useRouter()
 
@@ -325,6 +328,14 @@ export function PedidosClient({
       console.error("Error advancing order status:", error)
       toast.error("No se pudo actualizar el estado")
     }
+  }
+
+  // Abre el diálogo de cobro para cerrar la venta
+  const openCheckout = (order: Order) => setCheckoutOrder(order)
+
+  const handleOrderFinalized = (orderId: string) => {
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o)))
+    setCheckoutOrder(null)
   }
 
   // Abre la vista previa/edición del pedido
@@ -702,7 +713,16 @@ export function PedidosClient({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 border-t border-border pt-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="border-t border-border pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+                    {order.status !== 'completed' && order.status !== 'cancelled' && (
+                      <Button
+                        onClick={() => openCheckout(order)}
+                        className="w-full h-9 rounded-xl bg-emerald-500 text-white font-bold text-xs shadow-sm hover:bg-emerald-600 transition-colors gap-1"
+                      >
+                        <Banknote className="h-4 w-4" /> Cobrar
+                      </Button>
+                    )}
+                    <div className="flex items-center gap-2">
                     {nextStatusOf(order.status) && (
                       <Button
                         onClick={() => advanceOrderStatus(order)}
@@ -727,6 +747,7 @@ export function PedidosClient({
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -808,6 +829,15 @@ export function PedidosClient({
 
                     {/* Right: Actions */}
                     <div className="flex items-center gap-2 ml-auto" onClick={(e) => e.stopPropagation()}>
+                      {order.status !== 'completed' && order.status !== 'cancelled' && (
+                        <Button
+                          onClick={() => openCheckout(order)}
+                          variant="outline"
+                          className="rounded-xl gap-1 border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 whitespace-nowrap"
+                        >
+                          <Banknote className="h-4 w-4" /> Cobrar
+                        </Button>
+                      )}
                       {nextStatusOf(order.status) && (
                         <Button
                           onClick={() => advanceOrderStatus(order)}
@@ -963,13 +993,13 @@ export function PedidosClient({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="delivery_fee">Costo de delivery ($)</Label>
-                    <Input id="delivery_fee" type="number" step="0.01" value={deliverySettings.delivery_fee} className="rounded-xl"
-                      onChange={(e) => setDeliverySettings(p => ({ ...p, delivery_fee: parseFloat(e.target.value) || 0 }))} />
+                    <NumberInput id="delivery_fee" value={deliverySettings.delivery_fee || null} className="rounded-xl"
+                      onValueChange={(v) => setDeliverySettings(p => ({ ...p, delivery_fee: v ?? 0 }))} />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="minimum_order">Pedido mínimo ($)</Label>
-                    <Input id="minimum_order" type="number" step="0.01" value={deliverySettings.minimum_order_delivery} className="rounded-xl"
-                      onChange={(e) => setDeliverySettings(p => ({ ...p, minimum_order_delivery: parseFloat(e.target.value) || 0 }))} />
+                    <NumberInput id="minimum_order" value={deliverySettings.minimum_order_delivery || null} className="rounded-xl"
+                      onValueChange={(v) => setDeliverySettings(p => ({ ...p, minimum_order_delivery: v ?? 0 }))} />
                   </div>
                 </div>
               </div>
@@ -1194,14 +1224,34 @@ export function PedidosClient({
             </div>
           )}
 
-          <DialogFooter className="border-t border-border pt-3 mt-1">
-            <Button type="button" variant="outline" className="rounded-xl" onClick={() => setIsDetailOpen(false)}>Cancelar</Button>
-            <Button type="button" disabled={isLoading} onClick={handleSaveOrder} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C]">
-              {isLoading ? "Guardando..." : "Guardar cambios"}
-            </Button>
+          <DialogFooter className="border-t border-border pt-3 mt-1 sm:justify-between">
+            {selectedOrder && selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl gap-1 border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                onClick={() => { const o = selectedOrder; setIsDetailOpen(false); openCheckout(o) }}
+              >
+                <Banknote className="h-4 w-4" /> Cobrar
+              </Button>
+            ) : <span />}
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" className="rounded-xl" onClick={() => setIsDetailOpen(false)}>Cancelar</Button>
+              <Button type="button" disabled={isLoading} onClick={handleSaveOrder} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C]">
+                {isLoading ? "Guardando..." : "Guardar cambios"}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Diálogo de cobro (cerrar la venta) */}
+      <OrderCheckoutDialog
+        order={checkoutOrder}
+        open={!!checkoutOrder}
+        onOpenChange={(o) => { if (!o) setCheckoutOrder(null) }}
+        onFinalized={handleOrderFinalized}
+      />
     </div>
   )
 }

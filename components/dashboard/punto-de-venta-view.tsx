@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { NumberInput } from "@/components/ui/number-input"
 import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -1266,11 +1267,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       </button>
                       <div className="relative flex-1">
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
-                        <Input
-                          type="number"
-                          min="0"
-                          value={tip ? String(tip) : ""}
-                          onChange={(e) => setTip(parseFloat(e.target.value) || 0)}
+                        <NumberInput
+                          value={tip || null}
+                          onValueChange={(v) => setTip(v ?? 0)}
                           placeholder="Otro monto"
                           className="h-8 pl-5 text-sm"
                         />
@@ -1290,11 +1289,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                         <span className="text-xs text-slate-400 flex-shrink-0 w-[68px]">Paga con</span>
                         <div className="relative flex-1">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
-                          <Input
-                            type="number"
-                            min="0"
-                            value={amountPaid}
-                            onChange={(e) => setAmountPaid(e.target.value)}
+                          <NumberInput
+                            value={amountPaid === "" ? null : Number(amountPaid)}
+                            onValueChange={(v) => setAmountPaid(v == null ? "" : String(v))}
                             placeholder="Monto recibido"
                             className="h-8 pl-5 text-sm"
                           />
