@@ -90,7 +90,13 @@ function buildTicketInner(t: TicketData): string {
     <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`
 }
 
-/** CSS: en pantalla el ticket está oculto; al imprimir, se oculta TODO menos el ticket. */
+/**
+ * CSS "modo impresión": mientras está activo, la PANTALLA ENTERA muestra solo
+ * el ticket (todo lo demás se oculta también en pantalla, no solo en print).
+ * Motivo: muchos webviews de POSNET Android imprimen una captura de lo que se
+ * ve en pantalla e ignoran @media print — si el diálogo/preview está visible,
+ * eso es lo que sale impreso. Con esto, lo único visible ES el ticket.
+ */
 function buildScopedStyle(widthMm: TicketWidth): string {
   const bodyW = widthMm === 58 ? 54 : 72
   const baseFont = widthMm === 58 ? 15 : 17
@@ -98,65 +104,72 @@ function buildScopedStyle(widthMm: TicketWidth): string {
   const smallFont = widthMm === 58 ? 12 : 13
 
   return `
-    #${CONTAINER_ID} { display: none; }
-    @media print {
-      html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
-      body > *:not(#${CONTAINER_ID}) { display: none !important; }
-      #${CONTAINER_ID} {
-        display: block !important;
-        width: ${bodyW}mm;
-        margin: 0 auto;
-        padding: 3mm 2mm;
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-        font-size: ${baseFont}px;
-        font-weight: 600;
-        color: #000;
-        line-height: 1.4;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      #${CONTAINER_ID} * { box-sizing: border-box; margin: 0; padding: 0; }
-      #${CONTAINER_ID} .center { text-align: center; }
-      #${CONTAINER_ID} .biz { font-size: ${bigFont}px; font-weight: 700; text-transform: uppercase; }
-      #${CONTAINER_ID} .muted { font-size: ${smallFont}px; font-weight: 500; }
-      #${CONTAINER_ID} .bold { font-weight: 700; }
-      #${CONTAINER_ID} .sep { border-top: 1px dashed #000; margin: 8px 0; }
-      #${CONTAINER_ID} .row, #${CONTAINER_ID} .item { display: flex; justify-content: space-between; gap: 8px; }
-      #${CONTAINER_ID} .iname { min-width: 0; word-break: break-word; }
-      #${CONTAINER_ID} .iprice { white-space: nowrap; flex-shrink: 0; }
-      #${CONTAINER_ID} .total { font-size: ${bigFont}px; font-weight: 700; }
-      #${CONTAINER_ID} .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
-      #${CONTAINER_ID} .footer { margin-top: 10px; }
-      @page { size: ${widthMm}mm auto; margin: 0; }
-    }`
+    html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+    body > *:not(#${CONTAINER_ID}) { display: none !important; }
+    #${CONTAINER_ID} {
+      display: block !important;
+      width: ${bodyW}mm;
+      margin: 0 auto;
+      padding: 3mm 2mm;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: ${baseFont}px;
+      font-weight: 600;
+      color: #000;
+      line-height: 1.4;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    #${CONTAINER_ID} * { box-sizing: border-box; margin: 0; padding: 0; }
+    #${CONTAINER_ID} .center { text-align: center; }
+    #${CONTAINER_ID} .biz { font-size: ${bigFont}px; font-weight: 700; text-transform: uppercase; }
+    #${CONTAINER_ID} .muted { font-size: ${smallFont}px; font-weight: 500; }
+    #${CONTAINER_ID} .bold { font-weight: 700; }
+    #${CONTAINER_ID} .sep { border-top: 1px dashed #000; margin: 8px 0; }
+    #${CONTAINER_ID} .row, #${CONTAINER_ID} .item { display: flex; justify-content: space-between; gap: 8px; }
+    #${CONTAINER_ID} .iname { min-width: 0; word-break: break-word; }
+    #${CONTAINER_ID} .iprice { white-space: nowrap; flex-shrink: 0; }
+    #${CONTAINER_ID} .total { font-size: ${bigFont}px; font-weight: 700; }
+    #${CONTAINER_ID} .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
+    #${CONTAINER_ID} .footer { margin-top: 10px; }
+    @page { size: ${widthMm}mm auto; margin: 0; }`
 }
 
 export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
-  // Limpiar restos de una impresión anterior
-  document.getElementById(CONTAINER_ID)?.remove()
-  document.getElementById(STYLE_ID)?.remove()
+  // Evitar doble impresión si ya hay una en curso
+  if (document.getElementById(CONTAINER_ID)) return
 
   const style = document.createElement("style")
   style.id = STYLE_ID
   style.textContent = buildScopedStyle(widthMm)
-  document.head.appendChild(style)
 
   const container = document.createElement("div")
   container.id = CONTAINER_ID
   container.innerHTML = buildTicketInner(t)
-  document.body.appendChild(container)
 
+  // Activar "modo impresión": la pantalla pasa a mostrar SOLO el ticket
+  document.body.appendChild(container)
+  document.head.appendChild(style)
+
+  let cleaned = false
   const cleanup = () => {
+    if (cleaned) return
+    cleaned = true
     container.remove()
     style.remove()
     window.removeEventListener("afterprint", cleanup)
   }
   window.addEventListener("afterprint", cleanup)
 
-  // Un tick para que el DOM/estilos se apliquen antes de abrir el diálogo
-  setTimeout(() => {
-    window.print()
-    // Fallback: algunos webviews no disparan afterprint
-    setTimeout(cleanup, 4000)
-  }, 80)
+  // Espera a que el navegador pinte el ticket en pantalla antes de imprimir
+  // (los webviews que rasterizan capturan lo visible; necesita estar pintado).
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.print()
+        // Fallback: algunos webviews no disparan afterprint. Le damos tiempo
+        // de sobra para que el servicio de impresión capture el contenido.
+        setTimeout(cleanup, 8000)
+      }, 250)
+    })
+  })
 }
