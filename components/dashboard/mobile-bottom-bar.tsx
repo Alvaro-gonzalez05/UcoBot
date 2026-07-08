@@ -43,6 +43,7 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
   const [isMoreOpen, setIsMoreOpen] = useState(false)
   const [isShrunk, setIsShrunk] = useState(false)
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [forceHidden, setForceHidden] = useState(false)
 
   // El chat avisa cuando hay una conversación abierta (ahí sí se oculta la barra)
   useEffect(() => {
@@ -50,6 +51,14 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
     sync()
     window.addEventListener("ucobot:chat-state", sync)
     return () => window.removeEventListener("ucobot:chat-state", sync)
+  }, [])
+
+  // Otras pantallas (ej: carrito del punto de venta) pueden pedir ocultar el downbar
+  useEffect(() => {
+    const sync = () => setForceHidden(document.body.dataset.hideDownbar === "true")
+    sync()
+    window.addEventListener("ucobot:downbar", sync)
+    return () => window.removeEventListener("ucobot:downbar", sync)
   }, [])
 
   // Animación de scroll: bajar achica la barra, subir la agranda.
@@ -81,6 +90,7 @@ export function MobileBottomBar({ user, profile }: MobileBottomBarProps) {
     setIsMoreOpen(false)
   }, [pathname])
 
+  if (forceHidden) return null
   if (HIDDEN_ROUTES.some((r) => pathname?.startsWith(r))) return null
   // En Mensajes la barra vive en la lista de conversaciones, pero no dentro de un chat
   if (pathname?.startsWith("/dashboard/chat") && isChatOpen) return null

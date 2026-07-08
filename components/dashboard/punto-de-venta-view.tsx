@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { cn, normalizeSearchText } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -121,8 +121,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [visibleCount, setVisibleCount] = useState(PRODUCTS_PAGE_SIZE)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
-  // Feedback visual al agregar un producto (flash + "+1" sobre la tarjeta)
-  const [justAdded, setJustAdded] = useState<string | null>(null)
+  // Feedback visual al agregar un producto (flash + "+N" sobre la tarjeta).
+  // count acumula los toques seguidos: 1 toque → +1, 2 toques → +2, etc.
+  const [justAdded, setJustAdded] = useState<{ id: string; count: number } | null>(null)
+  const justAddedTimer = useRef<number | null>(null)
   const [clientSearch, setClientSearch] = useState("")
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [paymentMethod, setPaymentMethod] = useState("cash")
@@ -154,6 +156,16 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   // Solo los medios de pago habilitados por el negocio
   const enabledPaymentOptions = paymentOptions.filter((o) => posSettings.payment_methods.includes(o.id))
+
+  // En mobile, ocultar el downbar del dashboard mientras el carrito está abierto
+  useEffect(() => {
+    document.body.dataset.hideDownbar = isCartOpen ? "true" : "false"
+    window.dispatchEvent(new Event("ucobot:downbar"))
+    return () => {
+      document.body.dataset.hideDownbar = "false"
+      window.dispatchEvent(new Event("ucobot:downbar"))
+    }
+  }, [isCartOpen])
 
   useEffect(() => {
     // Cargar premios activos y la regla de puntos del negocio
@@ -358,9 +370,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   }
 
   const addProductToCart = (product: Product) => {
-    // Flash de confirmación sobre la tarjeta tocada
-    setJustAdded(product.id)
-    window.setTimeout(() => setJustAdded((prev) => (prev === product.id ? null : prev)), 650)
+    // Flash de confirmación: acumula "+N" si se toca el mismo producto varias veces seguidas
+    setJustAdded((prev) =>
+      prev && prev.id === product.id ? { id: product.id, count: prev.count + 1 } : { id: product.id, count: 1 }
+    )
+    if (justAddedTimer.current) window.clearTimeout(justAddedTimer.current)
+    justAddedTimer.current = window.setTimeout(() => setJustAdded(null), 750)
     const promo = bestProductPromotion(
       { id: product.id, price: product.price, category: product.category },
       promotions
@@ -791,20 +806,21 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     onClick={() => addProductToCart(product)}
                     className={cn(
                       "group relative rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-muted shadow-[0_16px_30px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_16px_30px_-12px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_24px_40px_-14px_rgba(17,24,39,0.6)] dark:hover:shadow-[0_24px_40px_-14px_rgba(0,0,0,1)] active:scale-95",
-                      justAdded === product.id && "ring-2 ring-[#D1F366] scale-[0.97]"
+                      justAdded?.id === product.id && "ring-2 ring-[#D1F366] scale-[0.97]"
                     )}
                   >
-                    {/* "+1" que salta al agregar */}
+                    {/* "+N" que salta al agregar (dentro de la tarjeta para que no lo corte el scroll) */}
                     <AnimatePresence>
-                      {justAdded === product.id && (
+                      {justAdded?.id === product.id && (
                         <motion.span
+                          key={justAdded.count}
                           initial={{ opacity: 0, y: 6, scale: 0.5 }}
-                          animate={{ opacity: 1, y: -14, scale: 1.1 }}
-                          exit={{ opacity: 0, y: -26, scale: 0.8 }}
-                          transition={{ duration: 0.4, ease: "easeOut" }}
-                          className="pointer-events-none absolute -top-1 right-3 z-20 rounded-full bg-[#D1F366] px-2.5 py-1 text-sm font-black text-[#1C1C28] shadow-lg"
+                          animate={{ opacity: 1, y: 0, scale: 1.1 }}
+                          exit={{ opacity: 0, y: -8, scale: 0.8 }}
+                          transition={{ duration: 0.35, ease: "easeOut" }}
+                          className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-[#D1F366] px-2.5 py-1 text-sm font-black text-[#1C1C28] shadow-lg"
                         >
-                          +1
+                          +{justAdded.count}
                         </motion.span>
                       )}
                     </AnimatePresence>
