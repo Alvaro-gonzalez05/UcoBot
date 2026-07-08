@@ -58,11 +58,10 @@ export function buildTicketHtml(t: TicketData, widthMm: TicketWidth = 80): strin
   const itemRows = t.items
     .map(
       (it) => `
-      <tr>
-        <td class="qty">${it.quantity}x</td>
-        <td class="name">${esc(it.name)}</td>
-        <td class="price">${money(it.price * it.quantity)}</td>
-      </tr>`
+      <div class="item">
+        <span class="iname">${it.quantity}x ${esc(it.name)}</span>
+        <span class="iprice">${money(it.price * it.quantity)}</span>
+      </div>`
     )
     .join("")
 
@@ -87,23 +86,21 @@ export function buildTicketHtml(t: TicketData, widthMm: TicketWidth = 80): strin
     width: ${bodyW}mm;
     margin: 0 auto;
     padding: 3mm 2mm;
-    font-family: "Courier New", ui-monospace, monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     font-size: ${baseFont}px;
-    font-weight: 700;
+    font-weight: 600;
     color: #000;
     line-height: 1.4;
   }
   .center { text-align: center; }
-  .biz { font-size: ${bigFont}px; font-weight: 800; text-transform: uppercase; }
-  .muted { font-size: ${smallFont}px; font-weight: 600; }
-  .sep { border-top: 2px dashed #000; margin: 6px 0; }
-  table { width: 100%; border-collapse: collapse; }
-  td { vertical-align: top; padding: 1px 0; }
-  .qty { width: 24px; white-space: nowrap; }
-  .name { padding-right: 4px; word-break: break-word; }
-  .price { text-align: right; white-space: nowrap; }
+  .biz { font-size: ${bigFont}px; font-weight: 700; text-transform: uppercase; }
+  .muted { font-size: ${smallFont}px; font-weight: 500; }
+  .sep { border-top: 1px dashed #000; margin: 8px 0; }
   .row { display: flex; justify-content: space-between; gap: 8px; }
-  .total { font-size: ${bigFont}px; font-weight: 800; }
+  .item { display: flex; justify-content: space-between; gap: 8px; }
+  .iname { min-width: 0; word-break: break-word; }
+  .iprice { white-space: nowrap; flex-shrink: 0; }
+  .total { font-size: ${bigFont}px; font-weight: 700; }
   .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
   .footer { margin-top: 10px; }
 </style>
@@ -116,7 +113,7 @@ export function buildTicketHtml(t: TicketData, widthMm: TicketWidth = 80): strin
   ${t.clientName ? `<div class="row"><span>Cliente</span><span>${esc(t.clientName)}</span></div>` : ""}
   ${t.orderType ? `<div class="row"><span>Modalidad</span><span>${esc(t.orderType)}</span></div>` : ""}
   <div class="sep"></div>
-  <table>${itemRows}</table>
+  ${itemRows}
   <div class="sep"></div>
   <div class="row total"><span>TOTAL</span><span>${money(t.total)}</span></div>
   ${paymentRows}
