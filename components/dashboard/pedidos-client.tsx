@@ -19,7 +19,7 @@ import { ProductForm } from "./product-form"
 import { ProductImportWizard } from "./product-import-wizard"
 import { ProductEditForm } from "./product-edit-form"
 import { OrderCheckoutDialog, OrderCheckoutPanel, type PaymentRecord } from "./order-checkout-dialog"
-import { printTicket } from "@/lib/print-ticket"
+import { printTicket, cleanTicketNotes } from "@/lib/print-ticket"
 import { toast } from "sonner"
 import { DashboardPagination } from "./dashboard-pagination"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -119,11 +119,23 @@ export function PedidosClient({
   const [addSearch, setAddSearch] = useState("")
   const [showAddProduct, setShowAddProduct] = useState(false)
   const [checkoutOrder, setCheckoutOrder] = useState<Order | null>(null)
+  const [ticketWidth, setTicketWidth] = useState<58 | 80>(80)
   // Modo del modal de detalle: edición, cobro o vista previa de impresión (se intercambian con animación)
   const [detailMode, setDetailMode] = useState<"edit" | "checkout" | "print">("edit")
   const [orderSearch, setOrderSearch] = useState("")
   const supabase = createClient()
   const router = useRouter()
+
+  // Ancho del ticket configurado por el negocio (58/80mm) para imprimir bien
+  useEffect(() => {
+    supabase
+      .from("pos_settings")
+      .select("ticket_width")
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data?.ticket_width === 58 || data?.ticket_width === 80) setTicketWidth(data.ticket_width)
+      })
+  }, [])
 
   // Extract unique tags from all orders
   const allTags = Array.from(new Set(orders.flatMap(o => o.tags || []))).sort()
@@ -477,7 +489,7 @@ export function PedidosClient({
       total: editTotal,
       payments: selectedOrder.payments,
       notes: editNotes || undefined,
-    })
+    }, ticketWidth)
   }
 
   const updateItemQty = (index: number, delta: number) => {
@@ -1306,7 +1318,7 @@ export function PedidosClient({
                   >
                     {/* Vista previa del ticket */}
                     <div className="md:flex-1 md:min-h-0 md:overflow-y-auto flex justify-center py-1">
-                      <div className="w-full max-w-[280px] rounded-lg bg-white text-black shadow-lg border border-border/50 px-4 py-5 font-mono text-[12px] leading-snug h-fit">
+                      <div className={cn("w-full rounded-lg bg-white text-black shadow-lg border border-border/50 px-4 py-5 font-mono text-[12px] leading-snug h-fit", ticketWidth === 58 ? "max-w-[210px]" : "max-w-[280px]")}>
                         <p className="text-center text-[14px] font-bold uppercase">{businessName}</p>
                         <p className="text-center text-[10px] text-neutral-500">
                           {format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })} · se imprime con la hora exacta
@@ -1334,7 +1346,7 @@ export function PedidosClient({
                             ))}
                           </>
                         )}
-                        {editNotes && <p className="mt-2 text-[10px] text-neutral-600 break-words">Nota: {editNotes}</p>}
+                        {cleanTicketNotes(editNotes) && <p className="mt-2 text-[10px] text-neutral-600 break-words">Nota: {cleanTicketNotes(editNotes)}</p>}
                         <p className="mt-3 text-center text-[10px] text-neutral-500">¡Gracias por su compra!</p>
                         <p className="mt-1 text-center text-[9px] font-bold text-neutral-500">UCOBOT - CODEA DESARROLLOS</p>
                       </div>

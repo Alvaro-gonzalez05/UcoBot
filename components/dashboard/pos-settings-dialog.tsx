@@ -21,6 +21,7 @@ export interface PosSettings {
   payment_methods: string[]
   tip_enabled: boolean
   tip_percent: number
+  ticket_width: number
 }
 
 const PAYMENT_METHODS = [
@@ -47,6 +48,7 @@ export function PosSettingsDialog({
   const [methods, setMethods] = useState<string[]>(settings.payment_methods)
   const [tipEnabled, setTipEnabled] = useState(settings.tip_enabled)
   const [tipPercent, setTipPercent] = useState(String(settings.tip_percent))
+  const [ticketWidth, setTicketWidth] = useState<number>(settings.ticket_width || 80)
   const [saving, setSaving] = useState(false)
 
   const toggleMethod = (id: string) => {
@@ -72,6 +74,7 @@ export function PosSettingsDialog({
         payment_methods: ordered,
         tip_enabled: tipEnabled,
         tip_percent: percent,
+        ticket_width: ticketWidth,
       }
       const { error } = await supabase.from("pos_settings").upsert({
         user_id: userId,
@@ -162,6 +165,31 @@ export function PosSettingsDialog({
                 <span className="text-sm text-muted-foreground">%</span>
               </div>
             )}
+          </div>
+
+          {/* Ancho del ticket */}
+          <div className="space-y-2 rounded-xl border border-border/60 p-3">
+            <div>
+              <Label className="text-sm font-semibold">Ancho del ticket</Label>
+              <p className="text-[11px] text-muted-foreground">Elegí según tu impresora térmica (80mm es lo más común).</p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {[80, 58].map((w) => (
+                <button
+                  key={w}
+                  type="button"
+                  onClick={() => setTicketWidth(w)}
+                  className={cn(
+                    "rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors",
+                    ticketWidth === w
+                      ? "border-[#D1F366] bg-[#D1F366]/10 text-foreground"
+                      : "border-border/60 bg-muted/20 text-muted-foreground hover:border-border"
+                  )}
+                >
+                  {w}mm
+                </button>
+              ))}
+            </div>
           </div>
 
           <Button

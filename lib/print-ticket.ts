@@ -23,12 +23,35 @@ export interface TicketData {
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
+/**
+ * Limpia las notas para el ticket: saca el "Método de pago: ..." y el
+ * "Pagó con ... · Vuelto ..." que arrastra el punto de venta, porque hasta
+ * que la venta no está cobrada no corresponde mostrar un medio de pago.
+ */
+export function cleanTicketNotes(notes?: string | null): string {
+  if (!notes) return ""
+  return notes
+    .split(/\.\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => !/^m[eé]todo de pago/i.test(s))
+    .filter((s) => !/^pag[oó]\s+con/i.test(s))
+    .join(". ")
+}
+
 const money = (v: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2 }).format(v)
 
-export function buildTicketHtml(t: TicketData): string {
+export type TicketWidth = 58 | 80
+
+export function buildTicketHtml(t: TicketData, widthMm: TicketWidth = 80): string {
   // Siempre la fecha/hora exacta del momento de impresión (no la del pedido)
   const fechaStr = new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" })
+
+  // Medidas según el ancho de papel del negocio (el área imprimible es ~6-8mm menor)
+  const bodyW = widthMm === 58 ? 54 : 72
+  const baseFont = widthMm === 58 ? 11 : 12
+  const bigFont = widthMm === 58 ? 13 : 15
 
   const itemRows = t.items
     .map(
@@ -53,20 +76,22 @@ export function buildTicketHtml(t: TicketData): string {
 <html>
 <head>
 <meta charset="utf-8" />
+<title> </title>
 <style>
-  @page { size: 80mm auto; margin: 0; }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  @page { size: ${widthMm}mm auto; margin: 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; }
   body {
-    width: 72mm;
+    width: ${bodyW}mm;
     margin: 0 auto;
-    padding: 4mm 2mm;
+    padding: 3mm 2mm;
     font-family: "Courier New", ui-monospace, monospace;
-    font-size: 12px;
+    font-size: ${baseFont}px;
     color: #000;
     line-height: 1.35;
   }
   .center { text-align: center; }
-  .biz { font-size: 15px; font-weight: 700; text-transform: uppercase; }
+  .biz { font-size: ${bigFont}px; font-weight: 700; text-transform: uppercase; }
   .muted { font-size: 10px; }
   .sep { border-top: 1px dashed #000; margin: 6px 0; }
   table { width: 100%; border-collapse: collapse; }
@@ -75,7 +100,7 @@ export function buildTicketHtml(t: TicketData): string {
   .name { padding-right: 4px; word-break: break-word; }
   .price { text-align: right; white-space: nowrap; }
   .row { display: flex; justify-content: space-between; gap: 8px; }
-  .total { font-size: 15px; font-weight: 700; }
+  .total { font-size: ${bigFont}px; font-weight: 700; }
   .notes { font-size: 10px; margin-top: 4px; word-break: break-word; }
   .footer { margin-top: 10px; }
 </style>
@@ -92,15 +117,15 @@ export function buildTicketHtml(t: TicketData): string {
   <div class="sep"></div>
   <div class="row total"><span>TOTAL</span><span>${money(t.total)}</span></div>
   ${paymentRows}
-  ${t.notes ? `<div class="notes">Nota: ${esc(t.notes)}</div>` : ""}
+  ${cleanTicketNotes(t.notes) ? `<div class="notes">Nota: ${esc(cleanTicketNotes(t.notes))}</div>` : ""}
   <div class="center muted footer">¡Gracias por su compra!</div>
   <div class="center muted" style="margin-top:4px;font-weight:700;">UCOBOT - CODEA DESARROLLOS</div>
 </body>
 </html>`
 }
 
-export function printTicket(t: TicketData) {
-  const html = buildTicketHtml(t)
+export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
+  const html = buildTicketHtml(t, widthMm)
   const iframe = document.createElement("iframe")
   iframe.style.position = "fixed"
   iframe.style.right = "0"

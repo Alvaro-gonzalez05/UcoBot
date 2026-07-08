@@ -146,6 +146,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     payment_methods: ["cash", "card", "transfer", "qr"],
     tip_enabled: false,
     tip_percent: 10,
+    ticket_width: 80,
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [tip, setTip] = useState(0)
@@ -191,7 +192,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     // Cargar configuración del POS (medios de pago + propina)
     supabase
       .from("pos_settings")
-      .select("payment_methods, tip_enabled, tip_percent")
+      .select("payment_methods, tip_enabled, tip_percent, ticket_width")
       .eq("user_id", userId)
       .maybeSingle()
       .then(({ data }) => {
@@ -205,6 +206,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             payment_methods: pm,
             tip_enabled: data.tip_enabled ?? false,
             tip_percent: Number(data.tip_percent) || 10,
+            ticket_width: Number(data.ticket_width) || 80,
           })
           if (!pm.includes("cash")) setPaymentMethod(pm[0])
         }
