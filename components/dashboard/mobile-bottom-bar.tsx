@@ -33,7 +33,7 @@ const MORE_ITEMS = [
 ]
 
 // Rutas donde el downbar molesta (pantallas de altura completa con input abajo)
-const HIDDEN_ROUTES = ["/dashboard/punto-de-venta"]
+const HIDDEN_ROUTES: string[] = []
 
 const glassPanel =
   "bg-white/70 dark:bg-[#1C1C28]/70 backdrop-blur-2xl backdrop-saturate-150 border border-white/40 dark:border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.18)]"

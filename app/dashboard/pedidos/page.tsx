@@ -51,19 +51,19 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
   // Get unique categories
   const categories = [...new Set(products?.map(p => p.category).filter(Boolean))] as string[]
 
-  // Fetch delivery settings
-  const { data: deliverySettings } = await supabase
-    .from("delivery_settings")
-    .select("*")
-    .eq("user_id", ownerId)
-    .single()
+  // Fetch delivery settings + business name (para el ticket impreso)
+  const [{ data: deliverySettings }, { data: profile }] = await Promise.all([
+    supabase.from("delivery_settings").select("*").eq("user_id", ownerId).single(),
+    supabase.from("user_profiles").select("business_name").eq("id", ownerId).single(),
+  ])
 
   return (
-    <PedidosClient 
+    <PedidosClient
       initialOrders={orders || []}
       initialProducts={products || []}
       initialCategories={categories}
       deliverySettings={deliverySettings || undefined}
+      businessName={profile?.business_name || "Mi Negocio"}
       pagination={{
         page,
         limit,

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { cn } from "@/lib/utils"
+import { cn, normalizeSearchText } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
@@ -81,6 +81,7 @@ function parseRewardDiscount(reward: Reward, subtotal: number): number {
   return Math.min(discount, subtotal)
 }
 
+
 interface LoyaltySettings {
   points_per_unit: number
   unit_amount: number
@@ -115,11 +116,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const supabase = createClient()
   const [activeCategory, setActiveCategory] = useState("Todos")
   const [productSearch, setProductSearch] = useState("")
-  const [products, setProducts] = useState<Product[]>(initialProducts)
-  const [page, setPage] = useState(0)
-  const [hasMoreProducts, setHasMoreProducts] = useState(initialProducts.length === PRODUCTS_PAGE_SIZE)
-  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
-  const [isRefetching, setIsRefetching] = useState(false)
+  // Catálogo completo en memoria: la búsqueda filtra acá (instantánea, sin ir al servidor)
+  const [allProducts, setAllProducts] = useState<Product[]>(initialProducts)
+  const [visibleCount, setVisibleCount] = useState(PRODUCTS_PAGE_SIZE)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
   const [clientSearch, setClientSearch] = useState("")
@@ -276,90 +275,53 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const suggestedTip = Math.round(discountedSubtotal * (posSettings.tip_percent / 100))
   const tipApplied = tip > 0
 
-  const fetchProductsPage = async ({
-    pageNumber,
-    replace,
-    category,
-    search,
-  }: {
-    pageNumber: number
-    replace: boolean
-    category: string
-    search: string
-  }) => {
-    setIsLoadingProducts(true)
-    if (replace) setIsRefetching(true)
-
-    try {
-      const from = pageNumber * PRODUCTS_PAGE_SIZE
-      const to = from + PRODUCTS_PAGE_SIZE - 1
-      let query = supabase
+  // Trae TODO el catálogo una sola vez: la búsqueda y las categorías filtran
+  // en memoria (instantáneo, sin viajes al servidor por cada tecla).
+  useEffect(() => {
+    let cancelled = false
+    const loadAll = async () => {
+      const { data, error } = await supabase
         .from("products")
         .select("id, name, description, price, category, is_available, image_url, created_at")
         .eq("user_id", userId)
         .eq("is_available", true)
         .order("created_at", { ascending: false })
-        .range(from, to)
-
-      if (category !== "Todos") {
-        query = query.eq("category", category)
-      }
-
-      const normalizedSearch = search.trim()
-      if (normalizedSearch) {
-        query = query.or(`name.ilike.%${normalizedSearch}%,description.ilike.%${normalizedSearch}%,category.ilike.%${normalizedSearch}%`)
-      }
-
-      const { data, error } = await query
-      if (error) throw error
-
-      const nextProducts = (data || []) as Product[]
-
-      setProducts((prev) => {
-        if (replace) {
-          return nextProducts
-        }
-
-        const seen = new Set(prev.map((product) => product.id))
-        return [...prev, ...nextProducts.filter((product) => !seen.has(product.id))]
-      })
-
-      setHasMoreProducts(nextProducts.length === PRODUCTS_PAGE_SIZE)
-      setPage(pageNumber)
-    } catch (error) {
-      console.error("Error fetching POS products:", error)
-      toast.error("No se pudieron cargar mas productos")
-    } finally {
-      setIsLoadingProducts(false)
-      setIsRefetching(false)
+      if (!cancelled && !error && data) setAllProducts(data as Product[])
     }
-  }
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchProductsPage({
-        pageNumber: 0,
-        replace: true,
-        category: activeCategory,
-        search: productSearch,
-      })
-    }, 250)
-
-    return () => clearTimeout(timer)
-  }, [activeCategory, productSearch])
-
-  useEffect(() => {
-    if (!isIntersecting || isLoadingProducts || !hasMoreProducts) {
-      return
+    loadAll()
+    return () => {
+      cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
 
-    fetchProductsPage({
-      pageNumber: page + 1,
-      replace: false,
-      category: activeCategory,
-      search: productSearch,
-    })
-  }, [isIntersecting, isLoadingProducts, hasMoreProducts, page, activeCategory, productSearch])
+  // Filtrado client-side, tolerante a acentos. Con búsqueda activa se ignora
+  // la categoría seleccionada (búsqueda global sobre todo el catálogo).
+  const filteredProducts = useMemo(() => {
+    const q = normalizeSearchText(productSearch.trim())
+    if (q) {
+      return allProducts.filter((p) =>
+        normalizeSearchText(`${p.name} ${p.description ?? ""} ${p.category ?? ""}`).includes(q)
+      )
+    }
+    if (activeCategory !== "Todos") return allProducts.filter((p) => p.category === activeCategory)
+    return allProducts
+  }, [allProducts, productSearch, activeCategory])
+
+  const products = filteredProducts.slice(0, visibleCount)
+  const hasMoreProducts = visibleCount < filteredProducts.length
+
+  // Reset del paginado visual al cambiar búsqueda o categoría
+  useEffect(() => {
+    setVisibleCount(PRODUCTS_PAGE_SIZE)
+  }, [productSearch, activeCategory])
+
+  // Scroll infinito: solo agranda la ventana visible (sin red)
+  useEffect(() => {
+    if (isIntersecting && hasMoreProducts) {
+      setVisibleCount((c) => c + PRODUCTS_PAGE_SIZE)
+    }
+  }, [isIntersecting, hasMoreProducts])
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("es-AR", {
@@ -518,6 +480,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           status: status,
           items: orderItems,
           total_amount: Number(total.toFixed(2)),
+          tip_amount: Number(tip.toFixed(2)),
+          payments: status === "completed" ? [{ method: paymentMethod, amount: Number(total.toFixed(2)), label: paymentLabel }] : [],
           delivery_phone: selectedClient?.phone || selectedClient?.instagram_username || "venta-local",
           customer_notes: noteParts.join(". "),
           source: "pos",
@@ -750,7 +714,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const moveOrder = () => submitSale("pending")
 
   return (
-    <div className="h-full w-full bg-background p-3 sm:p-4 lg:p-4 xl:p-6 overflow-hidden">
+    <div className="h-full w-full bg-background p-3 pb-24 sm:p-4 sm:pb-24 lg:p-4 lg:pb-4 xl:p-6 overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1500px] gap-4 rounded-[2rem] bg-transparent">
         <section
           className={cn(
@@ -762,7 +726,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <Input
               value={productSearch}
-              onChange={(event) => setProductSearch(event.target.value)}
+              onChange={(event) => {
+                setProductSearch(event.target.value)
+                // La búsqueda es global: al escribir volvemos a "Todos" para que la UI coincida
+                if (event.target.value.trim() && activeCategory !== "Todos") setActiveCategory("Todos")
+              }}
               placeholder="Buscar productos por nombre, descripcion o categoria..."
               className="h-auto border-0 bg-transparent p-0 text-sm text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
             />
@@ -787,29 +755,20 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           </div>
 
           <div className="flex-1 overflow-y-auto -mx-1 px-1 pb-2 custom-scrollbar">
-          {isRefetching ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(170px,1fr))]">
-              {Array.from({ length: PRODUCTS_PAGE_SIZE }).map((_, i) => (
-                <div key={i} className="animate-pulse rounded-[2rem] bg-white dark:bg-muted p-3 shadow-[0_18px_45px_-8px_rgba(17,24,39,0.5)] dark:shadow-[0_18px_45px_-8px_rgba(0,0,0,0.9)]">
-                  <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted dark:bg-muted/60 p-2">
-                    <div className="aspect-square rounded-[1.25rem] bg-slate-200 dark:bg-muted-foreground/20" />
-                  </div>
-                  <div className="space-y-2">
-                    <div className="h-4 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
-                    <div className="h-3 w-3/4 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
-                    <div className="flex items-center justify-between pt-2">
-                      <div className="h-6 w-24 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
-                      <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-muted-foreground/20" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : products.length === 0 && !isLoadingProducts ? (
+          {products.length === 0 ? (
             <div className="flex h-[420px] items-center justify-center rounded-[2rem] border border-dashed border-slate-200 dark:border-border bg-white dark:bg-card text-center text-slate-500 dark:text-muted-foreground">
               <div className="max-w-sm px-6">
-                <p className="text-lg font-semibold text-slate-700 dark:text-foreground">No hay productos disponibles</p>
-                <p className="mt-2 text-sm text-slate-500 dark:text-muted-foreground">Carga productos en tu catalogo para empezar a vender desde esta seccion.</p>
+                {productSearch.trim() ? (
+                  <>
+                    <p className="text-lg font-semibold text-slate-700 dark:text-foreground">Sin resultados para &quot;{productSearch.trim()}&quot;</p>
+                    <p className="mt-2 text-sm text-slate-500 dark:text-muted-foreground">Probá con otro nombre, descripción o categoría.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-semibold text-slate-700 dark:text-foreground">No hay productos disponibles</p>
+                    <p className="mt-2 text-sm text-slate-500 dark:text-muted-foreground">Carga productos en tu catalogo para empezar a vender desde esta seccion.</p>
+                  </>
+                )}
                   </div>
                 </div>
               ) : (
@@ -887,9 +846,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               </div>
 
               <div ref={loadMoreRef} className="flex justify-center py-6">
-                {isLoadingProducts ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-                ) : hasMoreProducts ? (
+                {hasMoreProducts ? (
                   <div className="h-5" />
                 ) : products.length > 0 ? (
                   <p className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">No hay mas productos</p>

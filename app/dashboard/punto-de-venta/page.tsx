@@ -20,8 +20,7 @@ export default async function PuntoDeVentaPage() {
       .select("id, name, description, price, category, is_available, image_url, created_at")
       .eq("user_id", ownerId)
       .eq("is_available", true)
-      .order("created_at", { ascending: false })
-      .range(0, 17),
+      .order("created_at", { ascending: false }),
     supabase
       .from("clients")
       .select("id, name, phone, instagram_username, points, stamps, total_purchases, loyalty_code")
