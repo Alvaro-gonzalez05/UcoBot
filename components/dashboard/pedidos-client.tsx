@@ -435,7 +435,34 @@ export function PedidosClient({
   const savePartialPayments = async (payments: PaymentRecord[]) => {
     if (!selectedOrder) return
     await supabase.from("orders").update({ payments }).eq("id", selectedOrder.id)
+    setSelectedOrder((prev) => (prev ? { ...prev, payments } : prev))
     setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, payments } : o)))
+  }
+
+  // Quita un pago ya registrado (deshacer cobro). Si tenía propina, se descuenta también.
+  const removePayment = async (index: number) => {
+    if (!selectedOrder) return
+    const current = selectedOrder.payments || []
+    const removed = current[index]
+    if (!removed) return
+    const next = current.filter((_, i) => i !== index)
+    const newTip = Math.max(0, Number(((selectedOrder.tip_amount || 0) - (removed.tip || 0)).toFixed(2)))
+    // Si el pedido estaba finalizado, al quitarle un pago deja de estar completo → vuelve a "Listo"
+    const revertStatus = selectedOrder.status === "completed" ? "ready" : null
+    try {
+      const { error } = await supabase
+        .from("orders")
+        .update({ payments: next, tip_amount: newTip, ...(revertStatus ? { status: revertStatus } : {}) })
+        .eq("id", selectedOrder.id)
+      if (error) throw error
+      setSelectedOrder((prev) => (prev ? { ...prev, payments: next, tip_amount: newTip, ...(revertStatus ? { status: revertStatus } : {}) } : prev))
+      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, payments: next, tip_amount: newTip, ...(revertStatus ? { status: revertStatus } : {}) } : o)))
+      if (revertStatus) setEditStatus(revertStatus)
+      toast.success(`Pago quitado (${removed.label || removed.method}: ${formatCurrency(removed.amount + (removed.tip || 0))})${revertStatus ? " · el pedido volvió a Listo" : ""}`)
+    } catch (error) {
+      console.error("Error removing payment:", error)
+      toast.error("No se pudo quitar el pago")
+    }
   }
 
   // Imprime el ticket con lo que se ve en pantalla (items editados incluidos)
@@ -592,10 +619,10 @@ export function PedidosClient({
     <div className="flex flex-col h-full overflow-hidden">
       <audio ref={audioRef} id="new-order-sound" src="/sounds/cash-register.mp3" preload="auto" />
       {/* Header */}
-      <div className="flex justify-between items-center mb-6 px-1 pt-2">
+      <div className="flex justify-between items-center mb-3 sm:mb-6 px-1 pt-2">
         <div>
-          <h2 className="text-3xl font-bold dark:text-white">Gestión de Pedidos</h2>
-          <p className="text-muted-foreground text-sm mt-1">Administración de órdenes y ventas en tiempo real.</p>
+          <h2 className="text-2xl sm:text-3xl font-bold dark:text-white">Gestión de Pedidos</h2>
+          <p className="text-muted-foreground text-xs sm:text-sm mt-1">Administración de órdenes y ventas en tiempo real.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative group hidden sm:block">
@@ -611,18 +638,30 @@ export function PedidosClient({
         </div>
       </div>
 
+      {/* Buscador en móvil (en desktop vive en el header) */}
+      <div className="relative sm:hidden mb-3 px-1">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <input
+          className="w-full pl-10 pr-4 py-2.5 rounded-full border border-border bg-card shadow-sm focus:ring-2 focus:ring-[#D1F366] focus:outline-none text-sm text-foreground placeholder-muted-foreground"
+          placeholder="Buscar orden o cliente..."
+          type="text"
+          value={orderSearch}
+          onChange={(e) => setOrderSearch(e.target.value)}
+        />
+      </div>
+
       {/* Tabs */}
       <Tabs defaultValue="orders" className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="w-full justify-start rounded-2xl bg-muted p-1 mb-4 h-auto">
-          <TabsTrigger value="orders" className="rounded-xl flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-5 py-2.5 font-semibold">
+        <TabsList className="w-full justify-start rounded-2xl bg-muted p-1 mb-4 h-auto overflow-x-auto">
+          <TabsTrigger value="orders" className="rounded-xl flex items-center gap-1.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-3.5 sm:px-5 py-2 sm:py-2.5 font-semibold text-sm whitespace-nowrap shrink-0">
             <ShoppingCart className="h-4 w-4" />
             Pedidos
           </TabsTrigger>
-          <TabsTrigger value="products" className="rounded-xl flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-5 py-2.5 font-semibold">
+          <TabsTrigger value="products" className="rounded-xl flex items-center gap-1.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-3.5 sm:px-5 py-2 sm:py-2.5 font-semibold text-sm whitespace-nowrap shrink-0">
             <Package className="h-4 w-4" />
             Productos
           </TabsTrigger>
-          <TabsTrigger value="settings" className="rounded-xl flex items-center gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-5 py-2.5 font-semibold">
+          <TabsTrigger value="settings" className="rounded-xl flex items-center gap-1.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-3.5 sm:px-5 py-2 sm:py-2.5 font-semibold text-sm whitespace-nowrap shrink-0">
             <Settings className="h-4 w-4" />
             Configuración
           </TabsTrigger>
@@ -1162,7 +1201,8 @@ export function PedidosClient({
 
       {/* Vista previa / edición del pedido */}
       <Dialog open={isDetailOpen} onOpenChange={(o) => { setIsDetailOpen(o); if (!o) setDetailMode("edit") }}>
-        <DialogContent className="max-w-4xl w-[calc(100vw-1rem)] sm:w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6">
+        <DialogContent className="max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+          <div className="mx-auto -mt-1 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted-foreground/25 sm:hidden" />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {detailMode === "checkout" && <Banknote className="h-5 w-5 text-emerald-600" />}
@@ -1433,8 +1473,17 @@ export function PedidosClient({
                   {selectedOrder.payments && selectedOrder.payments.length > 0 && (
                     <div className="flex flex-wrap justify-end gap-1.5">
                       {selectedOrder.payments.map((p, i) => (
-                        <span key={i} className="rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                          {p.label || p.method}: {formatCurrency(p.amount)}
+                        <span key={i} className="inline-flex items-center gap-1 rounded-full border border-border bg-background pl-2 pr-1 py-1 text-[10px] font-bold text-foreground shadow-sm">
+                          {p.label || p.method}: pagó {formatCurrency(p.amount + (p.tip || 0))}
+                          {p.tip ? <span className="font-medium text-muted-foreground">({formatCurrency(p.tip)} de propina)</span> : null}
+                          <button
+                            type="button"
+                            title="Quitar este pago"
+                            onClick={() => removePayment(i)}
+                            className="rounded-full p-0.5 hover:bg-muted transition-colors"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
                         </span>
                       ))}
                     </div>
@@ -1458,7 +1507,10 @@ export function PedidosClient({
                 <ChevronLeft className="h-4 w-4 mr-1" /> Volver al pedido
               </Button>
             ) : (
-              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <div className={cn(
+                "grid gap-2 w-full sm:flex sm:w-auto sm:items-center",
+                selectedOrder && selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' ? "grid-cols-2" : "grid-cols-1"
+              )}>
                 <Button
                   type="button"
                   variant="outline"
@@ -1480,7 +1532,7 @@ export function PedidosClient({
               </div>
             )}
             {detailMode === "edit" && (
-              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:items-center">
                 <Button type="button" variant="outline" className="rounded-xl w-full sm:w-auto" onClick={() => setIsDetailOpen(false)}>Cancelar</Button>
                 <Button type="button" disabled={isLoading} onClick={handleSaveOrder} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C] w-full sm:w-auto">
                   {isLoading ? "Guardando..." : "Guardar cambios"}

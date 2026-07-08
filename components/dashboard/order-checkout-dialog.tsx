@@ -131,6 +131,8 @@ export function OrderCheckoutPanel({
   const [splitCashPaid, setSplitCashPaid] = useState("")
   const [cashTipMode, setCashTipMode] = useState<"change" | "tip">("change")
   const [splitTipMode, setSplitTipMode] = useState<"change" | "tip">("change")
+  // Animación de venta completada (fondo verde + check)
+  const [showSuccess, setShowSuccess] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [mpQr, setMpQr] = useState<string | null>(null)
   const [mpQrLoading, setMpQrLoading] = useState(false)
@@ -162,6 +164,14 @@ export function OrderCheckoutPanel({
     }
   }
 
+  // Muestra la animación de confirmación (fondo verde + check) y después finaliza
+  const finalizeWithSuccess = (payments: PaymentRecord[]) => {
+    setShowSuccess(true)
+    setTimeout(() => {
+      handleFinalize(payments)
+    }, 1400)
+  }
+
   // Tocar un item suma 1 unidad a la tanda (hasta agotar lo que falta pagar)
   const tapItem = (si: SplitItem) => {
     const available = si.qty - paidCountFor(si.idx) - (selected[si.idx] || 0)
@@ -187,10 +197,8 @@ export function OrderCheckoutPanel({
     // El último cobro ajusta al restante exacto (evita diferencias de redondeo/descuentos)
     const amount = isLastBatch ? remaining : Math.round(selectedTotal * 100) / 100
     const labels = splitItems.flatMap((si) => Array(selected[si.idx] || 0).fill(si.name))
-    // Si pagó de más en efectivo y eligió dejarlo de propina, se registra
-    const tip = splitMethod === "cash" && splitTipMode === "tip" && splitSurplus > 0
-      ? Math.round(splitSurplus * 100) / 100
-      : undefined
+    // Propina: si pagó de más y marcó "dejar de propina", el excedente se registra (cualquier método)
+    const tip = splitTipMode === "tip" && splitSurplus > 0 ? Math.round(splitSurplus * 100) / 100 : undefined
     const group: Group = {
       method: splitMethod,
       label: opt?.label || splitMethod,
@@ -205,7 +213,12 @@ export function OrderCheckoutPanel({
     setSplitCashPaid("")
     setSplitTipMode("change")
     onPaymentsChange?.(toRecords(next))
-    toast.success(`${opt?.label || splitMethod}: ${formatCurrency(amount)} cobrado${tip ? ` (+${formatCurrency(tip)} propina)` : ""}`)
+    if (isLastBatch) {
+      // Último cobro: el pedido queda pago completo → se finaliza solo, con animación
+      finalizeWithSuccess(toRecords(next))
+    } else {
+      toast.success(`${opt?.label || splitMethod}: ${formatCurrency(amount + (tip || 0))} cobrado${tip ? ` (incluye ${formatCurrency(tip)} de propina)` : ""}`)
+    }
   }
 
   const undoLastGroup = () => {
@@ -224,10 +237,12 @@ export function OrderCheckoutPanel({
     setMpQrPaid(false)
     setMpQrOrderId(null)
     try {
+      // El QR cobra total + propina (si puso un monto mayor y lo marcó como propina)
+      const qrAmount = cashTipMode === "tip" && cashSurplus > 0 ? total + cashSurplus : total
       const res = await fetch("/api/mp/create-qr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amount: Number(total.toFixed(2)) }),
+        body: JSON.stringify({ amount: Number(qrAmount.toFixed(2)) }),
       })
       const j = await res.json()
       if (!res.ok || !j.qr_data) {
@@ -265,13 +280,52 @@ export function OrderCheckoutPanel({
   useEffect(() => {
     if (!mpQrPaid) return
     const t = setTimeout(() => {
-      handleFinalize([{ method: "qr", label: "QR MercadoPago", amount: Number(total.toFixed(2)) }])
+      const tip = cashTipMode === "tip" && cashSurplus > 0 ? Math.round(cashSurplus * 100) / 100 : undefined
+      handleFinalize([{ method: "qr", label: "QR MercadoPago", amount: Number(total.toFixed(2)), tip }])
     }, 1800)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mpQrPaid])
 
   const isQr = paymentMethod === "qr"
+
+  // ─── Venta completada: fondo verde + check animado ───
+  if (showSuccess) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
+        className="flex flex-col items-center justify-center gap-3 rounded-2xl bg-emerald-500 py-16 text-white shadow-lg"
+      >
+        <motion.div
+          initial={{ scale: 0, rotate: -30 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.15 }}
+          className="relative"
+        >
+          <span className="absolute inset-0 rounded-full bg-white/25 animate-ping" />
+          <CheckCircle2 className="relative h-24 w-24" />
+        </motion.div>
+        <motion.p
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.35 }}
+          className="text-xl font-black tracking-wide"
+        >
+          ¡Venta completada!
+        </motion.p>
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.5 }}
+          className="text-sm text-white/85 font-semibold"
+        >
+          {formatCurrency(total + tipsTotal)}{tipsTotal > 0 ? ` · incluye ${formatCurrency(tipsTotal)} de propina` : ""}
+        </motion.p>
+      </motion.div>
+    )
+  }
 
   // Estado QR: esperando o pagado
   if (mpQr) {
@@ -327,12 +381,14 @@ export function OrderCheckoutPanel({
           {groups.length > 0 && (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {groups.map((g, i) => (
-                <span key={i} className="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">
-                  <Check className="h-3 w-3" /> {g.label}: {formatCurrency(g.amount)}{g.tip ? ` (+${formatCurrency(g.tip)} propina)` : ""}
+                <span key={i} className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1 text-[10px] font-bold text-foreground shadow-sm">
+                  <Check className="h-3 w-3 text-emerald-500" />
+                  {g.label}: pagó {formatCurrency(g.amount + (g.tip || 0))}
+                  {g.tip ? <span className="font-medium text-muted-foreground">({formatCurrency(g.tip)} de propina)</span> : null}
                 </span>
               ))}
               {tipsTotal > 0 && (
-                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Propinas: {formatCurrency(tipsTotal)}</span>
+                <span className="w-full text-right text-[11px] font-bold text-foreground">Propinas totales: {formatCurrency(tipsTotal)}</span>
               )}
               <button type="button" onClick={undoLastGroup} className="text-[10px] text-muted-foreground underline underline-offset-2 hover:text-foreground">
                 deshacer último
@@ -435,9 +491,9 @@ export function OrderCheckoutPanel({
               })}
             </div>
 
-            {/* Efectivo: con cuánto paga → vuelto de esta tanda */}
+            {/* Con cuánto paga esta tanda → el excedente puede quedar de propina */}
             <AnimatePresence initial={false}>
-              {splitMethod === "cash" && selectedCount > 0 && (
+              {selectedCount > 0 && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
@@ -507,7 +563,7 @@ export function OrderCheckoutPanel({
           </>
         ) : (
           <Button
-            onClick={() => handleFinalize(toRecords(groups))}
+            onClick={() => finalizeWithSuccess(toRecords(groups))}
             disabled={isSubmitting}
             className="h-12 w-full rounded-xl bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
           >
@@ -586,16 +642,8 @@ export function OrderCheckoutPanel({
         </div>
       </div>
 
-      {/* Efectivo: con cuánto paga → vuelto */}
-      <AnimatePresence initial={false}>
-        {paymentMethod === "cash" && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="overflow-hidden"
-          >
+      {/* Con cuánto paga → el excedente puede quedar de propina (todos los métodos) */}
+      <div>
             <div className="rounded-xl bg-muted/40 p-2 space-y-2">
               <div className="flex items-center gap-2">
                 <Input
@@ -644,9 +692,7 @@ export function OrderCheckoutPanel({
                 </div>
               )}
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      </div>
 
       {/* Total */}
       <div className="flex items-center justify-between border-t border-border pt-3">
@@ -667,10 +713,8 @@ export function OrderCheckoutPanel({
         <Button
           onClick={() => {
             const opt = PAYMENT_OPTIONS.find((o) => o.id === paymentMethod)
-            const tip = paymentMethod === "cash" && cashTipMode === "tip" && cashSurplus > 0
-              ? Math.round(cashSurplus * 100) / 100
-              : undefined
-            handleFinalize([{ method: paymentMethod, label: opt?.label || paymentMethod, amount: Number(total.toFixed(2)), tip }])
+            const tip = cashTipMode === "tip" && cashSurplus > 0 ? Math.round(cashSurplus * 100) / 100 : undefined
+            finalizeWithSuccess([{ method: paymentMethod, label: opt?.label || paymentMethod, amount: Number(total.toFixed(2)), tip }])
           }}
           disabled={isSubmitting}
           className="h-12 w-full rounded-xl bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
@@ -741,7 +785,8 @@ export function OrderCheckoutDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md w-[calc(100vw-1.5rem)] sm:w-full rounded-2xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-md w-full rounded-2xl max-h-[92vh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <div className="mx-auto -mt-1 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted-foreground/25 sm:hidden" />
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Banknote className="h-5 w-5 text-emerald-600" />

@@ -10,7 +10,7 @@ import { NumberInput } from "@/components/ui/number-input"
 import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 import QRCode from "react-qr-code"
 import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
@@ -121,6 +121,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [visibleCount, setVisibleCount] = useState(PRODUCTS_PAGE_SIZE)
   const [cartItems, setCartItems] = useState<CartItem[]>([])
   const [isCartOpen, setIsCartOpen] = useState(false)
+  // Feedback visual al agregar un producto (flash + "+1" sobre la tarjeta)
+  const [justAdded, setJustAdded] = useState<string | null>(null)
   const [clientSearch, setClientSearch] = useState("")
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [paymentMethod, setPaymentMethod] = useState("cash")
@@ -356,6 +358,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   }
 
   const addProductToCart = (product: Product) => {
+    // Flash de confirmación sobre la tarjeta tocada
+    setJustAdded(product.id)
+    window.setTimeout(() => setJustAdded((prev) => (prev === product.id ? null : prev)), 650)
     const promo = bestProductPromotion(
       { id: product.id, price: product.price, category: product.category },
       promotions
@@ -718,11 +723,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       <div className="mx-auto flex h-full max-w-[1500px] gap-4 rounded-[2rem] bg-transparent">
         <section
           className={cn(
-            "flex min-w-0 flex-1 flex-col overflow-hidden rounded-[2rem] bg-white dark:bg-card p-4 transition-all duration-500 sm:p-5 shadow-[0_12px_34px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_12px_34px_-12px_rgba(0,0,0,0.9)]",
+            "flex min-w-0 flex-1 flex-col transition-all duration-500",
             isCartOpen ? "lg:mr-0" : ""
           )}
         >
-          <div className="mb-4 flex flex-shrink-0 items-center gap-3 rounded-[1.6rem] bg-white dark:bg-muted px-4 py-3 shadow-[0_16px_40px_-8px_rgba(17,24,39,0.45)] dark:shadow-[0_16px_40px_-8px_rgba(0,0,0,0.85)]">
+          <div className="mb-4 flex flex-shrink-0 items-center gap-3 rounded-[1.6rem] bg-white dark:bg-muted px-4 py-3 shadow-[0_14px_28px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_14px_28px_-12px_rgba(0,0,0,0.9)]">
             <Search className="h-4 w-4 shrink-0 text-slate-400" />
             <Input
               value={productSearch}
@@ -736,7 +741,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             />
           </div>
 
-          <div className="mb-4 -mx-2.5 flex flex-shrink-0 gap-2 overflow-x-auto px-2.5 py-3.5">
+          <div className="mb-2 -mx-4 flex flex-shrink-0 gap-2 overflow-x-auto px-4 py-3.5 hide-scrollbar-mobile">
             {categories.map((category) => (
               <button
                 key={category}
@@ -754,7 +759,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             ))}
           </div>
 
-          <div className="flex-1 overflow-y-auto -mx-1 px-1 pb-2 custom-scrollbar">
+          <div className="flex-1 min-h-0 overflow-y-auto -mx-4 px-4 pt-2 pb-8 custom-scrollbar hide-scrollbar-mobile">
           {products.length === 0 ? (
             <div className="flex h-[420px] items-center justify-center rounded-[2rem] border border-dashed border-slate-200 dark:border-border bg-white dark:bg-card text-center text-slate-500 dark:text-muted-foreground">
               <div className="max-w-sm px-6">
@@ -784,8 +789,25 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     key={product.id}
                     type="button"
                     onClick={() => addProductToCart(product)}
-                    className="group relative rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-muted shadow-[0_18px_45px_-8px_rgba(17,24,39,0.5)] dark:shadow-[0_18px_45px_-8px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_28px_60px_-8px_rgba(17,24,39,0.6)] dark:hover:shadow-[0_28px_60px_-8px_rgba(0,0,0,1)]"
+                    className={cn(
+                      "group relative rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-muted shadow-[0_16px_30px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_16px_30px_-12px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_24px_40px_-14px_rgba(17,24,39,0.6)] dark:hover:shadow-[0_24px_40px_-14px_rgba(0,0,0,1)] active:scale-95",
+                      justAdded === product.id && "ring-2 ring-[#D1F366] scale-[0.97]"
+                    )}
                   >
+                    {/* "+1" que salta al agregar */}
+                    <AnimatePresence>
+                      {justAdded === product.id && (
+                        <motion.span
+                          initial={{ opacity: 0, y: 6, scale: 0.5 }}
+                          animate={{ opacity: 1, y: -14, scale: 1.1 }}
+                          exit={{ opacity: 0, y: -26, scale: 0.8 }}
+                          transition={{ duration: 0.4, ease: "easeOut" }}
+                          className="pointer-events-none absolute -top-1 right-3 z-20 rounded-full bg-[#D1F366] px-2.5 py-1 text-sm font-black text-[#1C1C28] shadow-lg"
+                        >
+                          +1
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                     {/* Media: imagen o placeholder con la inicial. El badge va acá (nunca tapa el nombre) */}
                     <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted">
                       <div className="aspect-square overflow-hidden rounded-[1.5rem]">
@@ -1392,17 +1414,27 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       />
 
       {!isCartOpen && cartItems.length > 0 && (
-        <button
+        <motion.button
           type="button"
           onClick={() => setIsCartOpen(true)}
-          className="fixed bottom-6 right-6 z-30 flex h-16 w-16 items-center justify-center rounded-full bg-[#1f2030] shadow-2xl lg:hidden"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 18 }}
+          // bottom-24: queda por encima del downbar móvil (que ocupa ~5.5rem abajo)
+          className="fixed bottom-24 right-4 z-40 flex h-16 w-16 items-center justify-center rounded-full bg-[#1f2030] shadow-2xl lg:hidden"
           aria-label="Ver carrito"
         >
           <ReceiptText className="h-6 w-6 text-[#d8ff55]" />
-          <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#d8ff55] text-xs font-black text-slate-900">
+          <motion.span
+            key={totalItems}
+            initial={{ scale: 1.6 }}
+            animate={{ scale: 1 }}
+            transition={{ type: "spring", stiffness: 400, damping: 15 }}
+            className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#d8ff55] text-xs font-black text-slate-900"
+          >
             {totalItems}
-          </span>
-        </button>
+          </motion.span>
+        </motion.button>
       )}
     </div>
   )
