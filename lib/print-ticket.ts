@@ -87,8 +87,8 @@ function buildTicketInner(t: TicketData): string {
     <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`
 }
 
-/** Documento standalone del ticket (para el iframe de impresión). */
-function buildTicketDocument(t: TicketData, widthMm: TicketWidth): string {
+/** Documento standalone del ticket (iframe o pestaña de impresión). */
+function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = false): string {
   const bodyW = widthMm === 58 ? 54 : 72
   const baseFont = widthMm === 58 ? 15 : 17
   const bigFont = widthMm === 58 ? 19 : 23
@@ -126,13 +126,38 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth): string {
   .footer { margin-top: 10px; }
 </style>
 </head>
-<body>${buildTicketInner(t)}</body>
+<body>${buildTicketInner(t)}${autoPrint ? `
+<script>
+  // Pestaña que se imprime sola y se cierra (para Android/POSNET, donde
+  // imprimir desde un iframe no funciona).
+  window.onload = function () {
+    setTimeout(function () {
+      window.focus();
+      window.print();
+    }, 300);
+  };
+  window.onafterprint = function () { setTimeout(function () { window.close(); }, 300); };
+</script>` : ""}</body>
 </html>`
 }
 
 const IFRAME_ID = "__ticket_print_frame"
 
 export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
+  // Android (incluye POSNET): Chrome/webviews no soportan imprimir desde un
+  // iframe (falla silenciosamente). Abrimos el ticket en una pestaña propia
+  // que se imprime sola y se cierra al terminar.
+  if (/android/i.test(navigator.userAgent)) {
+    const w = window.open("", "_blank")
+    if (w) {
+      w.document.open()
+      w.document.write(buildTicketDocument(t, widthMm, true))
+      w.document.close()
+      return
+    }
+    // Si el popup fue bloqueado, seguimos con el iframe como último recurso.
+  }
+
   // Evitar doble impresión si ya hay una en curso
   if (document.getElementById(IFRAME_ID)) return
 
