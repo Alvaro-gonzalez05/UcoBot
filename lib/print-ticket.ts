@@ -118,9 +118,38 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   .muted { font-size: ${smallFont}px; font-weight: 500; }
   .bold { font-weight: 700; }
   .sep { border-top: 1px dashed #000; margin: 8px 0; }
-  .row, .item { display: flex; justify-content: space-between; gap: 8px; }
-  .iname { min-width: 0; word-break: break-word; }
-  .iprice { white-space: nowrap; flex-shrink: 0; }
+  .row, .item {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 4px 0;
+    padding: 4px 0 6px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+  .item {
+    line-height: 1.28;
+  }
+  .row:last-of-type, .item:last-of-type {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  .iname {
+    flex: 1 1 auto;
+    min-width: 0;
+    word-break: break-word;
+    white-space: normal;
+    margin-right: 8px;
+    font-size: 13px;
+    line-height: 1.32;
+  }
+  .iprice {
+    white-space: nowrap;
+    flex-shrink: 0;
+    text-align: right;
+    font-weight: 700;
+    font-size: 13px;
+  }
   .total { font-size: ${bigFont}px; font-weight: 700; }
   .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
   .footer { margin-top: 10px; }
@@ -197,11 +226,10 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
   // iframe (falla silenciosamente). Abrimos el ticket en una pestaña propia
   // que se imprime sola y se cierra al terminar.
   if (/android/i.test(navigator.userAgent)) {
-    const w = window.open("", "_blank", "noopener,noreferrer,width=380,height=720")
+    const html = buildTicketDocument(t, widthMm, true)
+    const printUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
+    const w = window.open(printUrl, "_blank", "noopener,noreferrer,width=380,height=720")
     if (w) {
-      w.document.open()
-      w.document.write(buildTicketDocument(t, widthMm, true))
-      w.document.close()
       setTimeout(() => {
         try {
           w.focus()
