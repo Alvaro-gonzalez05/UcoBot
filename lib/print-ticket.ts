@@ -154,15 +154,38 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   <button type="button" class="btn-close" onclick="window.close()">Cerrar</button>
 </div>
 <script>
-  // Pestaña de impresión para Android/POSNET (imprimir desde iframe no anda ahí).
-  // OJO: no usamos onafterprint para autocerrar porque en Android dispara
-  // apenas se ABRE el diálogo (cerraba la pestaña antes de poder imprimir).
-  // La pestaña queda abierta con los botones IMPRIMIR / Cerrar.
-  window.onload = function () {
-    setTimeout(function () {
-      try { window.focus(); window.print(); } catch (e) { /* el botón queda de respaldo */ }
-    }, 400);
-  };
+  // Pestaña de impresión para Android/POSNET.
+  // Evitamos imprimir automáticamente al cargar porque en muchos webviews
+  // eso no abre el selector de impresión de forma confiable. La página queda
+  // abierta con los botones IMPRIMIR / Cerrar para que el usuario dispare el
+  // diálogo desde una interacción real.
+  window.addEventListener("load", function () {
+    const printBtn = document.querySelector(".btn-print")
+    const closeBtn = document.querySelector(".btn-close")
+
+    if (printBtn) {
+      printBtn.addEventListener("click", function (event) {
+        event.preventDefault()
+        try {
+          window.focus()
+          window.print()
+        } catch (e) {
+          // El botón queda como respaldo si el navegador bloquea el diálogo.
+        }
+      })
+    }
+
+    if (closeBtn) {
+      closeBtn.addEventListener("click", function (event) {
+        event.preventDefault()
+        try { window.close() } catch (e) {}
+      })
+    }
+
+    setTimeout(() => {
+      try { printBtn?.focus() } catch (e) {}
+    }, 150)
+  })
 </script>` : ""}</body>
 </html>`
 }
@@ -174,11 +197,18 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
   // iframe (falla silenciosamente). Abrimos el ticket en una pestaña propia
   // que se imprime sola y se cierra al terminar.
   if (/android/i.test(navigator.userAgent)) {
-    const w = window.open("", "_blank")
+    const w = window.open("", "_blank", "noopener,noreferrer,width=380,height=720")
     if (w) {
       w.document.open()
       w.document.write(buildTicketDocument(t, widthMm, true))
       w.document.close()
+      setTimeout(() => {
+        try {
+          w.focus()
+          const btn = w.document.querySelector(".btn-print") as HTMLButtonElement | null
+          btn?.focus()
+        } catch (e) {}
+      }, 250)
       return
     }
     // Si el popup fue bloqueado, seguimos con el iframe como último recurso.
