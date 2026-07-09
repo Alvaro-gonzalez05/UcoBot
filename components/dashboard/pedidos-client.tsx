@@ -120,6 +120,7 @@ export function PedidosClient({
   const [showAddProduct, setShowAddProduct] = useState(false)
   const [checkoutOrder, setCheckoutOrder] = useState<Order | null>(null)
   const [ticketWidth, setTicketWidth] = useState<58 | 80>(80)
+  const [isPrintingTicket, setIsPrintingTicket] = useState(false)
   // Modo del modal de detalle: edición, cobro o vista previa de impresión (se intercambian con animación)
   const [detailMode, setDetailMode] = useState<"edit" | "checkout" | "print">("edit")
   const [orderSearch, setOrderSearch] = useState("")
@@ -480,6 +481,7 @@ export function PedidosClient({
   // Imprime el ticket con lo que se ve en pantalla (items editados incluidos)
   const handlePrintTicket = () => {
     if (!selectedOrder) return
+    setIsPrintingTicket(true)
     printTicket({
       businessName,
       orderId: selectedOrder.id,
@@ -490,6 +492,7 @@ export function PedidosClient({
       payments: selectedOrder.payments,
       notes: editNotes || undefined,
     }, ticketWidth)
+    window.setTimeout(() => setIsPrintingTicket(false), 1200)
   }
 
   const updateItemQty = (index: number, delta: number) => {
@@ -1318,8 +1321,18 @@ export function PedidosClient({
                   >
                     {/* Vista previa del ticket */}
                     <div className="md:flex-1 md:min-h-0 md:overflow-y-auto flex justify-center py-1">
-                      <div className={cn("w-full rounded-lg bg-white text-black shadow-lg border border-border/50 px-4 py-5 font-mono text-[12px] leading-snug h-fit", ticketWidth === 58 ? "max-w-[210px]" : "max-w-[280px]")}>
-                        <p className="text-center text-[14px] font-bold uppercase">{businessName}</p>
+                      <div className="flex w-full flex-col items-center">
+                        {isPrintingTicket && (
+                          <div className="mb-2 flex items-center gap-2 rounded-full bg-[#d8ff55]/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#1f2030] shadow-sm">
+                            <Printer className="h-3.5 w-3.5" /> Imprimiendo...
+                          </div>
+                        )}
+                        <motion.div
+                          animate={isPrintingTicket ? { scale: [1, 0.99, 1.01, 1], y: [0, -2, 0] } : { scale: 1, y: 0 }}
+                          transition={isPrintingTicket ? { duration: 0.8, ease: "easeOut" } : { duration: 0.2 }}
+                          className={cn("w-full rounded-lg bg-white text-black shadow-lg border border-border/50 px-4 py-5 font-mono text-[12px] leading-snug h-fit", ticketWidth === 58 ? "max-w-[210px]" : "max-w-[280px]")}
+                        >
+                          <p className="text-center text-[14px] font-bold uppercase">{businessName}</p>
                         <p className="text-center text-[10px] text-neutral-500">
                           {format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })} · se imprime con la hora exacta
                         </p>
@@ -1350,6 +1363,7 @@ export function PedidosClient({
                         <p className="mt-3 text-center text-[10px] text-neutral-500">¡Gracias por su compra!</p>
                         <p className="text-center text-[10px] text-neutral-500">No válido como factura</p>
                         <p className="mt-1 text-center text-[9px] font-bold text-neutral-500">UCOBOT - CODEA DESARROLLOS</p>
+                        </motion.div>
                       </div>
                     </div>
                     <Button
