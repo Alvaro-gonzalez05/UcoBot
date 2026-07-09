@@ -481,6 +481,7 @@ export function PedidosClient({
   // Imprime el ticket con lo que se ve en pantalla (items editados incluidos)
   const handlePrintTicket = () => {
     if (!selectedOrder) return
+    setDetailMode("print")
     setIsPrintingTicket(true)
     printTicket({
       businessName,
@@ -491,8 +492,12 @@ export function PedidosClient({
       total: editTotal,
       payments: selectedOrder.payments,
       notes: editNotes || undefined,
-    }, ticketWidth)
-    window.setTimeout(() => setIsPrintingTicket(false), 1200)
+    }, ticketWidth, {
+      onComplete: () => {
+        setIsPrintingTicket(false)
+        setDetailMode("print")
+      },
+    })
   }
 
   const updateItemQty = (index: number, delta: number) => {

@@ -21,6 +21,10 @@ export interface TicketData {
   notes?: string
 }
 
+export interface PrintTicketOptions {
+  onComplete?: () => void
+}
+
 export type TicketWidth = 58 | 80
 
 const esc = (s: string) =>
@@ -221,7 +225,7 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
 
 const IFRAME_ID = "__ticket_print_frame"
 
-export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
+export function printTicket(t: TicketData, widthMm: TicketWidth = 80, options?: PrintTicketOptions) {
   // Android (incluye POSNET): Chrome/webviews no soportan imprimir desde un
   // iframe (falla silenciosamente). Abrimos el ticket en una pestaña propia
   // que se imprime sola y se cierra al terminar.
@@ -237,6 +241,10 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
           btn?.focus()
         } catch (e) {}
       }, 250)
+      setTimeout(() => {
+        try { window.focus() } catch (e) {}
+        options?.onComplete?.()
+      }, 1400)
       return
     }
     // Si el popup fue bloqueado, seguimos con el iframe como último recurso.
@@ -279,6 +287,10 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80) {
     } finally {
       // El diálogo ya capturó el contenido; damos margen de sobra en webviews lentos
       setTimeout(cleanup, 8000)
+      setTimeout(() => {
+        try { window.focus() } catch (e) {}
+        options?.onComplete?.()
+      }, 1600)
     }
   }
 
