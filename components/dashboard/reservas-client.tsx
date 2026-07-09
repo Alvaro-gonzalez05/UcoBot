@@ -5,7 +5,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
-import { Calendar, Clock, Users, Phone, Eye, MoreHorizontal, Edit, Trash, Filter, X, ChevronLeft, ChevronRight, Store, Tag, CheckCircle, CalendarClock } from "lucide-react"
+import { Calendar, Clock, Users, Phone, Eye, MoreHorizontal, Edit, Trash, Filter, X, ChevronLeft, ChevronRight, ChevronDown, Store, Tag, CheckCircle, CalendarClock } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+import { cn } from "@/lib/utils"
+import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isSameMonth, addMonths, subMonths } from "date-fns"
 import { es } from "date-fns/locale"
 import { DashboardPagination } from "./dashboard-pagination"
@@ -79,6 +82,10 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [calendarMonth, setCalendarMonth] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
+  // Detalle de reserva (dialog controlado para poder cerrarlo con la barrita en móvil)
+  const [viewReservation, setViewReservation] = useState<Reservation | null>(null)
+  // En móvil el calendario y los filtros viven colapsados detrás de este toggle
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
 
   // Calendar data
   const monthStart = startOfMonth(calendarMonth)
@@ -197,46 +204,67 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header */}
-      <div className="mb-6 px-1 pt-2">
-        <h2 className="text-3xl font-bold dark:text-white">Gestión de Reservas</h2>
-        <p className="text-muted-foreground text-sm mt-1">Administración de citas y reuniones en tiempo real.</p>
+      <div className="mb-4 sm:mb-6 px-1 pt-2">
+        <h2 className="text-2xl sm:text-3xl font-bold dark:text-white">Gestión de Reservas</h2>
+        <p className="text-muted-foreground text-xs sm:text-sm mt-1">Administración de citas y reuniones en tiempo real.</p>
       </div>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center gap-4">
-          <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 text-blue-500 rounded-2xl flex items-center justify-center flex-shrink-0">
-            <CalendarClock className="h-6 w-6" />
+      {/* Stats row — compacto en móvil (icono arriba), horizontal en desktop */}
+      <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-4 sm:mb-6">
+        <div className="bg-card rounded-2xl sm:rounded-3xl p-3 sm:p-5 shadow-sm border border-border flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="w-9 h-9 sm:w-12 sm:h-12 bg-blue-50 dark:bg-blue-900/30 text-blue-500 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0">
+            <CalendarClock className="h-4 w-4 sm:h-6 sm:w-6" />
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Total Citas</p>
-            <p className="text-2xl font-bold dark:text-white">{pagination.totalItems}</p>
-          </div>
-        </div>
-        <div className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center gap-4">
-          <div className="w-12 h-12 bg-amber-50 dark:bg-amber-900/30 text-amber-500 rounded-2xl flex items-center justify-center flex-shrink-0">
-            <Clock className="h-6 w-6" />
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Pendientes</p>
-            <p className="text-2xl font-bold dark:text-white">{reservations.filter(r => r.status === 'pending').length}</p>
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-xs text-muted-foreground font-semibold uppercase tracking-wide truncate">Total Citas</p>
+            <p className="text-lg sm:text-2xl font-bold dark:text-white">{pagination.totalItems}</p>
           </div>
         </div>
-        <div className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center gap-4">
-          <div className="w-12 h-12 bg-green-50 dark:bg-green-900/30 text-green-500 rounded-2xl flex items-center justify-center flex-shrink-0">
-            <CheckCircle className="h-6 w-6" />
+        <div className="bg-card rounded-2xl sm:rounded-3xl p-3 sm:p-5 shadow-sm border border-border flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="w-9 h-9 sm:w-12 sm:h-12 bg-amber-50 dark:bg-amber-900/30 text-amber-500 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0">
+            <Clock className="h-4 w-4 sm:h-6 sm:w-6" />
           </div>
-          <div>
-            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Confirmadas</p>
-            <p className="text-2xl font-bold dark:text-white">{reservations.filter(r => r.status === 'confirmed').length}</p>
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-xs text-muted-foreground font-semibold uppercase tracking-wide truncate">Pendientes</p>
+            <p className="text-lg sm:text-2xl font-bold dark:text-white">{reservations.filter(r => r.status === 'pending').length}</p>
+          </div>
+        </div>
+        <div className="bg-card rounded-2xl sm:rounded-3xl p-3 sm:p-5 shadow-sm border border-border flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+          <div className="w-9 h-9 sm:w-12 sm:h-12 bg-green-50 dark:bg-green-900/30 text-green-500 rounded-xl sm:rounded-2xl flex items-center justify-center flex-shrink-0">
+            <CheckCircle className="h-4 w-4 sm:h-6 sm:w-6" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] sm:text-xs text-muted-foreground font-semibold uppercase tracking-wide truncate">Confirmadas</p>
+            <p className="text-lg sm:text-2xl font-bold dark:text-white">{reservations.filter(r => r.status === 'confirmed').length}</p>
           </div>
         </div>
       </div>
 
-      {/* Main area */}
-      <div className="flex-1 flex gap-5 overflow-hidden">
-        {/* ── Left panel ── */}
-        <div className="w-72 flex-shrink-0 flex flex-col gap-4 overflow-y-auto hide-scrollbar">
+      {/* Main area: apilado en móvil, dos columnas en desktop */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-5 overflow-y-auto lg:overflow-hidden hide-scrollbar">
+        {/* ── Left panel (en móvil colapsado detrás de un toggle) ── */}
+        <div className="w-full lg:w-72 flex-shrink-0 flex flex-col gap-3 lg:gap-4 lg:overflow-y-auto hide-scrollbar">
+          {/* Toggle móvil: calendario y filtros */}
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((v) => !v)}
+            className="lg:hidden flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3 shadow-sm active:scale-[0.99] transition-transform"
+          >
+            <span className="flex items-center gap-2 text-sm font-bold dark:text-white">
+              <Calendar className="h-4 w-4 text-[#B3D93C]" />
+              Calendario y filtros
+              {hasActiveFilters && (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#D1F366] text-[10px] font-black text-[#1C1C28]">
+                  {selectedTags.length + (selectedDate ? 1 : 0)}
+                </span>
+              )}
+            </span>
+            <motion.span animate={{ rotate: showMobileFilters ? 180 : 0 }} transition={{ duration: 0.2 }} className="flex">
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            </motion.span>
+          </button>
+
+          <div className={cn("flex-col gap-3 lg:gap-4", showMobileFilters ? "flex" : "hidden lg:flex")}>
           {/* Mini calendar */}
           <div className="bg-card rounded-3xl p-5 shadow-sm border border-border">
             <div className="flex items-center justify-between mb-4">
@@ -273,7 +301,11 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
                 return (
                   <button
                     key={day.toISOString()}
-                    onClick={() => setSelectedDate(isSelected ? null : day)}
+                    onClick={() => {
+                      setSelectedDate(isSelected ? null : day)
+                      // En móvil, al elegir fecha se colapsa el panel para ver los resultados
+                      if (!isSelected && typeof window !== "undefined" && window.innerWidth < 1024) setShowMobileFilters(false)
+                    }}
                     className={`p-2 rounded-lg transition-all relative font-medium
                       ${isSelected
                         ? "bg-[#1C1C28] text-white dark:bg-[#D1F366] dark:text-[#1C1C28]"
@@ -350,10 +382,11 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
               ))}
             </div>
           </div>
+          </div>
         </div>
 
         {/* ── Right: reservation cards ── */}
-        <div className="flex-1 overflow-y-auto flex flex-col gap-4 pb-4 hide-scrollbar">
+        <div className="flex-1 lg:overflow-y-auto flex flex-col gap-3 sm:gap-4 pb-4 hide-scrollbar">
           {/* Sub-header */}
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xl font-bold dark:text-white">
@@ -387,21 +420,21 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
             filteredReservations.map(reservation => (
               <div
                 key={reservation.id}
-                className="bg-card rounded-3xl p-5 shadow-sm border border-border flex items-center justify-between gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all"
+                className="bg-card rounded-3xl p-4 sm:p-5 shadow-sm border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 hover:shadow-md hover:-translate-y-0.5 transition-all"
               >
                 {/* Avatar + info */}
-                <div className="flex items-center gap-5 flex-1 min-w-0">
-                  <div className={`w-16 h-16 rounded-2xl flex-shrink-0 flex items-center justify-center font-bold text-xl uppercase ${getInitialColor(reservation.customer_name)}`}>
+                <div className="flex items-center gap-3 sm:gap-5 flex-1 min-w-0">
+                  <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-xl sm:rounded-2xl flex-shrink-0 flex items-center justify-center font-bold text-base sm:text-xl uppercase ${getInitialColor(reservation.customer_name)}`}>
                     {getInitials(reservation.customer_name)}
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-3 mb-1 flex-wrap">
-                      <h4 className="font-bold text-lg dark:text-white truncate">{reservation.customer_name}</h4>
-                      <span className={`px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusBadgeClass(reservation.status)}`}>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 sm:gap-3 mb-1 flex-wrap">
+                      <h4 className="font-bold text-base sm:text-lg dark:text-white truncate">{reservation.customer_name}</h4>
+                      <span className={`px-2.5 sm:px-3 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border ${getStatusBadgeClass(reservation.status)}`}>
                         {getStatusText(reservation.status)}
                       </span>
                     </div>
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm text-muted-foreground">
+                    <div className="grid grid-cols-2 gap-x-3 sm:gap-x-6 gap-y-1 text-xs sm:text-sm text-muted-foreground">
                       <div className="flex items-center gap-1.5">
                         <Clock className="h-4 w-4 flex-shrink-0" />
                         <span>{reservation.reservation_time}</span>
@@ -449,58 +482,18 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Actions: fila completa abajo en móvil, inline en desktop */}
+                <div className="flex items-center gap-2 flex-shrink-0 w-full sm:w-auto border-t border-border pt-3 sm:border-0 sm:pt-0">
                   {/* View details */}
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl">
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Detalles de la Reserva</DialogTitle>
-                        <DialogDescription>Información completa de la reserva</DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div><Label>Cliente</Label><p className="mt-1">{reservation.customer_name}</p></div>
-                          <div><Label>Teléfono</Label><p className="mt-1">{reservation.customer_phone}</p></div>
-                          <div><Label>Fecha</Label><p className="mt-1">{format(new Date(reservation.reservation_date + "T12:00:00"), "dd MMMM yyyy", { locale: es })}</p></div>
-                          <div><Label>Hora</Label><p className="mt-1">{reservation.reservation_time}</p></div>
-                          <div><Label>Personas</Label><p className="mt-1">{reservation.party_size}</p></div>
-                          <div>
-                            <Label>Estado</Label>
-                            <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusBadgeClass(reservation.status)}`}>
-                              {getStatusText(reservation.status)}
-                            </span>
-                          </div>
-                        </div>
-                        {reservation.table_number && <div><Label>Mesa asignada</Label><p className="mt-1">{reservation.table_number}</p></div>}
-                        {reservation.special_requests && <div><Label>Solicitudes especiales</Label><p className="mt-1">{reservation.special_requests}</p></div>}
-                        <div><Label>Plataforma</Label><p className="mt-1">{reservation.conversation?.platform || "N/A"}</p></div>
-                        {reservation.tags && reservation.tags.length > 0 && (
-                          <div>
-                            <Label>Etiquetas</Label>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {reservation.tags.map((tag, i) => (
-                                <span key={i} className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                  <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl" onClick={() => setViewReservation(reservation)}>
+                    <Eye className="h-4 w-4" />
+                  </Button>
 
                   {/* Confirm button */}
                   <Button
                     onClick={() => handleQuickConfirm(reservation)}
                     disabled={isLoading || reservation.status === 'confirmed' || reservation.status === 'cancelled'}
-                    className={`px-5 py-2.5 rounded-xl font-bold text-sm transition-all whitespace-nowrap
+                    className={`flex-1 sm:flex-none px-3 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap
                       ${reservation.status === 'confirmed' || reservation.status === 'cancelled'
                         ? "bg-muted text-muted-foreground cursor-not-allowed"
                         : "bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] shadow-sm"
@@ -515,7 +508,7 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
                     onClick={demo ? undefined : () => handleEdit(reservation)}
                     disabled={demo}
                     title={demo ? "Activá tu cuenta para empezar a usar" : undefined}
-                    className="px-5 py-2.5 rounded-xl font-bold text-sm bg-muted text-muted-foreground hover:bg-muted/80 whitespace-nowrap"
+                    className="flex-1 sm:flex-none px-3 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-muted text-muted-foreground hover:bg-muted/80 whitespace-nowrap"
                   >
                     Reprogramar
                   </Button>
@@ -566,9 +559,53 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
         </div>
       </div>
 
+      {/* Detalles de la reserva (bottom sheet en móvil) */}
+      <Dialog open={!!viewReservation} onOpenChange={(o) => !o && setViewReservation(null)}>
+        <DialogContent className="w-full rounded-2xl max-h-[92vh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+          <SheetGrabBar onDismiss={() => setViewReservation(null)} />
+          <DialogHeader>
+            <DialogTitle>Detalles de la Reserva</DialogTitle>
+            <DialogDescription>Información completa de la reserva</DialogDescription>
+          </DialogHeader>
+          {viewReservation && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div><Label>Cliente</Label><p className="mt-1">{viewReservation.customer_name}</p></div>
+                <div><Label>Teléfono</Label><p className="mt-1">{viewReservation.customer_phone}</p></div>
+                <div><Label>Fecha</Label><p className="mt-1">{format(new Date(viewReservation.reservation_date + "T12:00:00"), "dd MMMM yyyy", { locale: es })}</p></div>
+                <div><Label>Hora</Label><p className="mt-1">{viewReservation.reservation_time}</p></div>
+                <div><Label>Personas</Label><p className="mt-1">{viewReservation.party_size}</p></div>
+                <div>
+                  <Label>Estado</Label>
+                  <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${getStatusBadgeClass(viewReservation.status)}`}>
+                    {getStatusText(viewReservation.status)}
+                  </span>
+                </div>
+              </div>
+              {viewReservation.table_number && <div><Label>Mesa asignada</Label><p className="mt-1">{viewReservation.table_number}</p></div>}
+              {viewReservation.special_requests && <div><Label>Solicitudes especiales</Label><p className="mt-1">{viewReservation.special_requests}</p></div>}
+              <div><Label>Plataforma</Label><p className="mt-1">{viewReservation.conversation?.platform || "N/A"}</p></div>
+              {viewReservation.tags && viewReservation.tags.length > 0 && (
+                <div>
+                  <Label>Etiquetas</Label>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {viewReservation.tags.map((tag, i) => (
+                      <span key={i} className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-medium">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-full rounded-2xl max-h-[92vh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+          <SheetGrabBar onDismiss={() => setIsEditDialogOpen(false)} />
           <DialogHeader>
             <DialogTitle>Editar / Reprogramar Reserva</DialogTitle>
             <DialogDescription>Modifica los detalles de la reserva.</DialogDescription>
@@ -607,9 +644,9 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
                 <Label htmlFor="table_number">Número de Mesa / Local</Label>
                 <Input id="table_number" name="table_number" placeholder="Ej: Mesa 5" defaultValue={selectedReservation.table_number || ""} className="rounded-xl" />
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" className="rounded-xl" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
-                <Button type="submit" disabled={isLoading} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C]">
+              <DialogFooter className="gap-2">
+                <Button type="button" variant="outline" className="rounded-xl w-full sm:w-auto" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" disabled={isLoading} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C] w-full sm:w-auto">
                   {isLoading ? "Guardando..." : "Guardar cambios"}
                 </Button>
               </DialogFooter>

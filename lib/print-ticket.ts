@@ -17,6 +17,10 @@ export interface TicketData {
   orderType?: string
   items: TicketItem[]
   total: number
+  /** Propina/extra como línea agregada (se muestra antes del total) */
+  tipAmount?: number
+  /** Texto de la línea de propina (por defecto "Propina / extra") */
+  tipLabel?: string
   payments?: { label?: string; method: string; amount: number }[]
   notes?: string
 }
@@ -63,10 +67,15 @@ function buildTicketInner(t: TicketData): string {
     )
     .join("")
 
+  // Un solo pago que cubre todo el total es redundante (repite el TOTAL): no se muestra.
+  // Solo tiene sentido detallar los pagos cuando fue dividido (2+ métodos).
+  const showPayments =
+    t.payments && t.payments.length > 0 &&
+    !(t.payments.length === 1 && Math.abs(t.payments[0].amount - t.total) < 0.01)
   const paymentRows =
-    t.payments && t.payments.length > 0
+    showPayments
       ? `<div class="sep"></div>
-         ${t.payments
+         ${t.payments!
            .map((p) => `<div class="row"><span>${esc(p.label || p.method)}</span><span>${money(p.amount)}</span></div>`)
            .join("")}`
       : ""
@@ -82,6 +91,7 @@ function buildTicketInner(t: TicketData): string {
     ${t.orderType ? `<div class="row"><span>Modalidad</span><span>${esc(t.orderType)}</span></div>` : ""}
     <div class="sep"></div>
     ${itemRows}
+    ${t.tipAmount && t.tipAmount > 0 ? `<div class="row"><span>${esc(t.tipLabel || "Propina / extra")}</span><span>+${money(t.tipAmount)}</span></div>` : ""}
     <div class="sep"></div>
     <div class="row total"><span>TOTAL</span><span>${money(t.total)}</span></div>
     ${paymentRows}

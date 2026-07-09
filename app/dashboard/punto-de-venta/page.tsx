@@ -14,7 +14,7 @@ export default async function PuntoDeVentaPage() {
   const account = await getAccountContext()
   const ownerId = account?.ownerId || data.user.id
 
-  const [{ data: products }, { data: clients }, { data: promotions }] = await Promise.all([
+  const [{ data: products }, { data: clients }, { data: promotions }, { data: profile }] = await Promise.all([
     supabase
       .from("products")
       .select("id, name, description, price, category, is_available, image_url, created_at")
@@ -32,6 +32,7 @@ export default async function PuntoDeVentaPage() {
       .select("*")
       .eq("user_id", ownerId)
       .eq("is_active", true),
+    supabase.from("user_profiles").select("business_name").eq("id", ownerId).single(),
   ])
 
   const { data: categoryRows } = await supabase
@@ -52,6 +53,7 @@ export default async function PuntoDeVentaPage() {
         categories={categories}
         clients={clients || []}
         promotions={promotions || []}
+        businessName={profile?.business_name || "Mi Negocio"}
       />
     </div>
   )

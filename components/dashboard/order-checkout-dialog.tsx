@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
 import { Banknote, CreditCard, Landmark, QrCode, CheckCircle2, Loader2, ShoppingBag, Users, ChevronLeft, Check, Minus } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -768,7 +769,7 @@ export function OrderCheckoutDialog({
         })
         .eq("id", order.id)
       if (error) throw error
-      toast.success("Venta finalizada")
+      // Sin toast: la animación verde de venta completada ya lo confirma
       onFinalized(order.id)
       onOpenChange(false)
     } catch (error) {
@@ -786,7 +787,7 @@ export function OrderCheckoutDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md w-full rounded-2xl max-h-[92vh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
-        <div className="mx-auto -mt-1 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted-foreground/25 sm:hidden" />
+        <SheetGrabBar onDismiss={() => onOpenChange(false)} />
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Banknote className="h-5 w-5 text-emerald-600" />

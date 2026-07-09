@@ -149,7 +149,12 @@ export function PosSettingsDialog({
                 <Label className="text-sm font-semibold">Propina / extra</Label>
                 <p className="text-[11px] text-muted-foreground">Permite sumar un porcentaje a la cuenta al cobrar</p>
               </div>
-              <Switch checked={tipEnabled} onCheckedChange={setTipEnabled} />
+              {/* Colores explícitos: el switch por default se camuflaba con el fondo */}
+              <Switch
+                checked={tipEnabled}
+                onCheckedChange={setTipEnabled}
+                className="border border-border data-[state=checked]:bg-[#B3D93C] data-[state=unchecked]:bg-slate-300 dark:data-[state=unchecked]:bg-slate-600 [&>span]:bg-white [&>span]:shadow-md"
+              />
             </div>
             {tipEnabled && (
               <div className="flex items-center gap-2 pt-1">

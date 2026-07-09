@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -20,6 +20,7 @@ import { ProductImportWizard } from "./product-import-wizard"
 import { ProductEditForm } from "./product-edit-form"
 import { OrderCheckoutDialog, OrderCheckoutPanel, type PaymentRecord } from "./order-checkout-dialog"
 import { printTicket, cleanTicketNotes } from "@/lib/print-ticket"
+import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
 import { toast } from "sonner"
 import { DashboardPagination } from "./dashboard-pagination"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -121,9 +122,20 @@ export function PedidosClient({
   const [checkoutOrder, setCheckoutOrder] = useState<Order | null>(null)
   const [ticketWidth, setTicketWidth] = useState<58 | 80>(80)
   const [isPrintingTicket, setIsPrintingTicket] = useState(false)
+  // Animación de impresión a pantalla completa del panel: imprimiendo → impreso
+  const [printPhase, setPrintPhase] = useState<null | "printing" | "done">(null)
+  // Feedback "+1" en el dropdown de agregar productos
+  const [justAddedRow, setJustAddedRow] = useState<{ id: string; nonce: number } | null>(null)
+  // Carrito de selección del dropdown: lo tocado se acumula acá y entra al pedido al confirmar
+  const [staged, setStaged] = useState<{ id: string; name: string; price: number; image_url: string | null; qty: number }[]>([])
+  const [addConfirmPhase, setAddConfirmPhase] = useState(false)
   // Modo del modal de detalle: edición, cobro o vista previa de impresión (se intercambian con animación)
   const [detailMode, setDetailMode] = useState<"edit" | "checkout" | "print">("edit")
   const [orderSearch, setOrderSearch] = useState("")
+  // Tab activo: el buscador del header cambia según dónde estés (pedidos ↔ productos)
+  const [activeTab, setActiveTab] = useState("orders")
+  const [productTabSearch, setProductTabSearch] = useState("")
+  const [productTabCategory, setProductTabCategory] = useState("Todos")
   const supabase = createClient()
   const router = useRouter()
 
@@ -389,15 +401,69 @@ export function PedidosClient({
 
   const editTotal = editItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
-  const addProductToOrder = (p: Product) => {
-    setEditItems((prev) => {
-      const ex = prev.find((i) => i.product_id === p.id)
-      if (ex) return prev.map((i) => (i.product_id === p.id ? { ...i, quantity: i.quantity + 1 } : i))
-      // Se agrega arriba para que el usuario lo vea entrar (animado)
-      return [{ product_id: p.id, name: p.name, price: Number(p.price) || 0, quantity: 1, image_url: p.image_url || null }, ...prev]
+  // Tocar un producto NO lo agrega directo: lo suma al carrito de selección del dropdown
+  const stageProduct = (p: Product) => {
+    setStaged((prev) => {
+      const ex = prev.find((s) => s.id === p.id)
+      if (ex) return prev.map((s) => (s.id === p.id ? { ...s, qty: s.qty + 1 } : s))
+      return [...prev, { id: p.id, name: p.name, price: Number(p.price) || 0, image_url: p.image_url || null, qty: 1 }]
     })
-    // El panel queda abierto para seguir agregando; solo se limpia la búsqueda
+    // Feedback "+1" sobre la fila tocada
+    setJustAddedRow({ id: p.id, nonce: Date.now() })
+    window.setTimeout(() => setJustAddedRow((prev) => (prev?.id === p.id ? null : prev)), 650)
+  }
+
+  const unstageProduct = (id: string) => {
+    setStaged((prev) =>
+      prev
+        .map((s) => (s.id === id ? { ...s, qty: s.qty - 1 } : s))
+        .filter((s) => s.qty > 0)
+    )
+  }
+
+  const closeAddDropdown = () => {
+    setShowAddProduct(false)
+    setStaged([])
     setAddSearch("")
+  }
+
+  // Confirma la selección: animación de check en el dropdown y recién ahí entran al pedido
+  const confirmStaged = () => {
+    if (staged.length === 0) return
+    setAddConfirmPhase(true)
+    window.setTimeout(() => {
+      setEditItems((prev) => {
+        const next = [...prev]
+        const newOnes: typeof prev = []
+        for (const s of staged) {
+          const idx = next.findIndex((i) => i.product_id === s.id)
+          if (idx >= 0) next[idx] = { ...next[idx], quantity: next[idx].quantity + s.qty }
+          else newOnes.push({ product_id: s.id, name: s.name, price: s.price, quantity: s.qty, image_url: s.image_url })
+        }
+        // Los nuevos van arriba para que se los vea entrar (animados)
+        return [...newOnes, ...next]
+      })
+      setAddConfirmPhase(false)
+      closeAddDropdown()
+    }, 950)
+  }
+
+  const stagedCount = staged.reduce((s, i) => s + i.qty, 0)
+  const stagedTotal = staged.reduce((s, i) => s + i.price * i.qty, 0)
+
+  // Productos del tab Catálogo filtrados por buscador (sin acentos) y categoría.
+  // Con búsqueda activa se ignora la categoría (búsqueda global, como en el POS).
+  const productsTabFiltered = products.filter((p) => {
+    const q = normalizeSearchText(productTabSearch.trim())
+    if (q) return normalizeSearchText(`${p.name} ${p.description ?? ""} ${p.category ?? ""}`).includes(q)
+    if (productTabCategory !== "Todos") return p.category === productTabCategory
+    return true
+  })
+
+  // Al escribir, la categoría vuelve a "Todos" para que la UI coincida con los resultados
+  const handleProductTabSearch = (value: string) => {
+    setProductTabSearch(value)
+    if (value.trim() && productTabCategory !== "Todos") setProductTabCategory("Todos")
   }
 
   // Productos que matchean el buscador del panel "Agregar" (sin acentos)
@@ -435,7 +501,7 @@ export function PedidosClient({
         .single()
       if (error) throw error
       setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
-      toast.success("Venta finalizada")
+      // Sin toast: la animación verde de venta completada ya lo confirma
       setIsDetailOpen(false)
       setDetailMode("edit")
     } catch (error) {
@@ -478,18 +544,27 @@ export function PedidosClient({
     }
   }
 
+  // La propina va como línea agregada en el ticket, salvo que ya venga como item (pedidos del POS)
+  const hasPropinaItem = editItems.some((i) => i.name.toLowerCase().includes("propina"))
+  const ticketTip = !hasPropinaItem && (selectedOrder?.tip_amount || 0) > 0 ? selectedOrder!.tip_amount! : 0
+
   // Imprime el ticket con lo que se ve en pantalla (items editados incluidos)
   const handlePrintTicket = () => {
     if (!selectedOrder) return
     setDetailMode("print")
     setIsPrintingTicket(true)
+    // Animación del panel completo: "imprimiendo" → "impreso".
+    // El check queda fijo hasta que el usuario vuelva al pedido o cierre el modal.
+    setPrintPhase("printing")
+    window.setTimeout(() => setPrintPhase((p) => (p === "printing" ? "done" : p)), 1500)
     printTicket({
       businessName,
       orderId: selectedOrder.id,
       clientName: getOrderClientName(selectedOrder),
       orderType: getOrderModalityLabel(selectedOrder),
       items: editItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
-      total: editTotal,
+      total: editTotal + ticketTip,
+      tipAmount: ticketTip || undefined,
       payments: selectedOrder.payments,
       notes: editNotes || undefined,
     }, ticketWidth, {
@@ -649,29 +724,29 @@ export function PedidosClient({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-[#B3D93C] transition-colors" />
             <input
               className="pl-10 pr-4 py-2.5 rounded-full border border-border bg-card shadow-sm focus:ring-2 focus:ring-[#D1F366] focus:outline-none w-48 xl:w-64 text-sm text-foreground placeholder-muted-foreground transition-all"
-              placeholder="Buscar orden o cliente..."
+              placeholder={activeTab === "products" ? "Buscar producto..." : "Buscar orden o cliente..."}
               type="text"
-              value={orderSearch}
-              onChange={(e) => setOrderSearch(e.target.value)}
+              value={activeTab === "products" ? productTabSearch : orderSearch}
+              onChange={(e) => (activeTab === "products" ? handleProductTabSearch(e.target.value) : setOrderSearch(e.target.value))}
             />
           </div>
         </div>
       </div>
 
-      {/* Buscador en móvil (en desktop vive en el header) */}
+      {/* Buscador en móvil (en desktop vive en el header) — cambia según el tab activo */}
       <div className="relative sm:hidden mb-3 px-1">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           className="w-full pl-10 pr-4 py-2.5 rounded-full border border-border bg-card shadow-sm focus:ring-2 focus:ring-[#D1F366] focus:outline-none text-sm text-foreground placeholder-muted-foreground"
-          placeholder="Buscar orden o cliente..."
+          placeholder={activeTab === "products" ? "Buscar producto..." : "Buscar orden o cliente..."}
           type="text"
-          value={orderSearch}
-          onChange={(e) => setOrderSearch(e.target.value)}
+          value={activeTab === "products" ? productTabSearch : orderSearch}
+          onChange={(e) => (activeTab === "products" ? handleProductTabSearch(e.target.value) : setOrderSearch(e.target.value))}
         />
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="orders" className="flex-1 flex flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         <TabsList className="w-full justify-start rounded-2xl bg-muted p-1 mb-4 h-auto overflow-x-auto">
           <TabsTrigger value="orders" className="rounded-xl flex items-center gap-1.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-3.5 sm:px-5 py-2 sm:py-2.5 font-semibold text-sm whitespace-nowrap shrink-0">
             <ShoppingCart className="h-4 w-4" />
@@ -1048,34 +1123,97 @@ export function PedidosClient({
             </div>
           </div>
 
+          {/* Categorías: mismo carrusel de chips del punto de venta */}
+          {categories.length > 0 && (
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 py-2 hide-scrollbar-mobile">
+              {["Todos", ...categories].map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setProductTabCategory(category)}
+                  className={cn(
+                    "whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors shadow-[0_4px_12px_-3px_rgba(17,24,39,0.4)] dark:shadow-[0_4px_12px_-3px_rgba(0,0,0,0.7)] active:scale-95",
+                    productTabCategory === category
+                      ? "bg-[#1f2030] text-[#d8ff55]"
+                      : "bg-white dark:bg-muted text-slate-400 hover:text-slate-700 dark:hover:text-foreground"
+                  )}
+                >
+                  {category}
+                </button>
+              ))}
+            </div>
+          )}
+
           {!products || products.length === 0 ? (
             <div className="rounded-3xl border border-border bg-card p-12 flex flex-col items-center justify-center text-center shadow-sm">
               <Package className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-1">No hay productos en tu catálogo</h3>
               <p className="text-sm text-muted-foreground">Agrega productos para que tus clientes puedan hacer pedidos.</p>
             </div>
+          ) : productsTabFiltered.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-border bg-card p-10 flex flex-col items-center justify-center text-center">
+              <Search className="h-10 w-10 text-muted-foreground mb-3" />
+              <h3 className="text-base font-semibold mb-1">
+                {productTabSearch.trim()
+                  ? <>Sin resultados para &quot;{productTabSearch.trim()}&quot;</>
+                  : <>Sin productos en &quot;{productTabCategory}&quot;</>}
+              </h3>
+              <p className="text-sm text-muted-foreground">Probá con otro nombre, descripción o categoría.</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {products.map((product) => (
-                <div key={product.id} className="bg-card rounded-3xl border border-border shadow-sm overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md">
-                  {product.image_url ? (
-                    <img src={product.image_url} alt={product.name} className="w-full h-40 object-cover" />
-                  ) : (
-                    <div className="w-full h-40 bg-muted flex items-center justify-center">
-                      <Package className="h-10 w-10 text-muted-foreground" />
+            /* En móvil: mismo grid compacto del punto de venta; en desktop: tarjetas grandes */
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-2 lg:grid-cols-3 md:gap-4">
+              {productsTabFiltered.map((product) => (
+                <div key={product.id} className="bg-card rounded-[2rem] md:rounded-3xl border border-border shadow-sm overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md p-3 md:p-0">
+                  {/* Imagen: cuadrada estilo POS en móvil, banner en desktop */}
+                  <div className="relative mb-2 md:mb-0 overflow-hidden rounded-[1.5rem] md:rounded-none bg-muted">
+                    {product.image_url ? (
+                      <img src={product.image_url} alt={product.name} className="w-full aspect-square md:aspect-auto md:h-40 object-cover" />
+                    ) : (
+                      <div className="flex w-full aspect-square md:aspect-auto md:h-40 items-center justify-center bg-gradient-to-br from-muted to-muted/60">
+                        <span className="select-none text-4xl font-black text-muted-foreground/30 md:hidden">{product.name.charAt(0).toUpperCase()}</span>
+                        <Package className="hidden md:block h-10 w-10 text-muted-foreground" />
+                      </div>
+                    )}
+                    {/* Acciones sobre la imagen (solo móvil) */}
+                    <div className="absolute right-2 top-2 flex gap-1 md:hidden">
+                      <button
+                        type="button"
+                        onClick={() => setEditingProduct(product)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-background/85 text-foreground shadow backdrop-blur-sm active:scale-90 transition-transform"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteProduct(product.id)}
+                        className="flex h-7 w-7 items-center justify-center rounded-full bg-background/85 text-red-500 shadow backdrop-blur-sm active:scale-90 transition-transform"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
                     </div>
-                  )}
-                  <div className="p-5">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <h4 className="font-bold text-base dark:text-white">{product.name}</h4>
+                    {!product.is_available && (
+                      <span className="absolute left-2 bottom-2 rounded-full bg-background/85 px-2 py-0.5 text-[9px] font-bold uppercase text-muted-foreground md:hidden">
+                        No disponible
+                      </span>
+                    )}
+                  </div>
+                  <div className="md:p-5">
+                    <div className="flex justify-between items-start md:mb-2">
+                      <div className="flex-1 min-w-0">
                         {product.category && (
-                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium mt-1 inline-block">
+                          <span className="block truncate text-[10px] font-semibold uppercase tracking-wide text-muted-foreground md:hidden">
+                            {product.category}
+                          </span>
+                        )}
+                        <h4 className="font-bold text-sm md:text-base dark:text-white line-clamp-2 md:line-clamp-none leading-tight">{product.name}</h4>
+                        {product.category && (
+                          <span className="hidden md:inline-block text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium mt-1">
                             {product.category}
                           </span>
                         )}
                       </div>
-                      <div className="flex gap-1 ml-2">
+                      <div className="hidden md:flex gap-1 ml-2">
                         <Button variant="ghost" size="sm" className="h-8 w-8 p-0 rounded-xl" onClick={() => setEditingProduct(product)}>
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -1085,11 +1223,11 @@ export function PedidosClient({
                       </div>
                     </div>
                     {product.description && (
-                      <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{product.description}</p>
+                      <p className="hidden md:block text-xs text-muted-foreground mb-3 line-clamp-2">{product.description}</p>
                     )}
-                    <div className="flex justify-between items-center">
-                      <span className="text-2xl font-bold dark:text-white">${product.price}</span>
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${product.is_available ? 'bg-[#D1F366] text-[#1C1C28]' : 'bg-muted text-muted-foreground'}`}>
+                    <div className="flex justify-between items-center pt-1 md:pt-0">
+                      <span className="text-lg md:text-2xl font-black md:font-bold dark:text-white">${product.price}</span>
+                      <span className={`hidden md:inline-block text-xs font-bold px-2.5 py-1 rounded-full ${product.is_available ? 'bg-[#D1F366] text-[#1C1C28]' : 'bg-muted text-muted-foreground'}`}>
                         {product.is_available ? 'Disponible' : 'No disponible'}
                       </span>
                     </div>
@@ -1220,9 +1358,9 @@ export function PedidosClient({
       )}
 
       {/* Vista previa / edición del pedido */}
-      <Dialog open={isDetailOpen} onOpenChange={(o) => { setIsDetailOpen(o); if (!o) setDetailMode("edit") }}>
+      <Dialog open={isDetailOpen} onOpenChange={(o) => { setIsDetailOpen(o); if (!o) { setDetailMode("edit"); setPrintPhase(null) } }}>
         <DialogContent className="max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
-          <div className="mx-auto -mt-1 mb-1 h-1.5 w-12 shrink-0 rounded-full bg-muted-foreground/25 sm:hidden" />
+          <SheetGrabBar onDismiss={() => { setIsDetailOpen(false); setDetailMode("edit"); setPrintPhase(null) }} />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {detailMode === "checkout" && <Banknote className="h-5 w-5 text-emerald-600" />}
@@ -1324,17 +1462,77 @@ export function PedidosClient({
                     transition={{ duration: 0.2, ease: "easeOut" }}
                     className="flex flex-col min-h-0 md:flex-1"
                   >
+                    {printPhase ? (
+                      /* Animación de panel completo: imprimiendo → impreso */
+                      <motion.div
+                        key={printPhase}
+                        initial={{ opacity: 0, scale: 0.94 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.25, ease: "easeOut" }}
+                        className={cn(
+                          "flex flex-1 flex-col items-center justify-center gap-4 rounded-2xl py-16 text-white shadow-lg",
+                          printPhase === "printing" ? "bg-[#1f2030]" : "bg-emerald-500"
+                        )}
+                      >
+                        {printPhase === "printing" ? (
+                          <>
+                            <div className="flex flex-col items-center">
+                              <Printer className="h-16 w-16 text-[#d8ff55]" />
+                              {/* Ticket saliendo de la impresora */}
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: [0, 44, 44], opacity: [0, 1, 1], y: [0, 2, 6] }}
+                                transition={{ duration: 1.3, repeat: Infinity, repeatDelay: 0.15, ease: "easeInOut" }}
+                                className="mt-1 w-16 overflow-hidden rounded-b-md bg-white shadow-md"
+                              >
+                                <div className="mx-2 mt-2 space-y-1.5">
+                                  <div className="h-1 rounded bg-neutral-300" />
+                                  <div className="h-1 rounded bg-neutral-300" />
+                                  <div className="h-1 w-2/3 rounded bg-neutral-300" />
+                                  <div className="h-1 w-1/2 rounded bg-neutral-200" />
+                                </div>
+                              </motion.div>
+                            </div>
+                            <p className="text-sm font-black uppercase tracking-[0.2em] text-[#d8ff55]">Imprimiendo ticket…</p>
+                          </>
+                        ) : (
+                          <>
+                            <motion.div
+                              initial={{ scale: 0, rotate: -30 }}
+                              animate={{ scale: 1, rotate: 0 }}
+                              transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.1 }}
+                              className="relative"
+                            >
+                              <span className="absolute inset-0 rounded-full bg-white/25 animate-ping" />
+                              <CheckCircle2 className="relative h-20 w-20" />
+                            </motion.div>
+                            <motion.p
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.3 }}
+                              className="text-lg font-black tracking-wide"
+                            >
+                              ¡Ticket impreso!
+                            </motion.p>
+                            <motion.button
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ delay: 0.6 }}
+                              type="button"
+                              onClick={() => setPrintPhase(null)}
+                              className="mt-1 rounded-full bg-white/15 px-4 py-1.5 text-xs font-bold text-white hover:bg-white/25 transition-colors"
+                            >
+                              Ver vista previa
+                            </motion.button>
+                          </>
+                        )}
+                      </motion.div>
+                    ) : (
+                    <>
                     {/* Vista previa del ticket */}
                     <div className="md:flex-1 md:min-h-0 md:overflow-y-auto flex justify-center py-1">
                       <div className="flex w-full flex-col items-center">
-                        {isPrintingTicket && (
-                          <div className="mb-2 flex items-center gap-2 rounded-full bg-[#d8ff55]/90 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-[#1f2030] shadow-sm">
-                            <Printer className="h-3.5 w-3.5" /> Imprimiendo...
-                          </div>
-                        )}
                         <motion.div
-                          animate={isPrintingTicket ? { scale: [1, 0.99, 1.01, 1], y: [0, -2, 0] } : { scale: 1, y: 0 }}
-                          transition={isPrintingTicket ? { duration: 0.8, ease: "easeOut" } : { duration: 0.2 }}
                           className={cn("w-full rounded-lg bg-white text-black shadow-lg border border-border/50 px-4 py-5 font-mono text-[12px] leading-snug h-fit", ticketWidth === 58 ? "max-w-[210px]" : "max-w-[280px]")}
                         >
                           <p className="text-center text-[14px] font-bold uppercase">{businessName}</p>
@@ -1354,9 +1552,13 @@ export function PedidosClient({
                             <span className="shrink-0">{formatCurrency(item.price * item.quantity)}</span>
                           </div>
                         ))}
+                        {ticketTip > 0 && (
+                          <div className="flex justify-between gap-2"><span>Propina / extra</span><span>+{formatCurrency(ticketTip)}</span></div>
+                        )}
                         <div className="my-2 border-t border-dashed border-neutral-400" />
-                        <div className="flex justify-between text-[14px] font-bold"><span>TOTAL</span><span>{formatCurrency(editTotal)}</span></div>
-                        {selectedOrder.payments && selectedOrder.payments.length > 0 && (
+                        <div className="flex justify-between text-[14px] font-bold"><span>TOTAL</span><span>{formatCurrency(editTotal + ticketTip)}</span></div>
+                        {selectedOrder.payments && selectedOrder.payments.length > 0 &&
+                          !(selectedOrder.payments.length === 1 && Math.abs(selectedOrder.payments[0].amount - (editTotal + ticketTip)) < 0.01) && (
                           <>
                             <div className="my-2 border-t border-dashed border-neutral-400" />
                             {selectedOrder.payments.map((p, i) => (
@@ -1377,6 +1579,8 @@ export function PedidosClient({
                     >
                       <Printer className="h-4 w-4" /> Imprimir ticket
                     </Button>
+                    </>
+                    )}
                   </motion.div>
                 ) : (
                   <motion.div
@@ -1385,40 +1589,111 @@ export function PedidosClient({
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -24 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
-                    className="flex flex-col min-h-0 md:flex-1"
+                    className="relative flex flex-col min-h-0 md:flex-1"
                   >
                 <div className="flex items-center justify-between shrink-0">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Productos</Label>
-                  <Button type="button" variant="outline" size="sm" className="rounded-xl gap-1 h-8" onClick={() => setShowAddProduct((v) => !v)}>
-                    {showAddProduct ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                  <Button
+                    type="button"
+                    variant={showAddProduct ? "secondary" : "outline"}
+                    size="sm"
+                    className="rounded-xl gap-1 h-8 transition-all active:scale-95"
+                    onClick={() => (showAddProduct ? closeAddDropdown() : setShowAddProduct(true))}
+                  >
+                    <motion.span animate={{ rotate: showAddProduct ? 45 : 0 }} transition={{ duration: 0.18 }} className="flex">
+                      <Plus className="h-3.5 w-3.5" />
+                    </motion.span>
                     {showAddProduct ? "Cerrar" : "Agregar"}
                   </Button>
                 </div>
 
-                {/* Buscador de productos para agregar (entra/sale con animación) */}
-                <AnimatePresence initial={false}>
+                {/* Dropdown flotante para agregar productos: flota SOBRE la lista, no la empuja */}
+                <AnimatePresence>
                 {showAddProduct && (
-                  <motion.div
-                    key="add-panel"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.22, ease: "easeOut" }}
-                    className="shrink-0 overflow-hidden"
-                  >
-                  <div className="mt-2.5 rounded-2xl border border-border bg-muted/30 p-2 space-y-2">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="Buscar producto..." className="h-9 pl-8 rounded-xl" autoFocus />
-                    </div>
-                    <div className="max-h-44 overflow-y-auto space-y-1">
-                      {addMatches.slice(0, 20).map((p) => (
-                          <button
-                            key={p.id}
-                            type="button"
-                            onClick={() => addProductToOrder(p)}
-                            className="flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition-colors hover:bg-background active:scale-[0.99]"
+                  <>
+                    {/* Click-afuera para cerrar */}
+                    <motion.div
+                      key="add-backdrop"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute inset-0 z-10 rounded-2xl bg-background/50 backdrop-blur-[2px] max-sm:fixed max-sm:z-[55] max-sm:rounded-none max-sm:bg-background/60"
+                      onClick={closeAddDropdown}
+                    />
+                    <motion.div
+                      key="add-panel"
+                      initial={{ opacity: 0, y: -10, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.96 }}
+                      transition={{ type: "spring", stiffness: 380, damping: 28 }}
+                      style={{ transformOrigin: "top right" }}
+                      // En móvil flota centrado-arriba en la pantalla (el dropdown pegado abajo quedaba tapado por el teclado)
+                      className="absolute left-0 right-0 top-10 z-20 rounded-2xl border border-border bg-popover p-2 space-y-2 shadow-2xl max-sm:fixed max-sm:left-4 max-sm:right-4 max-sm:top-[10vh] max-sm:z-[60]"
+                    >
+                      {addConfirmPhase ? (
+                        /* Confirmación: check animado dentro del dropdown */
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex flex-col items-center justify-center gap-2 rounded-xl bg-emerald-500 py-10 text-white"
+                        >
+                          <motion.div
+                            initial={{ scale: 0, rotate: -30 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ type: "spring", stiffness: 280, damping: 14, delay: 0.08 }}
+                            className="relative"
                           >
+                            <span className="absolute inset-0 rounded-full bg-white/25 animate-ping" />
+                            <CheckCircle2 className="relative h-14 w-14" />
+                          </motion.div>
+                          <motion.p
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.25 }}
+                            className="text-sm font-black tracking-wide"
+                          >
+                            ¡Agregados al pedido!
+                          </motion.p>
+                        </motion.div>
+                      ) : (
+                      <>
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="Buscar producto..." className="h-9 pl-8 rounded-xl" autoFocus />
+                      </div>
+                      <div className="max-h-48 overflow-y-auto space-y-1">
+                        {addMatches.slice(0, 20).map((p, i) => {
+                          const stagedQty = staged.find((s) => s.id === p.id)?.qty || 0
+                          return (
+                          <motion.button
+                            key={p.id}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: Math.min(i * 0.025, 0.25), duration: 0.18 }}
+                            type="button"
+                            onClick={() => stageProduct(p)}
+                            className={cn(
+                              "relative flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition-all hover:bg-muted active:scale-[0.98]",
+                              (justAddedRow?.id === p.id || stagedQty > 0) && "bg-[#D1F366]/15 ring-1 ring-[#D1F366]/70"
+                            )}
+                          >
+                            {/* "+1" al sumar a la selección */}
+                            <AnimatePresence>
+                              {justAddedRow?.id === p.id && (
+                                <motion.span
+                                  key={justAddedRow.nonce}
+                                  initial={{ opacity: 0, scale: 0.4, y: 8 }}
+                                  animate={{ opacity: 1, scale: 1.1, y: -2 }}
+                                  exit={{ opacity: 0, scale: 0.8, y: -12 }}
+                                  transition={{ duration: 0.35, ease: "easeOut" }}
+                                  className="pointer-events-none absolute right-10 top-1/2 -translate-y-1/2 z-10 rounded-full bg-[#D1F366] px-2 py-0.5 text-xs font-black text-[#1C1C28] shadow-lg"
+                                >
+                                  +1
+                                </motion.span>
+                              )}
+                            </AnimatePresence>
                             <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
                               {p.image_url ? (
                                 <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
@@ -1428,17 +1703,82 @@ export function PedidosClient({
                             </div>
                             <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
                             <span className="text-xs font-semibold text-muted-foreground">{formatCurrency(Number(p.price) || 0)}</span>
-                            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#D1F366] text-[#1C1C28]">
-                              <Plus className="h-3.5 w-3.5" />
-                            </span>
-                          </button>
-                        ))}
-                      {addMatches.length === 0 && (
-                        <p className="py-3 text-center text-xs text-muted-foreground">Sin resultados.</p>
+                            {stagedQty > 0 ? (
+                              <motion.span
+                                key={stagedQty}
+                                initial={{ scale: 1.4 }}
+                                animate={{ scale: 1 }}
+                                transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                                className="flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-[#D1F366] px-1.5 text-xs font-black text-[#1C1C28]"
+                              >
+                                ×{stagedQty}
+                              </motion.span>
+                            ) : (
+                              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                                <Plus className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                          </motion.button>
+                          )
+                        })}
+                        {addMatches.length === 0 && (
+                          <p className="py-3 text-center text-xs text-muted-foreground">Sin resultados.</p>
+                        )}
+                      </div>
+
+                      {/* Carrito de selección: lo que entra al pedido al confirmar */}
+                      <AnimatePresence initial={false}>
+                        {staged.length > 0 && (
+                          <motion.div
+                            key="staged-cart"
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            className="overflow-hidden"
+                          >
+                            <div className="border-t border-border pt-2 space-y-1.5">
+                              <div className="max-h-28 overflow-y-auto space-y-1 px-0.5">
+                                <AnimatePresence initial={false}>
+                                  {staged.map((s) => (
+                                    <motion.div
+                                      key={s.id}
+                                      layout
+                                      initial={{ opacity: 0, y: -6 }}
+                                      animate={{ opacity: 1, y: 0 }}
+                                      exit={{ opacity: 0, scale: 0.95 }}
+                                      transition={{ duration: 0.15 }}
+                                      className="flex items-center gap-2 text-xs"
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => unstageProduct(s.id)}
+                                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/70 transition-colors active:scale-90"
+                                      >
+                                        <Minus className="h-3 w-3" />
+                                      </button>
+                                      <span className="font-black text-[#5c7a16] dark:text-[#D1F366]">{s.qty}x</span>
+                                      <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+                                      <span className="shrink-0 font-semibold">{formatCurrency(s.price * s.qty)}</span>
+                                    </motion.div>
+                                  ))}
+                                </AnimatePresence>
+                              </div>
+                              <Button
+                                type="button"
+                                onClick={confirmStaged}
+                                className="h-10 w-full rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C] active:scale-[0.98] transition-all"
+                              >
+                                Agregar {stagedCount} al pedido · {formatCurrency(stagedTotal)}
+                              </Button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      </>
                       )}
-                    </div>
-                  </div>
-                  </motion.div>
+                    </motion.div>
+                  </>
                 )}
                 </AnimatePresence>
 
@@ -1534,7 +1874,7 @@ export function PedidosClient({
                 type="button"
                 variant="ghost"
                 className="rounded-xl w-full sm:w-auto"
-                onClick={() => setDetailMode("edit")}
+                onClick={() => { setDetailMode("edit"); setPrintPhase(null) }}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" /> Volver al pedido
               </Button>

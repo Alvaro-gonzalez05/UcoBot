@@ -7,7 +7,7 @@ import { cn, normalizeSearchText } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from "framer-motion"
@@ -18,6 +18,7 @@ import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialo
 import { broadcastLoyaltyUpdate } from "@/lib/loyalty-realtime"
 import { PosSettingsDialog, type PosSettings } from "@/components/dashboard/pos-settings-dialog"
 import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
+import { printTicket, type TicketData, type TicketWidth } from "@/lib/print-ticket"
 
 interface Product {
   id: string
@@ -97,6 +98,7 @@ interface PuntoDeVentaViewProps {
   categories: string[]
   clients: Client[]
   promotions: Promotion[]
+  businessName?: string
 }
 
 const PRODUCTS_PAGE_SIZE = 18
@@ -112,7 +114,7 @@ const paymentOptions = [
 const normalizePaymentMethods = (methods: string[]) =>
   Array.from(new Set(methods.map((m) => (m === "link" ? "qr" : m))))
 
-export function PuntoDeVentaView({ userId, products: initialProducts, categories: initialCategories, clients, promotions }: PuntoDeVentaViewProps) {
+export function PuntoDeVentaView({ userId, products: initialProducts, categories: initialCategories, clients, promotions, businessName = "Mi Negocio" }: PuntoDeVentaViewProps) {
   const supabase = createClient()
   const [activeCategory, setActiveCategory] = useState("Todos")
   const [productSearch, setProductSearch] = useState("")
@@ -127,7 +129,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const justAddedTimer = useRef<number | null>(null)
   const [clientSearch, setClientSearch] = useState("")
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
-  const [paymentMethod, setPaymentMethod] = useState("cash")
+  // Sin método por default: el pedido puede pasarse sin cobrar, o cobrarse eligiendo método
+  const [paymentMethod, setPaymentMethod] = useState<string | null>(null)
+  // Animación de confirmación a panel completo: venta finalizada o pedido pasado
+  const [saleSuccess, setSaleSuccess] = useState<null | "completed" | "pending">(null)
+  // Ticket de la venta recién generada (para imprimirlo al toque) + fases de impresión
+  const [lastTicket, setLastTicket] = useState<TicketData | null>(null)
+  const [posPrintPhase, setPosPrintPhase] = useState<null | "printing" | "done">(null)
   const [mpQr, setMpQr] = useState<string | null>(null)
   const [mpQrLoading, setMpQrLoading] = useState(false)
   const [mpQrOrderId, setMpQrOrderId] = useState<string | null>(null)
@@ -208,7 +216,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             tip_percent: Number(data.tip_percent) || 10,
             ticket_width: Number(data.ticket_width) || 80,
           })
-          if (!pm.includes("cash")) setPaymentMethod(pm[0])
+          // No se auto-selecciona método: el usuario decide si cobra (y con qué) o pasa el pedido
         }
       })
   }, [userId])
@@ -448,7 +456,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     setIsSubmitting(true)
 
     try {
-      const paymentLabel = paymentOptions.find((option) => option.id === paymentMethod)?.label || "Efectivo"
+      const paymentLabel = paymentMethod
+        ? paymentOptions.find((option) => option.id === paymentMethod)?.label || paymentMethod
+        : "Pago pendiente"
 
       const orderItems = cartItems.map((item) => ({
         product_id: item.productId,
@@ -489,12 +499,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       }
 
       // Nota de cobro: medio de pago, canje, y vuelto si se ingresó
-      const noteParts = [`Venta generada desde Punto de venta. Metodo de pago: ${paymentLabel}`]
+      const noteParts = [
+        `Venta generada desde Punto de venta. ${status === "completed" && paymentMethod ? `Metodo de pago: ${paymentLabel}` : "Pago pendiente"}`,
+      ]
       if (redeemedReward) noteParts.push(`Canje: ${redeemedReward.name}`)
       if (tip > 0) noteParts.push(`Propina/extra: ${formatCurrency(tip)}`)
       if (paidNum > 0) noteParts.push(`Pagó con ${formatCurrency(paidNum)} · Vuelto: ${formatCurrency(Math.max(0, change))}`)
 
-      const { error } = await supabase
+      const { data: createdOrder, error } = await supabase
         .from("orders")
         .insert({
           user_id: userId,
@@ -503,11 +515,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           items: orderItems,
           total_amount: Number(total.toFixed(2)),
           tip_amount: Number(tip.toFixed(2)),
-          payments: status === "completed" ? [{ method: paymentMethod, amount: Number(total.toFixed(2)), label: paymentLabel }] : [],
+          payments: status === "completed" && paymentMethod ? [{ method: paymentMethod, amount: Number(total.toFixed(2)), label: paymentLabel }] : [],
           delivery_phone: selectedClient?.phone || selectedClient?.instagram_username || "venta-local",
           customer_notes: noteParts.join(". "),
           source: "pos",
         })
+        .select("id")
+        .single()
 
       if (error) {
         throw error
@@ -638,7 +652,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         }
       }
 
-      toast.success(status === "completed" ? "Venta registrada como finalizada" : "Pedido pasado correctamente")
+      // Sin toast: la animación de confirmación del panel ya avisa el resultado
 
       // Contabilizar un uso por cada promoción aplicada en esta venta (respeta el límite en DB)
       const usedPromoIds = Array.from(
@@ -652,24 +666,81 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         }
       }
 
-      setCartItems([])
-      setSelectedClient(null)
-      setClientSearch("")
-      setPaymentMethod(posSettings.payment_methods[0] || "cash")
-      setRedeemedReward(null)
-      setRedeemStampGift(false)
-      setTip(0)
-      setAmountPaid("")
-      setIsCartOpen(false)
+      // La limpieza del carrito ocurre en resetSale() (al tocar "Listo" en la confirmación)
+      return createdOrder?.id as string | null
     } catch (error) {
       console.error("Error creating POS order:", error)
       toast.error("No se pudo procesar el pedido")
+      return null
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const finalizeSale = () => submitSale("completed")
+  // Limpia el carrito y cierra el panel (después de la confirmación / impresión)
+  const resetSale = () => {
+    setCartItems([])
+    setSelectedClient(null)
+    setClientSearch("")
+    setPaymentMethod(null)
+    setRedeemedReward(null)
+    setRedeemStampGift(false)
+    setTip(0)
+    setAmountPaid("")
+    setSaleSuccess(null)
+    setPosPrintPhase(null)
+    setLastTicket(null)
+    setIsCartOpen(false)
+  }
+
+  // Snapshot del ticket ANTES de limpiar el carrito (mismo formato que /pedidos)
+  const buildPosTicket = (status: "completed" | "pending", orderId: string): TicketData => {
+    const items = cartItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price }))
+    if (rewardDiscount > 0 && redeemedReward) {
+      items.push({ name: `Canje: ${redeemedReward.name}`, quantity: 1, price: -rewardDiscount })
+    }
+    // Si la propina activa coincide con la sugerida, la línea dice "Propina sugerida X%"
+    const isSuggested = posSettings.tip_enabled && tip > 0 && tip === suggestedTip
+    return {
+      businessName,
+      orderId,
+      clientName: selectedClient?.name || undefined,
+      orderType: "Punto de venta",
+      items,
+      total, // ya incluye propina y descuentos
+      tipAmount: tip > 0 ? tip : undefined,
+      tipLabel: isSuggested ? `Propina sugerida ${posSettings.tip_percent}%` : "Propina / extra",
+      // No incluimos el método de pago en el ticket: repetía el total innecesariamente
+      payments: undefined,
+      notes: status === "pending" ? "Pago pendiente" : undefined,
+    }
+  }
+
+  // Imprime el ticket recién generado, con la animación imprimiendo → impreso
+  const handlePosPrint = () => {
+    if (!lastTicket) return
+    setPosPrintPhase("printing")
+    printTicket(lastTicket, (posSettings.ticket_width as TicketWidth) || 80)
+    window.setTimeout(() => setPosPrintPhase("done"), 1500)
+  }
+
+  // Cobra la venta: exige método elegido, muestra la animación y después confirma.
+  // El panel queda con los botones "Imprimir ticket" / "Listo" hasta que el usuario cierre.
+  const finalizeSale = () => {
+    if (!paymentMethod) {
+      toast.error("Elegí un método de pago", { description: "O usá \"Pasar pedido\" para cobrarlo después." })
+      return
+    }
+    setSaleSuccess("completed")
+    window.setTimeout(async () => {
+      const orderId = await submitSale("completed")
+      if (!orderId) {
+        setSaleSuccess(null)
+        return
+      }
+      setLastTicket(buildPosTicket("completed", orderId))
+    }, 1400)
+  }
 
   // Genera un QR INTEROPERABLE (lo paga cualquier billetera) por el total del carrito.
   const generateMpQr = async () => {
@@ -719,21 +790,36 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     return () => clearInterval(interval)
   }, [mpQr, mpQrOrderId, mpQrPaid])
 
-  // Al confirmarse el pago: dejamos ver la animación del check y finalizamos la venta
-  // (registra la orden, cierra el carrito y el diálogo del QR).
+  // Al confirmarse el pago QR: registra la orden, cierra el diálogo del QR y pasa
+  // al panel de confirmación con los botones de imprimir/cerrar.
   useEffect(() => {
     if (!mpQrPaid) return
     const t = setTimeout(async () => {
-      await submitSale("completed")
+      const orderId = await submitSale("completed")
       setMpQr(null)
       setMpQrOrderId(null)
       setMpQrPaid(false)
+      if (orderId) {
+        setSaleSuccess("completed")
+        setLastTicket(buildPosTicket("completed", orderId))
+      }
     }, 1800)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mpQrPaid])
 
-  const moveOrder = () => submitSale("pending")
+  // Pasa el pedido sin cobrar (queda pendiente en Pedidos), con su propia animación
+  const moveOrder = () => {
+    setSaleSuccess("pending")
+    window.setTimeout(async () => {
+      const orderId = await submitSale("pending")
+      if (!orderId) {
+        setSaleSuccess(null)
+        return
+      }
+      setLastTicket(buildPosTicket("pending", orderId))
+    }, 1400)
+  }
 
   return (
     <div className="h-full w-full bg-background p-3 pb-24 sm:p-4 sm:pb-24 lg:p-4 lg:pb-4 xl:p-6 overflow-hidden">
@@ -811,23 +897,31 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       justAdded?.id === product.id && "ring-2 ring-[#D1F366] scale-[0.97]"
                     )}
                   >
-                    {/* "+N" que salta al agregar (dentro de la tarjeta para que no lo corte el scroll) */}
-                    <AnimatePresence>
-                      {justAdded?.id === product.id && (
-                        <motion.span
-                          key={justAdded.count}
-                          initial={{ opacity: 0, y: 6, scale: 0.5 }}
-                          animate={{ opacity: 1, y: 0, scale: 1.1 }}
-                          exit={{ opacity: 0, y: -8, scale: 0.8 }}
-                          transition={{ duration: 0.35, ease: "easeOut" }}
-                          className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-[#D1F366] px-2.5 py-1 text-sm font-black text-[#1C1C28] shadow-lg"
-                        >
-                          +{justAdded.count}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
                     {/* Media: imagen o placeholder con la inicial. El badge va acá (nunca tapa el nombre) */}
                     <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted">
+                      {/* "+N" al agregar: centrado sobre la imagen (su overflow-hidden evita cualquier corte externo) */}
+                      <AnimatePresence>
+                        {justAdded?.id === product.id && (
+                          <motion.div
+                            key={justAdded.count}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-[#1C1C28]/25"
+                          >
+                            <motion.span
+                              initial={{ scale: 0.4, y: 10 }}
+                              animate={{ scale: 1.15, y: 0 }}
+                              exit={{ scale: 0.8, y: -12, opacity: 0 }}
+                              transition={{ type: "spring", stiffness: 380, damping: 18 }}
+                              className="rounded-full bg-[#D1F366] px-3.5 py-1.5 text-base font-black text-[#1C1C28] shadow-xl"
+                            >
+                              +{justAdded.count}
+                            </motion.span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                       <div className="aspect-square overflow-hidden rounded-[1.5rem]">
                         {product.image_url ? (
                           /* eslint-disable-next-line @next/next/no-img-element */
@@ -1200,6 +1294,133 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               className="flex-shrink-0 px-3 sm:px-4 pt-2.5 pb-3 sm:pb-4 space-y-2.5 border-t border-slate-100 dark:border-border text-left"
               style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
             >
+              {saleSuccess ? (
+                posPrintPhase ? (
+                  /* Fases de impresión: imprimiendo → impreso (igual que /pedidos) */
+                  <motion.div
+                    key={posPrintPhase}
+                    initial={{ opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-4 rounded-[1.5rem] py-14 text-white shadow-lg",
+                      posPrintPhase === "printing" ? "bg-[#1f2030]" : "bg-emerald-500"
+                    )}
+                  >
+                    {posPrintPhase === "printing" ? (
+                      <>
+                        <div className="flex flex-col items-center">
+                          <Printer className="h-16 w-16 text-[#d8ff55]" />
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: [0, 44, 44], opacity: [0, 1, 1], y: [0, 2, 6] }}
+                            transition={{ duration: 1.3, repeat: Infinity, repeatDelay: 0.15, ease: "easeInOut" }}
+                            className="mt-1 w-16 overflow-hidden rounded-b-md bg-white shadow-md"
+                          >
+                            <div className="mx-2 mt-2 space-y-1.5">
+                              <div className="h-1 rounded bg-neutral-300" />
+                              <div className="h-1 rounded bg-neutral-300" />
+                              <div className="h-1 w-2/3 rounded bg-neutral-300" />
+                            </div>
+                          </motion.div>
+                        </div>
+                        <p className="text-sm font-black uppercase tracking-[0.2em] text-[#d8ff55]">Imprimiendo ticket…</p>
+                      </>
+                    ) : (
+                      <>
+                        <motion.div
+                          initial={{ scale: 0, rotate: -30 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.1 }}
+                          className="relative"
+                        >
+                          <span className="absolute inset-0 rounded-full bg-white/25 animate-ping" />
+                          <CheckCircle2 className="relative h-20 w-20" />
+                        </motion.div>
+                        <p className="text-lg font-black tracking-wide">¡Ticket impreso!</p>
+                        <Button
+                          onClick={resetSale}
+                          className="h-10 w-full max-w-[220px] rounded-xl bg-white font-bold text-[#1C1C28] hover:bg-white/90"
+                        >
+                          Listo
+                        </Button>
+                      </>
+                    )}
+                  </motion.div>
+                ) : (
+                /* Animación de confirmación: cubre todo el bloque de pago */
+                <motion.div
+                  key={saleSuccess}
+                  initial={{ opacity: 0, scale: 0.94 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className={cn(
+                    "flex flex-col items-center justify-center gap-3 rounded-[1.5rem] py-10 text-white shadow-lg",
+                    saleSuccess === "completed" ? "bg-emerald-500" : "bg-[#1f2030]"
+                  )}
+                >
+                  <motion.div
+                    initial={{ scale: 0, rotate: -30 }}
+                    animate={{ scale: 1, rotate: 0 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 14, delay: 0.12 }}
+                    className="relative"
+                  >
+                    <span className={cn("absolute inset-0 rounded-full animate-ping", saleSuccess === "completed" ? "bg-white/25" : "bg-[#d8ff55]/20")} />
+                    {saleSuccess === "completed" ? (
+                      <CheckCircle2 className="relative h-20 w-20" />
+                    ) : (
+                      <ReceiptText className="relative h-20 w-20 text-[#d8ff55]" />
+                    )}
+                  </motion.div>
+                  <motion.p
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className={cn("text-lg font-black tracking-wide", saleSuccess === "pending" && "text-[#d8ff55]")}
+                  >
+                    {saleSuccess === "completed" ? "¡Venta completada!" : "¡Pedido pasado!"}
+                  </motion.p>
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.45 }}
+                    className={cn("text-sm font-semibold", saleSuccess === "completed" ? "text-white/85" : "text-white/70")}
+                  >
+                    {saleSuccess === "completed"
+                      ? formatCurrency(total)
+                      : `${formatCurrency(total)} · queda pendiente de cobro en Pedidos`}
+                  </motion.p>
+
+                  {/* Acciones: imprimir el ticket al toque o cerrar */}
+                  {lastTicket ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.15 }}
+                      className="mt-2 flex w-full max-w-[240px] flex-col gap-2"
+                    >
+                      <Button
+                        onClick={handlePosPrint}
+                        className="h-10 w-full rounded-xl bg-white/15 font-bold text-white hover:bg-white/25 gap-2 backdrop-blur-sm"
+                      >
+                        <Printer className="h-4 w-4" /> Imprimir ticket
+                      </Button>
+                      <Button
+                        onClick={resetSale}
+                        className="h-10 w-full rounded-xl bg-white font-bold text-[#1C1C28] hover:bg-white/90"
+                      >
+                        Listo
+                      </Button>
+                    </motion.div>
+                  ) : (
+                    <p className={cn("mt-1 flex items-center gap-1.5 text-xs", saleSuccess === "completed" ? "text-white/70" : "text-white/50")}>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Guardando…
+                    </p>
+                  )}
+                </motion.div>
+                )
+              ) : (
+              <>
                 <div>
                   <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
                   <div className="grid grid-cols-2 gap-2">
@@ -1210,9 +1431,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                         <button
                           key={option.id}
                           type="button"
-                          onClick={() => setPaymentMethod(option.id)}
+                          // Tocar de nuevo deselecciona (el pedido puede pasarse sin método de pago)
+                          onClick={() => setPaymentMethod((prev) => (prev === option.id ? null : option.id))}
                           className={cn(
-                            "flex items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-semibold transition-all",
+                            "flex items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-semibold transition-all active:scale-95",
                             isActive
                               ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-md"
                               : "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-500 dark:text-muted-foreground hover:border-slate-300 hover:text-slate-700 dark:hover:text-foreground"
@@ -1337,11 +1559,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     ) : (
                       <Button
                         onClick={finalizeSale}
-                        disabled={isSubmitting || cartItems.length === 0}
-                        className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
+                        disabled={isSubmitting || cartItems.length === 0 || !paymentMethod}
+                        className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42] disabled:opacity-60"
                       >
-                        {isSubmitting ? "Procesando..." : "Finalizar venta"}
-                        <CheckCircle2 className="ml-2 h-4 w-4" />
+                        {isSubmitting ? "Procesando..." : !paymentMethod ? "Elegí un método de pago" : "Finalizar venta"}
+                        {paymentMethod && !isSubmitting && <CheckCircle2 className="ml-2 h-4 w-4" />}
                       </Button>
                     )}
                     <Button
@@ -1354,6 +1576,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     </Button>
                   </div>
                 </div>
+              </>
+              )}
             </div>
           </div>
         </aside>
@@ -1425,7 +1649,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         onSaved={(s) => {
           setPosSettings(s)
           // Si el medio de pago elegido quedó deshabilitado, pasar al primero válido
-          if (!s.payment_methods.includes(paymentMethod)) setPaymentMethod(s.payment_methods[0])
+          if (paymentMethod && !s.payment_methods.includes(paymentMethod)) setPaymentMethod(null)
           // Si apagaron la propina, limpiar lo cargado
           if (!s.tip_enabled) setTip(0)
         }}
