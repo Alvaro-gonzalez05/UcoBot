@@ -124,19 +124,45 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   .total { font-size: ${bigFont}px; font-weight: 700; }
   .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
   .footer { margin-top: 10px; }
+  .actions { display: none; }
+  ${autoPrint ? `
+  /* Botonera visible solo en pantalla (nunca sale en el papel) */
+  .actions {
+    display: flex;
+    gap: 8px;
+    margin: 14px 0 6px;
+  }
+  .actions button {
+    flex: 1;
+    padding: 14px 10px;
+    border: 0;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 800;
+    font-family: inherit;
+  }
+  .btn-print { background: #d1f366; color: #1c1c28; }
+  .btn-close { background: #e5e5e5; color: #333; }
+  @media print {
+    .actions { display: none !important; }
+  }` : ""}
 </style>
 </head>
 <body>${buildTicketInner(t)}${autoPrint ? `
+<div class="actions">
+  <button type="button" class="btn-print" onclick="window.print()">IMPRIMIR</button>
+  <button type="button" class="btn-close" onclick="window.close()">Cerrar</button>
+</div>
 <script>
-  // Pestaña que se imprime sola y se cierra (para Android/POSNET, donde
-  // imprimir desde un iframe no funciona).
+  // Pestaña de impresión para Android/POSNET (imprimir desde iframe no anda ahí).
+  // OJO: no usamos onafterprint para autocerrar porque en Android dispara
+  // apenas se ABRE el diálogo (cerraba la pestaña antes de poder imprimir).
+  // La pestaña queda abierta con los botones IMPRIMIR / Cerrar.
   window.onload = function () {
     setTimeout(function () {
-      window.focus();
-      window.print();
-    }, 300);
+      try { window.focus(); window.print(); } catch (e) { /* el botón queda de respaldo */ }
+    }, 400);
   };
-  window.onafterprint = function () { setTimeout(function () { window.close(); }, 300); };
 </script>` : ""}</body>
 </html>`
 }
