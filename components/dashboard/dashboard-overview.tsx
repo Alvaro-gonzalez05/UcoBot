@@ -10,7 +10,20 @@ import { createClient } from "@/lib/supabase/client"
 import { startOfMonth, subMonths } from "date-fns"
 import { MultiStepAutomationCreation } from "./multi-step-automation-creation"
 import { ClientCreationDialog } from "./client-creation-dialog"
-import { Area, AreaChart, Bar, BarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts"
+import dynamic from "next/dynamic"
+
+// Gráficos (recharts) cargados bajo demanda: no entran en el bundle inicial.
+const chartLoader = () => (
+  <div className="h-full w-full animate-pulse rounded-xl bg-muted/40" />
+)
+const RevenueBarChart = dynamic(() => import("./overview-charts").then((m) => m.RevenueBarChart), {
+  ssr: false,
+  loading: chartLoader,
+})
+const TrendAreaChart = dynamic(() => import("./overview-charts").then((m) => m.TrendAreaChart), {
+  ssr: false,
+  loading: chartLoader,
+})
 
 interface DashboardOverviewProps {
   user: User
@@ -39,16 +52,6 @@ const currencyFmt = new Intl.NumberFormat("es-AR", {
   maximumFractionDigits: 0,
 })
 
-const chartTooltipStyle = {
-  backgroundColor: "#1C1C28",
-  border: "none",
-  borderRadius: "8px",
-  color: "#fff",
-  fontSize: "12px",
-  fontWeight: "bold",
-  padding: "10px",
-  boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
-} as const
 
 function getLeadsTip(clientsGrowth: number, totalClients: number): string {
   if (totalClients === 0) return "Conectá tu primer asistente para empezar a capturar leads."
@@ -343,20 +346,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                 : "Cuando tu bot tome pedidos, acá vas a ver la plata que te genera."}
             </p>
             <div className="flex-1 min-h-[150px] -mx-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={revenueChart} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 600, fill: '#94A3B8' }} interval={1} />
-                  <Tooltip
-                    formatter={(value: number) => [currencyFmt.format(value), "Ventas"]}
-                    labelFormatter={(label: string) => `Día ${label}`}
-                    cursor={{ fill: "rgba(148,163,184,0.08)" }}
-                    contentStyle={chartTooltipStyle}
-                    itemStyle={{ color: '#D1F366' }}
-                    labelStyle={{ color: '#94A3B8', fontSize: '10px' }}
-                  />
-                  <Bar dataKey="value" fill="#D1F366" radius={[5, 5, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <RevenueBarChart data={revenueChart} />
             </div>
             <p className="text-[10px] text-[#64748B] text-center mt-2">Ventas por día · últimos 14 días (todos los canales)</p>
           </div>
@@ -486,19 +476,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
               )}
             </div>
             <div className="relative h-36 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#D1F366" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#D1F366" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 600, fill: '#94A3B8' }} />
-                  <Tooltip contentStyle={chartTooltipStyle} itemStyle={{ color: '#D1F366' }} labelStyle={{ color: '#94A3B8', fontSize: '10px' }} />
-                  <Area type="monotone" dataKey="value" stroke="#D1F366" strokeWidth={3} fill="url(#colorValue)" dot={false} activeDot={{ r: 6, fill: '#D1F366', stroke: '#fff', strokeWidth: 2 }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <TrendAreaChart data={chartData} />
             </div>
           </div>
           )}

@@ -28,7 +28,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { useEffect, useRef } from "react"
-import { gsap } from "gsap"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn, normalizeSearchText } from "@/lib/utils"
 
@@ -153,7 +152,6 @@ export function PedidosClient({
   // Extract unique tags from all orders
   const allTags = Array.from(new Set(orders.flatMap(o => o.tags || []))).sort()
 
-  const pendingCardsRef = useRef<(HTMLDivElement | null)[]>([])
 
   // Make sure we have a reliable audio element
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -198,27 +196,9 @@ export function PedidosClient({
     }
   }, [supabase])
 
-  useEffect(() => {
-    // GSAP animation for pending orders
-    const pendingElements = pendingCardsRef.current.filter(Boolean)
-    if (pendingElements.length > 0) {
-      const ctx = gsap.context(() => {
-        gsap.to(pendingElements, {
-          y: -4,
-          boxShadow: "0 10px 15px -3px rgba(209, 243, 102, 0.4)",
-          repeat: -1,
-          yoyo: true,
-          duration: 1.5,
-          ease: "sine.inOut",
-          stagger: {
-            amount: 0.5,
-            from: "start"
-          }
-        })
-      })
-      return () => ctx.revert()
-    }
-  }, [orders])
+  // (El resaltado de pedidos pendientes ahora es una animación CSS liviana —
+  //  ver .order-card-pending en globals.css. Antes era GSAP animando box-shadow
+  //  de forma infinita, que trababa los celulares de gama baja.)
 
   // Filter orders based on search + selected tags + status
   const filteredOrders = orders.filter(order => {
@@ -880,13 +860,6 @@ export function PedidosClient({
                 /* ── Vista tarjeta vertical ── */
                 <div
                   key={order.id}
-                  ref={(el) => {
-                    if (order.status === 'pending') {
-                      pendingCardsRef.current[index] = el
-                    } else {
-                      pendingCardsRef.current[index] = null
-                    }
-                  }}
                   onClick={() => openDetail(order)}
                   className={cn(
                     "rounded-3xl p-4 shadow-sm border transition-all hover:shadow-md cursor-pointer flex flex-col gap-3",
@@ -983,13 +956,6 @@ export function PedidosClient({
               ) : (
                 <div
                   key={order.id}
-                  ref={(el) => {
-                    if (order.status === 'pending') {
-                      pendingCardsRef.current[index] = el
-                    } else {
-                      pendingCardsRef.current[index] = null
-                    }
-                  }}
                   onClick={() => openDetail(order)}
                   className={cn(
                     "rounded-3xl p-5 shadow-sm border transition-all hover:shadow-md cursor-pointer",
@@ -1002,7 +968,7 @@ export function PedidosClient({
                       {/* Product image or placeholder */}
                       <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                         {Array.isArray(order.items) && order.items[0]?.image_url ? (
-                          <img src={order.items[0].image_url} alt="producto" className="w-full h-full object-cover" />
+                          <img src={order.items[0].image_url} alt="producto" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         ) : (
                           <ShoppingCart className="h-7 w-7 text-muted-foreground" />
                         )}
@@ -1168,7 +1134,7 @@ export function PedidosClient({
                   {/* Imagen: cuadrada estilo POS en móvil, banner en desktop */}
                   <div className="relative mb-2 md:mb-0 overflow-hidden rounded-[1.5rem] md:rounded-none bg-muted">
                     {product.image_url ? (
-                      <img src={product.image_url} alt={product.name} className="w-full aspect-square md:aspect-auto md:h-40 object-cover" />
+                      <img src={product.image_url} alt={product.name} loading="lazy" decoding="async" className="w-full aspect-square md:aspect-auto md:h-40 object-cover" />
                     ) : (
                       <div className="flex w-full aspect-square md:aspect-auto md:h-40 items-center justify-center bg-gradient-to-br from-muted to-muted/60">
                         <span className="select-none text-4xl font-black text-muted-foreground/30 md:hidden">{product.name.charAt(0).toUpperCase()}</span>

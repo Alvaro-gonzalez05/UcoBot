@@ -322,3 +322,17 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 40px -12px rgba(0, 0, 0, 0.6);
   }
 }
+
+/* Resaltado de pedidos pendientes (antes era GSAP animando box-shadow, que
+   trababa celulares de gama baja). Solo transform → va por GPU, casi gratis. */
+@keyframes pendingPulse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.order-card-pending {
+  animation: pendingPulse 1.6s ease-in-out infinite;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-card-pending { animation: none; }
+}
