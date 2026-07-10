@@ -384,6 +384,8 @@ export function PedidosClient({
   const advanceOrderStatus = async (order: Order) => {
     const next = nextStatusOf(order.status)
     if (!next) return
+    // Finalizar exige cobro: al pasar a "completado" abrimos el cobro del pedido.
+    if (next === "completed") { openCheckout(order); return }
     try {
       const { data, error } = await supabase
         .from("orders")
@@ -742,16 +744,19 @@ export function PedidosClient({
   // o claro (oscuro) según el tema.
   const getCardStyle = (status: string) => {
     switch (status) {
-      case 'pending':    return 'bg-amber-200 border-amber-300 dark:bg-amber-900 dark:border-amber-800'
-      case 'confirmed':  return 'bg-sky-200 border-sky-300 dark:bg-sky-900 dark:border-sky-800'
-      case 'preparing':  return 'bg-orange-200 border-orange-300 dark:bg-orange-900 dark:border-orange-800'
-      case 'ready':      return 'bg-emerald-200 border-emerald-300 dark:bg-emerald-900 dark:border-emerald-800'
-      case 'completed':  return 'bg-slate-200 border-slate-300 dark:bg-slate-800 dark:border-slate-700'
-      case 'delivered':  return 'bg-slate-200 border-slate-300 dark:bg-slate-800 dark:border-slate-700'
-      case 'cancelled':  return 'bg-rose-200 border-rose-300 dark:bg-rose-900 dark:border-rose-800 line-through'
+      case 'pending':    return 'bg-amber-500 border-amber-600 text-white dark:bg-amber-600 dark:border-amber-700'
+      case 'confirmed':  return 'bg-sky-500 border-sky-600 text-white dark:bg-sky-600 dark:border-sky-700'
+      case 'preparing':  return 'bg-orange-500 border-orange-600 text-white dark:bg-orange-600 dark:border-orange-700'
+      case 'ready':      return 'bg-emerald-500 border-emerald-600 text-white dark:bg-emerald-600 dark:border-emerald-700'
+      case 'completed':  return 'bg-slate-500 border-slate-600 text-white dark:bg-slate-600 dark:border-slate-700'
+      case 'delivered':  return 'bg-slate-500 border-slate-600 text-white dark:bg-slate-600 dark:border-slate-700'
+      case 'cancelled':  return 'bg-rose-500 border-rose-600 text-white line-through dark:bg-rose-600 dark:border-rose-700'
       default:           return 'bg-card border-border'
     }
   }
+
+  // Badge de estado sobre la tarjeta de color: pastilla blanca sólida (contrasta siempre)
+  const cardBadgeClass = 'bg-white text-slate-900'
 
   // Color del anillo del flash cuando el pedido cambia de estado
   const getStatusRing = (status: string) => {
@@ -967,18 +972,18 @@ export function PedidosClient({
                   {renderStatusFlash(order)}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <span className="text-base font-bold dark:text-white">#{order.id.slice(0, 8).toUpperCase()}</span>
-                      <p className="text-xs text-muted-foreground mt-0.5">
+                      <span className="text-base font-bold text-white">#{order.id.slice(0, 8).toUpperCase()}</span>
+                      <p className="text-xs text-white/70 mt-0.5">
                         {formatDistanceToNow(new Date(order.created_at), { addSuffix: true, locale: es })}
                       </p>
                     </div>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${getStatusBadgeClass(order.status)}`}>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${cardBadgeClass}`}>
                       {getStatusText(order.status).toUpperCase()}
                     </span>
                   </div>
 
-                  <div className="flex-1 rounded-2xl bg-white dark:bg-slate-950 p-3">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Detalle</span>
+                  <div className="flex-1 rounded-2xl bg-white dark:bg-slate-950 p-3 text-slate-900 dark:text-slate-100">
+                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Detalle</span>
                     <div className="mt-1 space-y-0.5">
                       {Array.isArray(order.items) && order.items.length > 0 ? (
                         <>
@@ -1015,11 +1020,11 @@ export function PedidosClient({
                     </div>
                   )}
 
-                  <div className="border-t border-border pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="border-t border-white/25 pt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
                     {order.status !== 'completed' && order.status !== 'cancelled' && (
                       <Button
                         onClick={() => openCheckout(order)}
-                        className="w-full h-9 rounded-xl bg-emerald-500 text-white font-bold text-xs shadow-sm hover:bg-emerald-600 transition-colors gap-1"
+                        className="w-full h-9 rounded-xl bg-white text-emerald-700 font-bold text-xs shadow-sm hover:bg-emerald-50 transition-colors gap-1"
                       >
                         <Banknote className="h-4 w-4" /> Cobrar
                       </Button>
@@ -1028,7 +1033,7 @@ export function PedidosClient({
                     {nextStatusOf(order.status) && (
                       <Button
                         onClick={() => advanceOrderStatus(order)}
-                        className="flex-1 h-9 rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold text-xs shadow-sm hover:bg-[#B3D93C] transition-colors whitespace-nowrap gap-1"
+                        className="flex-1 h-9 rounded-xl bg-[#1f2030] text-[#d8ff55] font-bold text-xs shadow-sm hover:bg-[#2a2b3d] transition-colors whitespace-nowrap gap-1"
                       >
                         {getStatusText(nextStatusOf(order.status)!)}
                         <ChevronRight className="h-4 w-4" />
@@ -1036,7 +1041,7 @@ export function PedidosClient({
                     )}
                     <DropdownMenu modal={false}>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-9 w-9 p-0 rounded-xl">
+                        <Button variant="ghost" className="h-9 w-9 p-0 rounded-xl text-white hover:bg-white/15 hover:text-white">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
@@ -1072,49 +1077,49 @@ export function PedidosClient({
                     {/* Left: ID, status, time */}
                     <div className="flex items-center gap-4 w-full md:w-auto">
                       {/* Product image or placeholder */}
-                      <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
                         {Array.isArray(order.items) && order.items[0]?.image_url ? (
                           <img src={order.items[0].image_url} alt="producto" loading="lazy" decoding="async" className="w-full h-full object-cover" />
                         ) : (
-                          <ShoppingCart className="h-7 w-7 text-muted-foreground" />
+                          <ShoppingCart className="h-7 w-7 text-slate-400" />
                         )}
                       </div>
                       <div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-lg font-bold dark:text-white">#{order.id.slice(0, 8).toUpperCase()}</span>
-                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getStatusBadgeClass(order.status)}`}>
+                          <span className="text-lg font-bold text-white">#{order.id.slice(0, 8).toUpperCase()}</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${cardBadgeClass}`}>
                             {getStatusText(order.status).toUpperCase()}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="text-xs text-white/70 mt-1">
                           {formatDistanceToNow(new Date(order.created_at), { addSuffix: true, locale: es })}
                         </p>
                       </div>
                     </div>
 
                     {/* Center: Products */}
-                    <div className="flex-1 min-w-[180px] flex flex-col justify-center px-4 md:px-6 md:border-x border-border">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Detalle de Productos</span>
+                    <div className="flex-1 min-w-[180px] flex flex-col justify-center px-4 md:px-6 md:border-x border-white/25">
+                      <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider mb-1">Detalle de Productos</span>
                       {Array.isArray(order.items) && order.items.length > 0 ? (
                         order.items.map((item: any, i: number) => (
-                          <p key={i} className="text-sm font-semibold text-foreground">
+                          <p key={i} className="text-sm font-semibold text-white">
                             {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
-                            <span className="text-xs text-muted-foreground font-normal ml-1">${item.price} c/u</span>
+                            <span className="text-xs text-white/60 font-normal ml-1">${item.price} c/u</span>
                           </p>
                         ))
                       ) : (
-                        <p className="text-sm text-muted-foreground">Sin detalle</p>
+                        <p className="text-sm text-white/70">Sin detalle</p>
                       )}
                     </div>
 
                     {/* Center-right: Client & Payment */}
-                    <div className="flex-1 min-w-[180px] flex flex-col justify-center px-4 md:px-6 md:border-r border-border">
-                      <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Cliente & Pago</span>
-                      <div className="flex items-center gap-2 text-sm font-semibold text-foreground mb-1">
+                    <div className="flex-1 min-w-[180px] flex flex-col justify-center px-4 md:px-6 md:border-r border-white/25">
+                      <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider mb-1">Cliente & Pago</span>
+                      <div className="flex items-center gap-2 text-sm font-semibold text-white mb-1">
                         {getPlatformIcon(order.conversation?.platform)}
                         <span>{getOrderClientName(order) || 'Cliente Anónimo'}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-white/70">
                         <CreditCard className="h-3.5 w-3.5" />
                         <span>{getOrderModalityLabel(order)} · ${order.total_amount}</span>
                       </div>
@@ -1134,8 +1139,7 @@ export function PedidosClient({
                       {order.status !== 'completed' && order.status !== 'cancelled' && (
                         <Button
                           onClick={() => openCheckout(order)}
-                          variant="outline"
-                          className="rounded-xl gap-1 border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 whitespace-nowrap"
+                          className="rounded-xl gap-1 bg-white text-emerald-700 font-bold hover:bg-emerald-50 whitespace-nowrap"
                         >
                           <Banknote className="h-4 w-4" /> Cobrar
                         </Button>
@@ -1143,7 +1147,7 @@ export function PedidosClient({
                       {nextStatusOf(order.status) && (
                         <Button
                           onClick={() => advanceOrderStatus(order)}
-                          className="px-4 py-2.5 rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold text-sm shadow-sm hover:bg-[#B3D93C] transition-colors whitespace-nowrap gap-1"
+                          className="px-4 py-2.5 rounded-xl bg-[#1f2030] text-[#d8ff55] font-bold text-sm shadow-sm hover:bg-[#2a2b3d] transition-colors whitespace-nowrap gap-1"
                         >
                           {getStatusText(nextStatusOf(order.status)!)}
                           <ChevronRight className="h-4 w-4" />
@@ -1152,7 +1156,7 @@ export function PedidosClient({
 
                       <DropdownMenu modal={false}>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-9 w-9 p-0 rounded-xl">
+                          <Button variant="ghost" className="h-9 w-9 p-0 rounded-xl text-white hover:bg-white/15 hover:text-white">
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -1479,7 +1483,14 @@ export function PedidosClient({
 
                 <div className="space-y-2">
                   <Label htmlFor="status">Estado</Label>
-                  <Select value={editStatus} onValueChange={setEditStatus}>
+                  <Select
+                    value={editStatus}
+                    onValueChange={(v) => {
+                      // Finalizar exige cobro: en vez de marcar completado, abrimos el cobro.
+                      if (v === "completed") { setDetailMode("checkout"); return }
+                      setEditStatus(v)
+                    }}
+                  >
                     <SelectTrigger className="rounded-xl">
                       <SelectValue placeholder="Seleccionar estado" />
                     </SelectTrigger>
