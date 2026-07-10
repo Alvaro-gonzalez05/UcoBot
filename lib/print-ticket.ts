@@ -199,8 +199,8 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
     font-weight: 800;
     font-family: inherit;
   }
-  .btn-print { background: #d1f366; color: #1c1c28; }
-  .btn-close { background: #e5e5e5; color: #333; }
+  .btn-close { background: #d1f366; color: #1c1c28; }
+  .btn-print { background: #e5e5e5; color: #333; }
   @media print {
     .actions { display: none !important; }
   }` : ""}
@@ -208,21 +208,14 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
 </head>
 <body>${buildTicketInner(t)}${autoPrint ? `
 <div class="actions">
-  <button type="button" class="btn-print" onclick="window.print()">IMPRIMIR</button>
-  <button type="button" class="btn-close" onclick="window.close()">Cerrar</button>
+  <button type="button" class="btn-close" onclick="window.close()">✓ Listo, volver</button>
+  <button type="button" class="btn-print" onclick="window.print()">Reimprimir</button>
 </div>
 <script>
-  // Al terminar (o cancelar) la impresión, cerramos esta pestaña y volvemos
-  // solos a la sección de donde vino. Si el webview no dispara afterprint,
-  // queda el botón "Cerrar" como respaldo.
-  var __closed = false;
-  function __closeTicket() {
-    if (__closed) return;
-    __closed = true;
-    // Damos aire a que el trabajo de impresión se mande antes de cerrar.
-    setTimeout(function () { try { window.close() } catch (e) {} }, 500)
-  }
-  window.addEventListener("afterprint", __closeTicket)
+  // NO cerramos automáticamente la pestaña tras imprimir: en el POS Android el
+  // plugin de impresión falla ("error al imprimir la página") si la ventana se
+  // cierra durante/después del trabajo. Para volver a la sección está el botón
+  // "Cerrar". La impresión se dispara sola al cargar.
   window.addEventListener("load", function () {
     setTimeout(function () {
       try {
