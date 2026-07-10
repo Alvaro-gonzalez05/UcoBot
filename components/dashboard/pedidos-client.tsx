@@ -737,15 +737,18 @@ export function PedidosClient({
   }
 
   // Colores SÓLIDOS por estado (estilo kanban), no el tinte neón translúcido anterior
+  // Colores SÓLIDOS por estado (sin transparencias/opacidad → nada de "vidrio").
+  // Relleno y borde del mismo color; el interior contrasta con texto oscuro (claro)
+  // o claro (oscuro) según el tema.
   const getCardStyle = (status: string) => {
     switch (status) {
-      case 'pending':    return 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700'
-      case 'confirmed':  return 'bg-sky-100 border-sky-400 dark:bg-sky-950 dark:border-sky-800'
-      case 'preparing':  return 'bg-orange-100 border-orange-400 dark:bg-orange-950 dark:border-orange-800'
-      case 'ready':      return 'bg-emerald-100 border-emerald-400 dark:bg-emerald-950 dark:border-emerald-800'
-      case 'completed':  return 'bg-slate-100 border-slate-300 dark:bg-muted/40 dark:border-border opacity-80'
-      case 'delivered':  return 'bg-slate-100 border-slate-300 dark:bg-muted/40 dark:border-border opacity-80'
-      case 'cancelled':  return 'bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:border-rose-900 opacity-70 line-through'
+      case 'pending':    return 'bg-amber-200 border-amber-300 dark:bg-amber-900 dark:border-amber-800'
+      case 'confirmed':  return 'bg-sky-200 border-sky-300 dark:bg-sky-900 dark:border-sky-800'
+      case 'preparing':  return 'bg-orange-200 border-orange-300 dark:bg-orange-900 dark:border-orange-800'
+      case 'ready':      return 'bg-emerald-200 border-emerald-300 dark:bg-emerald-900 dark:border-emerald-800'
+      case 'completed':  return 'bg-slate-200 border-slate-300 dark:bg-slate-800 dark:border-slate-700'
+      case 'delivered':  return 'bg-slate-200 border-slate-300 dark:bg-slate-800 dark:border-slate-700'
+      case 'cancelled':  return 'bg-rose-200 border-rose-300 dark:bg-rose-900 dark:border-rose-800 line-through'
       default:           return 'bg-card border-border'
     }
   }
@@ -974,7 +977,7 @@ export function PedidosClient({
                     </span>
                   </div>
 
-                  <div className="flex-1 rounded-2xl bg-background/50 dark:bg-muted/20 p-3">
+                  <div className="flex-1 rounded-2xl bg-white dark:bg-slate-950 p-3">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Detalle</span>
                     <div className="mt-1 space-y-0.5">
                       {Array.isArray(order.items) && order.items.length > 0 ? (
@@ -1005,7 +1008,7 @@ export function PedidosClient({
                   {order.tags && order.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {order.tags.map((tag, i) => (
-                        <span key={i} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-medium dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">
+                        <span key={i} className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-medium dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700">
                           {tag}
                         </span>
                       ))}
@@ -1065,7 +1068,7 @@ export function PedidosClient({
                 >
                   {renderDeleteOverlay(order.id)}
                   {renderStatusFlash(order)}
-                  <div className={cn("flex flex-wrap items-center justify-between gap-4", order.status === "cancelled" && "opacity-60")}>
+                  <div className="flex flex-wrap items-center justify-between gap-4">
                     {/* Left: ID, status, time */}
                     <div className="flex items-center gap-4 w-full md:w-auto">
                       {/* Product image or placeholder */}
@@ -1118,7 +1121,7 @@ export function PedidosClient({
                       {order.tags && order.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {order.tags.map((tag, i) => (
-                            <span key={i} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-medium dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">
+                            <span key={i} className="px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200 text-[10px] font-medium dark:bg-blue-900 dark:text-blue-100 dark:border-blue-700">
                               {tag}
                             </span>
                           ))}

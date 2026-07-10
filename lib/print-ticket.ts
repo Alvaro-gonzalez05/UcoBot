@@ -212,6 +212,16 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   <button type="button" class="btn-close" onclick="window.close()">Cerrar</button>
 </div>
 <script>
+  // Al terminar (o cancelar) la impresión, cerramos esta pestaña y volvemos
+  // solos a la sección de donde vino. Si el webview no dispara afterprint,
+  // queda el botón "Cerrar" como respaldo.
+  var __closed = false;
+  function __closeTicket() {
+    if (__closed) return;
+    __closed = true;
+    setTimeout(function () { try { window.close() } catch (e) {} }, 150)
+  }
+  window.addEventListener("afterprint", __closeTicket)
   window.addEventListener("load", function () {
     setTimeout(function () {
       try {
