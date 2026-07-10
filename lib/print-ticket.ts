@@ -59,7 +59,7 @@ const money = (v: number) =>
   new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2 }).format(v)
 
 /** Contenido interno del ticket (mismo look que la vista previa). */
-function buildTicketInner(t: TicketData): string {
+export function buildTicketInner(t: TicketData): string {
   const fechaStr = new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "medium" })
 
   const itemRows = t.items
@@ -111,7 +111,7 @@ function buildTicketInner(t: TicketData): string {
     <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`
 }
 
-/** Documento standalone del ticket (iframe o pestaña de impresión). */
+/** Documento standalone del ticket para una ventana de impresión. */
 function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = false): string {
   const bodyW = widthMm === 58 ? 54 : 72
   const baseFont = widthMm === 58 ? 15 : 17
@@ -185,7 +185,6 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   .footer { margin-top: 10px; }
   .actions { display: none; }
   ${autoPrint ? `
-  /* Botonera visible solo en pantalla (nunca sale en el papel) */
   .actions {
     display: flex;
     gap: 8px;
@@ -193,9 +192,9 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   }
   .actions button {
     flex: 1;
-    padding: 14px 10px;
+    padding: 12px 10px;
     border: 0;
-    border-radius: 12px;
+    border-radius: 10px;
     font-size: 15px;
     font-weight: 800;
     font-family: inherit;
@@ -213,75 +212,76 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   <button type="button" class="btn-close" onclick="window.close()">Cerrar</button>
 </div>
 <script>
-  // Pestaña de impresión para Android/POSNET.
-  // Evitamos imprimir automáticamente al cargar porque en muchos webviews
-  // eso no abre el selector de impresión de forma confiable. La página queda
-  // abierta con los botones IMPRIMIR / Cerrar para que el usuario dispare el
-  // diálogo desde una interacción real.
   window.addEventListener("load", function () {
-    const printBtn = document.querySelector(".btn-print")
-    const closeBtn = document.querySelector(".btn-close")
-
-    if (printBtn) {
-      printBtn.addEventListener("click", function (event) {
-        event.preventDefault()
-        try {
-          window.focus()
-          window.print()
-        } catch (e) {
-          // El botón queda como respaldo si el navegador bloquea el diálogo.
-        }
-      })
-    }
-
-    if (closeBtn) {
-      closeBtn.addEventListener("click", function (event) {
-        event.preventDefault()
-        try { window.close() } catch (e) {}
-      })
-    }
-
-    setTimeout(() => {
-      try { printBtn?.focus() } catch (e) {}
-    }, 150)
+    setTimeout(function () {
+      try {
+        window.focus()
+        const printBtn = document.querySelector(".btn-print")
+        printBtn?.focus()
+        window.print()
+      } catch (error) {
+        // El webview del POS puede no abrir el diálogo automáticamente; el botón.
+      }
+    }, 250)
   })
 </script>` : ""}</body>
 </html>`
 }
 
-const IFRAME_ID = "__ticket_print_frame"
-
 export function printTicket(t: TicketData, widthMm: TicketWidth = 80, options?: PrintTicketOptions) {
-  // Android (incluye POSNET): Chrome/webviews no soportan imprimir desde un
-  // iframe (falla silenciosamente). Abrimos el ticket en una pestaña propia
-  // que se imprime sola y se cierra al terminar.
-  if (/android/i.test(navigator.userAgent)) {
-    const html = buildTicketDocument(t, widthMm, true)
-    const printUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
-    const w = window.open(printUrl, "_blank", "noopener,noreferrer,width=380,height=720")
-    if (w) {
-      setTimeout(() => {
-        try {
-          w.focus()
-          const btn = w.document.querySelector(".btn-print") as HTMLButtonElement | null
-          btn?.focus()
-        } catch (e) {}
-      }, 250)
-      setTimeout(() => {
-        try { window.focus() } catch (e) {}
-        options?.onComplete?.()
-      }, 1400)
-      return
-    }
-    // Si el popup fue bloqueado, seguimos con el iframe como último recurso.
+  if (typeof window === "undefined" || typeof document === "undefined") return
+
+  const html = buildTicketDocument(t, widthMm, true)
+  let popupUrl: string | null = null
+
+  try {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" })
+    popupUrl = URL.createObjectURL(blob)
+  } catch (error) {
+    popupUrl = null
   }
 
-  // Evitar doble impresión si ya hay una en curso
-  if (document.getElementById(IFRAME_ID)) return
+  const popup = popupUrl
+    ? window.open(popupUrl, "_blank", "noopener,noreferrer,width=380,height=720")
+    : window.open("", "_blank", "noopener,noreferrer,width=380,height=720")
 
-  // Iframe con el ticket standalone: es lo único que se manda a imprimir.
+  if (popup) {
+    try {
+      if (!popupUrl) {
+        popup.document.open()
+        popup.document.write(html)
+        popup.document.close()
+      }
+
+      const triggerPrint = () => {
+        try {
+          popup.focus()
+          const printBtn = popup.document.querySelector(".btn-print") as HTMLButtonElement | null
+          printBtn?.focus()
+          popup.print()
+        } catch (error) {}
+      }
+
+      if (popup.document.readyState === "complete") {
+        setTimeout(triggerPrint, 250)
+      } else {
+        popup.addEventListener("load", () => setTimeout(triggerPrint, 250), { once: true })
+      }
+
+      setTimeout(() => {
+        try { URL.revokeObjectURL(popupUrl as string) } catch (error) {}
+      }, 8000)
+    } catch (error) {
+      try { popup.close() } catch (closeError) {}
+    }
+
+    options?.onComplete?.()
+    return
+  }
+
+  // Fallback: si el popup fue bloqueado, usamos un iframe oculto.
   const iframe = document.createElement("iframe")
-  iframe.id = IFRAME_ID
+  iframe.id = "__ticket_print_frame"
   iframe.style.position = "fixed"
   iframe.style.right = "0"
   iframe.style.bottom = "0"
@@ -300,33 +300,34 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80, options?: 
   const doc = iframe.contentWindow?.document
   if (!doc) {
     cleanup()
+    options?.onComplete?.()
     return
   }
 
-  let printed = false
-  const doPrint = () => {
-    if (printed) return
-    printed = true
-    try {
-      iframe.contentWindow?.focus()
-      iframe.contentWindow?.print()
-    } finally {
-      // El diálogo ya capturó el contenido; damos margen de sobra en webviews lentos
-      setTimeout(cleanup, 8000)
-      setTimeout(() => {
-        try { window.focus() } catch (e) {}
+  iframe.onload = () => {
+    setTimeout(() => {
+      try {
+        iframe.contentWindow?.focus()
+        iframe.contentWindow?.print()
+      } catch (error) {}
+      finally {
+        setTimeout(cleanup, 8000)
         options?.onComplete?.()
-      }, 1600)
-    }
+      }
+    }, 200)
   }
 
-  // Imprimir recién cuando el documento del iframe terminó de cargar.
-  // (La intermitencia venía de imprimir antes de tiempo: el webview del POSNET
-  // todavía no tenía el ticket listo y mandaba la página de atrás.)
-  iframe.onload = () => setTimeout(doPrint, 200)
   doc.open()
   doc.write(buildTicketDocument(t, widthMm))
   doc.close()
-  // Fallback tardío por si onload nunca dispara en este webview
-  setTimeout(doPrint, 2500)
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+    } catch (error) {}
+    finally {
+      setTimeout(cleanup, 8000)
+      options?.onComplete?.()
+    }
+  }, 2500)
 }
