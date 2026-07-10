@@ -987,9 +987,16 @@ export function PedidosClient({
                       {Array.isArray(order.items) && order.items.length > 0 ? (
                         <>
                           {order.items.slice(0, 4).map((item: any, i: number) => (
-                            <p key={i} className="text-sm font-semibold text-foreground truncate">
-                              {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
-                            </p>
+                            <div key={i}>
+                              <p className="text-sm font-semibold text-foreground truncate">
+                                {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
+                              </p>
+                              {optionNames(item.options).length > 0 && (
+                                <p className="pl-4 text-[11px] text-muted-foreground leading-tight truncate">
+                                  {optionNames(item.options).join(" · ")}
+                                </p>
+                              )}
+                            </div>
                           ))}
                           {order.items.length > 4 && (
                             <p className="text-xs text-muted-foreground">+{order.items.length - 4} más</p>
@@ -1101,10 +1108,17 @@ export function PedidosClient({
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Detalle de Productos</span>
                       {Array.isArray(order.items) && order.items.length > 0 ? (
                         order.items.map((item: any, i: number) => (
-                          <p key={i} className="text-sm font-semibold text-foreground">
-                            {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
-                            <span className="text-xs text-muted-foreground font-normal ml-1">${item.price} c/u</span>
-                          </p>
+                          <div key={i}>
+                            <p className="text-sm font-semibold text-foreground">
+                              {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
+                              <span className="text-xs text-muted-foreground font-normal ml-1">${item.price} c/u</span>
+                            </p>
+                            {optionNames(item.options).length > 0 && (
+                              <p className="pl-4 text-[11px] text-muted-foreground leading-tight">
+                                {optionNames(item.options).join(" · ")}
+                              </p>
+                            )}
+                          </div>
                         ))
                       ) : (
                         <p className="text-sm text-muted-foreground">Sin detalle</p>
