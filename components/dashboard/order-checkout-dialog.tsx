@@ -762,9 +762,10 @@ export function OrderCheckoutDialog({
   const supabase = createClient()
 
   // Propina recalculada sobre el total actual para pedidos del POS aún sin cobrar
-  const isPosOpen = order?.source === "pos" && order?.status !== "completed" && order?.status !== "cancelled"
-  const orderTip = isPosOpen && tipEnabled ? Math.round((order?.total_amount || 0) * (tipPercent / 100)) : 0
-  const chargeTotal = (order?.total_amount || 0) + orderTip
+  // La propina NO se auto-suma. Se cobra el total del pedido; la propina se
+  // agrega solo si el cajero deja el vuelto como propina al pagar en efectivo.
+  const orderTip = 0
+  const chargeTotal = order?.total_amount || 0
 
   const finalizeSale = async (payments: PaymentRecord[]) => {
     if (!order) return

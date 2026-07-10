@@ -7,7 +7,7 @@ import { cn, normalizeSearchText } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from "framer-motion"
@@ -167,9 +167,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Propina: "auto" sigue el % sugerido de la config (se aplica sola), "off" sin propina,
   // "custom" un monto que cargó el cajero. El monto real se deriva más abajo.
-  const [tipMode, setTipMode] = useState<"auto" | "off" | "custom">("auto")
+  // Arranca en "off": la propina NO se suma sola. El cajero la agrega (botón % o
+  // monto) solo si el cliente la dejó; si no, el total se guarda sin propina.
+  const [tipMode, setTipMode] = useState<"auto" | "off" | "custom">("off")
   const [customTip, setCustomTip] = useState(0)
   const [amountPaid, setAmountPaid] = useState("")
+  const [orderNote, setOrderNote] = useState("")
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false)
 
   const isStampsMode = loyaltySettings?.card_type === "stamps"
@@ -536,6 +539,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       if (redeemedReward) noteParts.push(`Canje: ${redeemedReward.name}`)
       if (orderTip > 0) noteParts.push(`Propina/extra: ${formatCurrency(orderTip)}`)
       if (paidNum > 0) noteParts.push(`Pagó con ${formatCurrency(paidNum)} · Vuelto: ${formatCurrency(Math.max(0, change))}`)
+      // Nota escrita por el cajero (se muestra en /pedidos; el resto es boilerplate que se limpia)
+      if (orderNote.trim()) noteParts.push(orderNote.trim())
 
       const { data: createdOrder, error } = await supabase
         .from("orders")
@@ -716,9 +721,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     setPaymentMethod(null)
     setRedeemedReward(null)
     setRedeemStampGift(false)
-    setTipMode("auto")
+    setTipMode("off")
     setCustomTip(0)
     setAmountPaid("")
+    setOrderNote("")
     setSaleSuccess(null)
     setPosPrintPhase(null)
     setLastTicket(null)
@@ -749,7 +755,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       tipLabel: isSuggested ? `Propina sugerida ${posSettings.tip_percent}%` : "Propina / extra",
       // No incluimos el método de pago en el ticket: repetía el total innecesariamente
       payments: undefined,
-      notes: status === "pending" ? "Pago pendiente" : undefined,
+      notes: [orderNote.trim(), status === "pending" ? "Pago pendiente" : ""].filter(Boolean).join(". ") || undefined,
     }
   }
 
@@ -1581,6 +1587,18 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {cartItems.length > 0 && (
+                    <div className="mt-2.5 flex items-start gap-2">
+                      <StickyNote className="mt-2 h-4 w-4 shrink-0 text-slate-400" />
+                      <Input
+                        value={orderNote}
+                        onChange={(e) => setOrderNote(e.target.value)}
+                        placeholder="Nota / mensaje del pedido (opcional)"
+                        className="h-8 text-sm"
+                      />
                     </div>
                   )}
 

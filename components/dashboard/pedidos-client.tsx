@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2 } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2, StickyNote } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -593,10 +593,10 @@ export function PedidosClient({
     selectedOrder?.source === "pos" &&
     selectedOrder?.status !== "completed" &&
     selectedOrder?.status !== "cancelled"
-  const ticketTip =
-    orderIsPosOpen && posTipEnabled
-      ? Math.round(editTotal * (posTipPercent / 100))
-      : selectedOrder?.tip_amount || 0
+  // La propina NO se auto-suma: en pedidos abiertos arranca en 0 y solo se agrega
+  // lo que el cajero deje explícitamente al cobrar (vuelto dejado de propina).
+  // En pedidos ya cobrados se respeta la propina registrada.
+  const ticketTip = orderIsPosOpen ? 0 : (selectedOrder?.tip_amount || 0)
 
   // Imprime el ticket con lo que se ve en pantalla (items editados incluidos)
   const handlePrintTicket = () => {
@@ -1016,6 +1016,13 @@ export function PedidosClient({
                     <span className="font-bold whitespace-nowrap">${order.total_amount}</span>
                   </div>
 
+                  {cleanTicketNotes(order.customer_notes) && (
+                    <div className="flex items-start gap-1.5 rounded-xl bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs">
+                      <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 break-words text-foreground">{cleanTicketNotes(order.customer_notes)}</span>
+                    </div>
+                  )}
+
                   {order.tags && order.tags.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {order.tags.map((tag, i) => (
@@ -1136,6 +1143,12 @@ export function PedidosClient({
                         <CreditCard className="h-3.5 w-3.5" />
                         <span>{getOrderModalityLabel(order)} · ${order.total_amount}</span>
                       </div>
+                      {cleanTicketNotes(order.customer_notes) && (
+                        <div className="mt-1.5 flex items-start gap-1.5 text-xs text-foreground">
+                          <StickyNote className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0 break-words">{cleanTicketNotes(order.customer_notes)}</span>
+                        </div>
+                      )}
                       {order.tags && order.tags.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {order.tags.map((tag, i) => (
