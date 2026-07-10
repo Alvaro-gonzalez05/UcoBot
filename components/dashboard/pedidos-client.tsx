@@ -17,6 +17,7 @@ import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
 import { ProductImportWizard } from "./product-import-wizard"
+import { ProductOptionsManager } from "./product-options-manager"
 import { ProductEditForm } from "./product-edit-form"
 import { OrderCheckoutDialog, OrderCheckoutPanel, type PaymentRecord } from "./order-checkout-dialog"
 import { printTicket, cleanTicketNotes } from "@/lib/print-ticket"
@@ -78,6 +79,7 @@ interface DeliverySettings {
 }
 
 interface PedidosClientProps {
+  userId: string
   initialOrders: Order[]
   initialProducts: Product[]
   initialCategories: string[]
@@ -94,6 +96,7 @@ interface PedidosClientProps {
 }
 
 export function PedidosClient({
+  userId,
   initialOrders,
   initialProducts,
   initialCategories,
@@ -120,7 +123,7 @@ export function PedidosClient({
   // Pedido que acaba de cambiar de estado (para el flash animado en su nuevo color)
   const [poppedId, setPoppedId] = useState<string | null>(null)
   // Estado editable del pedido en la vista previa
-  const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null }[]>([])
+  const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null; options?: any[] }[]>([])
   const [editStatus, setEditStatus] = useState("pending")
   const [editAddress, setEditAddress] = useState("")
   const [editNotes, setEditNotes] = useState("")
@@ -420,6 +423,7 @@ export function PedidosClient({
         price: Number(it.price) || 0,
         quantity: Number(it.quantity) || 1,
         image_url: it.image_url || null,
+        options: Array.isArray(it.options) && it.options.length ? it.options : undefined,
       }))
     )
     setAddSearch("")
@@ -500,6 +504,10 @@ export function PedidosClient({
     normalizeSearchText(`${p.name} ${p.category ?? ""}`).includes(normalizeSearchText(addSearch.trim()))
   )
 
+  // Nombres de las opciones de un item (soporta strings u objetos {name})
+  const optionNames = (opts?: any[]): string[] =>
+    (opts || []).map((o) => (typeof o === "string" ? o : o?.name)).filter(Boolean)
+
   // Cobra desde el modal: guarda los items editados, los pagos y cierra la venta en un solo paso
   const finalizeFromModal = async (payments: PaymentRecord[]) => {
     if (!selectedOrder) return
@@ -511,6 +519,7 @@ export function PedidosClient({
         price: i.price,
         subtotal: Number((i.price * i.quantity).toFixed(2)),
         image_url: i.image_url || null,
+        options: i.options && i.options.length ? i.options : undefined,
       }))
       // Las propinas dejadas del vuelto se suman a la propina recalculada del pedido
       const tipsFromPayments = payments.reduce((s, p) => s + (p.tip || 0), 0)
@@ -601,7 +610,7 @@ export function PedidosClient({
       orderId: selectedOrder.id,
       clientName: getOrderClientName(selectedOrder),
       orderType: getOrderModalityLabel(selectedOrder),
-      items: editItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price })),
+      items: editItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, options: optionNames(i.options) })),
       total: editTotal + ticketTip,
       tipAmount: ticketTip || undefined,
       payments: selectedOrder.payments,
@@ -637,6 +646,7 @@ export function PedidosClient({
         price: i.price,
         subtotal: Number((i.price * i.quantity).toFixed(2)),
         image_url: i.image_url || null,
+        options: i.options && i.options.length ? i.options : undefined,
       }))
       const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
       const { data, error } = await supabase
@@ -1178,6 +1188,7 @@ export function PedidosClient({
           <div className="flex items-center justify-between px-1 gap-2 flex-wrap">
             <h3 className="text-xl font-bold dark:text-white">Catálogo de Productos</h3>
             <div className="flex items-center gap-2">
+              <ProductOptionsManager userId={userId} products={products.map((p) => ({ id: p.id, name: p.name }))} />
               <ProductImportWizard onImported={refreshProducts} />
               <ProductForm onProductCreated={refreshProducts} existingCategories={categories} />
             </div>
@@ -1615,7 +1626,12 @@ export function PedidosClient({
                         <div className="my-2 border-t border-dashed border-neutral-400" />
                         {editItems.map((item, i) => (
                           <div key={i} className="flex justify-between gap-2">
-                            <span className="min-w-0 break-words">{item.quantity}x {item.name}</span>
+                            <span className="min-w-0 break-words">
+                              {item.quantity}x {item.name}
+                              {optionNames(item.options).length > 0 && (
+                                <span className="block pl-3 text-[10px] text-neutral-500">{optionNames(item.options).join(", ")}</span>
+                              )}
+                            </span>
                             <span className="shrink-0">{formatCurrency(item.price * item.quantity)}</span>
                           </div>
                         ))}
@@ -1880,6 +1896,9 @@ export function PedidosClient({
                         </div>
                         <div className="min-w-0 flex-1">
                           <h4 className="text-sm font-semibold leading-tight line-clamp-2">{item.name}</h4>
+                          {optionNames(item.options).length > 0 && (
+                            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{optionNames(item.options).join(" · ")}</p>
+                          )}
                           <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(item.price)} / ud</p>
                           <div className="mt-1.5 flex items-center gap-2">
                             <button type="button" onClick={() => updateItemQty(index, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-background text-muted-foreground hover:bg-muted transition-colors active:scale-90">

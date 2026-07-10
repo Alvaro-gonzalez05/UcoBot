@@ -8,6 +8,8 @@ export interface TicketItem {
   name: string
   quantity: number
   price: number
+  /** Opciones elegidas (ej: Coca Zero) para mostrar bajo el item */
+  options?: string[]
 }
 
 export interface TicketData {
@@ -64,7 +66,9 @@ function buildTicketInner(t: TicketData): string {
     .map(
       (it) => `
       <div class="item">
-        <span class="iname">${it.quantity}x ${esc(it.name)}</span>
+        <span class="iname">${it.quantity}x ${esc(it.name)}${
+          it.options && it.options.length ? `<span class="iopts">${esc(it.options.join(", "))}</span>` : ""
+        }</span>
         <span class="iprice">${money(it.price * it.quantity)}</span>
       </div>`
     )
@@ -162,6 +166,12 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
     margin-right: 8px;
     font-size: 13px;
     line-height: 1.32;
+  }
+  .iopts {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    padding-left: 10px;
   }
   .iprice {
     white-space: nowrap;

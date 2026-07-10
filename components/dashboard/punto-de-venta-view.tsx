@@ -19,6 +19,7 @@ import { broadcastLoyaltyUpdate } from "@/lib/loyalty-realtime"
 import { PosSettingsDialog, type PosSettings } from "@/components/dashboard/pos-settings-dialog"
 import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
 import { printTicket, type TicketData, type TicketWidth } from "@/lib/print-ticket"
+import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
 
 interface Product {
   id: string
@@ -43,6 +44,8 @@ interface Client {
 }
 
 interface CartItem {
+  /** Id único de la línea = producto + combinación de opciones (para no mezclar variantes) */
+  lineId: string
   productId: string
   name: string
   price: number
@@ -53,6 +56,8 @@ interface CartItem {
   promoLabel?: string
   imageUrl?: string | null
   quantity: number
+  /** Opciones elegidas (ej: Coca Zero); su precio ya está sumado en price */
+  options?: SelectedOption[]
 }
 
 interface Reward {
@@ -99,6 +104,7 @@ interface PuntoDeVentaViewProps {
   clients: Client[]
   promotions: Promotion[]
   businessName?: string
+  optionsByProduct?: Record<string, PosOptionGroup[]>
 }
 
 const PRODUCTS_PAGE_SIZE = 18
@@ -114,7 +120,7 @@ const paymentOptions = [
 const normalizePaymentMethods = (methods: string[]) =>
   Array.from(new Set(methods.map((m) => (m === "link" ? "qr" : m))))
 
-export function PuntoDeVentaView({ userId, products: initialProducts, categories: initialCategories, clients, promotions, businessName = "Mi Negocio" }: PuntoDeVentaViewProps) {
+export function PuntoDeVentaView({ userId, products: initialProducts, categories: initialCategories, clients, promotions, businessName = "Mi Negocio", optionsByProduct = {} }: PuntoDeVentaViewProps) {
   const supabase = createClient()
   const [activeCategory, setActiveCategory] = useState("Todos")
   const [productSearch, setProductSearch] = useState("")
@@ -136,6 +142,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   // Ticket de la venta recién generada (para imprimirlo al toque) + fases de impresión
   const [lastTicket, setLastTicket] = useState<TicketData | null>(null)
   const [posPrintPhase, setPosPrintPhase] = useState<null | "printing" | "done">(null)
+  // Producto para el que se está eligiendo opciones (modal centrado)
+  const [pickerProduct, setPickerProduct] = useState<Product | null>(null)
   const [mpQr, setMpQr] = useState<string | null>(null)
   const [mpQrLoading, setMpQrLoading] = useState(false)
   const [mpQrOrderId, setMpQrOrderId] = useState<string | null>(null)
@@ -391,54 +399,68 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     return "Sin contacto"
   }
 
-  const addProductToCart = (product: Product) => {
-    // Flash de confirmación: acumula "+N" si se toca el mismo producto varias veces seguidas
+  // Flash de confirmación "+N" sobre la tarjeta del producto
+  const flashAdd = (product: Product) => {
     setJustAdded((prev) =>
       prev && prev.id === product.id ? { id: product.id, count: prev.count + 1 } : { id: product.id, count: 1 }
     )
     if (justAddedTimer.current) window.clearTimeout(justAddedTimer.current)
     justAddedTimer.current = window.setTimeout(() => setJustAdded(null), 750)
+  }
+
+  // Firma de la línea: mismo producto con mismas opciones = misma línea (se acumula)
+  const lineSignature = (productId: string, options: SelectedOption[]) =>
+    productId + "|" + options.map((o) => `${o.group}:${o.name}`).sort().join("|")
+
+  // Agrega una línea al carrito (con o sin opciones). El precio ya incluye los extras.
+  const addLine = (product: Product, options: SelectedOption[], extra: number) => {
+    flashAdd(product)
     const promo = bestProductPromotion(
       { id: product.id, price: product.price, category: product.category },
       promotions
     )
+    const basePrice = promo ? promo.price : product.price
+    const unitPrice = Number((basePrice + extra).toFixed(2))
+    const sig = lineSignature(product.id, options)
     setCartItems((prev) => {
-      const existingItem = prev.find((item) => item.productId === product.id)
-      if (existingItem) {
-        return prev.map((item) =>
-          item.productId === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        )
+      const existing = prev.find((item) => item.lineId === sig)
+      if (existing) {
+        return prev.map((item) => (item.lineId === sig ? { ...item, quantity: item.quantity + 1 } : item))
       }
-
       return [
         ...prev,
         {
+          lineId: sig,
           productId: product.id,
           name: product.name,
-          price: promo ? promo.price : product.price,
-          originalPrice: promo ? product.price : undefined,
+          price: unitPrice,
+          originalPrice: promo ? Number((product.price + extra).toFixed(2)) : undefined,
           promoId: promo ? promo.promo.id : undefined,
           promoLabel: promo ? promotionLabel(promo.promo) : undefined,
           imageUrl: product.image_url,
           quantity: 1,
+          options: options.length ? options : undefined,
         },
       ]
     })
-
-    // On desktop (lg ≥ 1024px) open the cart panel automatically.
-    // On mobile the floating bubble handles the entry point.
-    if (typeof window !== "undefined" && window.innerWidth >= 1024) {
-      setIsCartOpen(true)
-    }
+    if (typeof window !== "undefined" && window.innerWidth >= 1024) setIsCartOpen(true)
   }
 
-  const updateQuantity = (productId: string, delta: number) => {
+  // Al tocar un producto: si tiene opciones, abre el modal; si no, se agrega directo
+  const addProductToCart = (product: Product) => {
+    const groups = optionsByProduct[product.id]
+    if (groups && groups.length > 0) {
+      setPickerProduct(product)
+      return
+    }
+    addLine(product, [], 0)
+  }
+
+  const updateQuantity = (lineId: string, delta: number) => {
     setCartItems((prev) =>
       prev
         .map((item) =>
-          item.productId === productId
+          item.lineId === lineId
             ? { ...item, quantity: item.quantity + delta }
             : item
         )
@@ -446,8 +468,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     )
   }
 
-  const removeItem = (productId: string) => {
-    setCartItems((prev) => prev.filter((item) => item.productId !== productId))
+  const removeItem = (lineId: string) => {
+    setCartItems((prev) => prev.filter((item) => item.lineId !== lineId))
   }
 
   const submitSale = async (status: "completed" | "pending") => {
@@ -478,6 +500,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         quantity: item.quantity,
         price: item.price,
         subtotal: item.price * item.quantity,
+        options: item.options && item.options.length ? item.options : undefined,
       })) as any[]
 
       if (redeemedReward && rewardDiscount > 0) {
@@ -704,9 +727,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   // Snapshot del ticket ANTES de limpiar el carrito (mismo formato que /pedidos)
   const buildPosTicket = (status: "completed" | "pending", orderId: string): TicketData => {
-    const items = cartItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price }))
+    const items = cartItems.map((i) => ({
+      name: i.name,
+      quantity: i.quantity,
+      price: i.price,
+      options: i.options?.map((o) => o.name),
+    }))
     if (rewardDiscount > 0 && redeemedReward) {
-      items.push({ name: `Canje: ${redeemedReward.name}`, quantity: 1, price: -rewardDiscount })
+      items.push({ name: `Canje: ${redeemedReward.name}`, quantity: 1, price: -rewardDiscount, options: undefined })
     }
     // Si la propina activa coincide con la sugerida, la línea dice "Propina sugerida X%"
     const isSuggested = posSettings.tip_enabled && tip > 0 && tip === suggestedTip
@@ -1165,7 +1193,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   ) : (
                     <div className="space-y-3">
                       {cartItems.map((item) => (
-                        <div key={item.productId} className="flex min-w-0 flex-row items-center gap-3 rounded-[1.25rem] bg-white dark:bg-card p-3 shadow-sm dark:shadow-none">
+                        <div key={item.lineId} className="flex min-w-0 flex-row items-center gap-3 rounded-[1.25rem] bg-white dark:bg-card p-3 shadow-sm dark:shadow-none">
                           <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[1rem] bg-slate-100 dark:bg-muted">
                             {item.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
@@ -1178,19 +1206,24 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                           </div>
                           <div className="min-w-0 flex-1">
                             <h4 className="text-sm font-semibold leading-tight text-slate-800 dark:text-foreground line-clamp-3 break-words">{item.name}</h4>
+                            {item.options && item.options.length > 0 && (
+                              <p className="mt-0.5 text-[11px] leading-tight text-slate-500 dark:text-muted-foreground">
+                                {item.options.map((o) => o.name + (o.delta > 0 ? ` (+${formatCurrency(o.delta)})` : "")).join(" · ")}
+                              </p>
+                            )}
                             <p className="truncate text-xs text-slate-400 mt-1">{formatCurrency(item.price)} / ud</p>
                             <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <button type="button" onClick={() => updateQuantity(item.productId, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
+                              <button type="button" onClick={() => updateQuantity(item.lineId, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
                                 <Minus className="h-3 w-3" />
                               </button>
                               <span className="min-w-4 text-center text-sm font-semibold text-slate-700 dark:text-foreground">{item.quantity}</span>
-                              <button type="button" onClick={() => updateQuantity(item.productId, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
+                              <button type="button" onClick={() => updateQuantity(item.lineId, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
                                 <Plus className="h-3 w-3" />
                               </button>
                             </div>
                           </div>
                           <div className="flex h-full shrink-0 flex-col items-end justify-between gap-2 overflow-hidden text-right">
-                            <button type="button" onClick={() => removeItem(item.productId)} className="shrink-0 p-1 hover:bg-slate-50 dark:hover:bg-muted transition-colors rounded-full">
+                            <button type="button" onClick={() => removeItem(item.lineId)} className="shrink-0 p-1 hover:bg-slate-50 dark:hover:bg-muted transition-colors rounded-full">
                               <X className="h-4 w-4 text-slate-300 hover:text-slate-500" />
                             </button>
                             <p className="truncate text-sm font-bold text-slate-800 dark:text-foreground">{formatCurrency(item.price * item.quantity)}</p>
@@ -1663,6 +1696,18 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           if (paymentMethod && !s.payment_methods.includes(paymentMethod)) setPaymentMethod(null)
           // Al reactivar la propina vuelve al modo automático (aplica el % sugerido solo)
           if (s.tip_enabled) setTipMode("auto")
+        }}
+      />
+
+      {/* Modal centrado para elegir las opciones del producto (ej: tipo de bebida) */}
+      <PosOptionPickerDialog
+        open={!!pickerProduct}
+        product={pickerProduct}
+        groups={pickerProduct ? optionsByProduct[pickerProduct.id] || [] : []}
+        onCancel={() => setPickerProduct(null)}
+        onConfirm={(selected, extra) => {
+          if (pickerProduct) addLine(pickerProduct, selected, extra)
+          setPickerProduct(null)
         }}
       />
 

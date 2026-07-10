@@ -35,6 +35,26 @@ export default async function PuntoDeVentaPage() {
     supabase.from("user_profiles").select("business_name").eq("id", ownerId).single(),
   ])
 
+  // Opciones/modificadores de producto
+  const [{ data: optGroups }, { data: optItems }, { data: optLinks }] = await Promise.all([
+    supabase.from("product_option_groups").select("*").eq("user_id", ownerId).order("created_at"),
+    supabase.from("product_option_items").select("*").eq("user_id", ownerId).order("sort_order"),
+    supabase.from("product_option_links").select("*").eq("user_id", ownerId),
+  ])
+
+  // Mapa producto -> grupos de opciones (con sus items)
+  const optionsByProduct: Record<string, any[]> = {}
+  for (const link of optLinks || []) {
+    const group = (optGroups || []).find((g) => g.id === link.group_id)
+    if (!group) continue
+    const items = (optItems || [])
+      .filter((i) => i.group_id === group.id)
+      .map((i) => ({ id: i.id, name: i.name, price_delta: Number(i.price_delta) || 0 }))
+    if (items.length === 0) continue
+    const entry = { id: group.id, name: group.name, required: group.required, multi: group.multi, items }
+    ;(optionsByProduct[link.product_id] ??= []).push(entry)
+  }
+
   const { data: categoryRows } = await supabase
     .from("products")
     .select("category")
@@ -54,6 +74,7 @@ export default async function PuntoDeVentaPage() {
         clients={clients || []}
         promotions={promotions || []}
         businessName={profile?.business_name || "Mi Negocio"}
+        optionsByProduct={optionsByProduct}
       />
     </div>
   )

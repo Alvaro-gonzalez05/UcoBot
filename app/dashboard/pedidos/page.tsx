@@ -60,6 +60,7 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
 
   return (
     <PedidosClient
+      userId={ownerId}
       initialOrders={orders || []}
       initialProducts={products || []}
       initialCategories={categories}
