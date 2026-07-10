@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -50,6 +50,17 @@ export function PosSettingsDialog({
   const [tipPercent, setTipPercent] = useState(String(settings.tip_percent))
   const [ticketWidth, setTicketWidth] = useState<number>(settings.ticket_width || 80)
   const [saving, setSaving] = useState(false)
+
+  // La config del POS llega async (arranca en los valores por defecto). Al abrir el
+  // diálogo resincronizamos desde settings para no mostrar un estado viejo (ej: la
+  // propina apareciendo apagada cuando en realidad está activada).
+  useEffect(() => {
+    if (!open) return
+    setMethods(settings.payment_methods)
+    setTipEnabled(settings.tip_enabled)
+    setTipPercent(String(settings.tip_percent))
+    setTicketWidth(settings.ticket_width || 80)
+  }, [open, settings])
 
   const toggleMethod = (id: string) => {
     setMethods((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]))

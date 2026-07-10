@@ -83,6 +83,8 @@ interface PedidosClientProps {
   initialCategories: string[]
   deliverySettings?: DeliverySettings
   businessName?: string
+  posTipEnabled?: boolean
+  posTipPercent?: number
   pagination?: {
     page: number
     limit: number
@@ -97,6 +99,8 @@ export function PedidosClient({
   initialCategories,
   deliverySettings: initialDeliverySettings,
   businessName = "Mi Negocio",
+  posTipEnabled = false,
+  posTipPercent = 10,
   pagination
 }: PedidosClientProps) {
   const [orders, setOrders] = useState<Order[]>(initialOrders)
@@ -111,6 +115,10 @@ export function PedidosClient({
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [filterStatuses, setFilterStatuses] = useState<string[]>([])
   const [viewMode, setViewMode] = useState<"list" | "grid">("grid")
+  // Pedido con confirmación de borrado activa (tarjeta en rojo)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  // Pedido que acaba de cambiar de estado (para el flash animado en su nuevo color)
+  const [poppedId, setPoppedId] = useState<string | null>(null)
   // Estado editable del pedido en la vista previa
   const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null }[]>([])
   const [editStatus, setEditStatus] = useState("pending")
@@ -292,36 +300,75 @@ export function PedidosClient({
     }
   }
 
-  const handleDeleteOrder = (orderId: string) => {
-    toast("¿Estás seguro de eliminar este pedido?", {
-      description: "Esta acción no se puede deshacer.",
-      action: {
-        label: "Eliminar",
-        onClick: () => performDeleteOrder(orderId),
-      },
-    })
-  }
+  // Eliminar: en vez de un toast, la tarjeta se pone roja y pide confirmación in-situ
+  const handleDeleteOrder = (orderId: string) => setDeletingId(orderId)
 
   const performDeleteOrder = async (orderId: string) => {
-    setIsLoading(true)
+    // Optimista: sacamos el pedido de la lista → dispara la animación de salida
+    // (se desliza al costado) y las de abajo suben suave con el layout animation.
+    setDeletingId(null)
+    const snapshot = orders
+    setOrders((prev) => prev.filter((o) => o.id !== orderId))
     try {
-      const { error } = await supabase
-        .from("orders")
-        .delete()
-        .eq("id", orderId)
-
+      const { error } = await supabase.from("orders").delete().eq("id", orderId)
       if (error) throw error
-
-      setOrders(orders.filter(o => o.id !== orderId))
-      toast.success("Pedido eliminado correctamente")
-      router.refresh()
+      // Sin toast: la animación ya confirma la eliminación
     } catch (error) {
       console.error("Error deleting order:", error)
       toast.error("No se pudo eliminar el pedido")
-    } finally {
-      setIsLoading(false)
+      setOrders(snapshot) // restaurar si falló
     }
   }
+
+  // Overlay rojo de confirmación que cubre la tarjeta del pedido a eliminar
+  const renderDeleteOverlay = (orderId: string) =>
+    deletingId === orderId ? (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.18 }}
+        onClick={(e) => e.stopPropagation()}
+        className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 rounded-3xl bg-red-500 p-4 text-center text-white"
+      >
+        <motion.div initial={{ scale: 0.5, rotate: -12 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 300, damping: 14 }}>
+          <Trash2 className="h-9 w-9" />
+        </motion.div>
+        <p className="text-sm font-bold leading-snug">¿Seguro que querés<br />eliminar este pedido?</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setDeletingId(null)}
+            className="rounded-xl bg-white/20 px-4 py-2 text-sm font-bold hover:bg-white/30 transition-colors active:scale-95"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => performDeleteOrder(orderId)}
+            className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-white/90 transition-colors active:scale-95 gap-1 inline-flex items-center"
+          >
+            <Trash2 className="h-4 w-4" /> Sí, eliminar
+          </button>
+        </div>
+      </motion.div>
+    ) : null
+
+  // Flash animado (anillo del color del nuevo estado) cuando el pedido cambia de estado
+  const renderStatusFlash = (order: Order) => (
+    <AnimatePresence>
+      {poppedId === order.id && (
+        <motion.div
+          key="flash"
+          initial={{ opacity: 0.85, scale: 1 }}
+          animate={{ opacity: 0, scale: 1.03 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.65, ease: "easeOut" }}
+          className={cn("pointer-events-none absolute inset-0 z-20 rounded-3xl ring-4", getStatusRing(order.status))}
+        />
+      )}
+    </AnimatePresence>
+  )
 
   // Flujo lineal de estados para el botón "Procesar pedido"
   const STATUS_FLOW = ["pending", "confirmed", "preparing", "ready", "completed"]
@@ -343,7 +390,9 @@ export function PedidosClient({
         .single()
       if (error) throw error
       setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...data } : o)))
-      toast.success(`Pedido marcado como ${getStatusText(next)}`)
+      // Sin toast: la tarjeta se recolorea al nuevo estado y hace un flash animado
+      setPoppedId(order.id)
+      window.setTimeout(() => setPoppedId((p) => (p === order.id ? null : p)), 700)
     } catch (error) {
       console.error("Error advancing order status:", error)
       toast.error("No se pudo actualizar el estado")
@@ -463,15 +512,17 @@ export function PedidosClient({
         subtotal: Number((i.price * i.quantity).toFixed(2)),
         image_url: i.image_url || null,
       }))
-      // Las propinas dejadas del vuelto se suman a la propina registrada del pedido
+      // Las propinas dejadas del vuelto se suman a la propina recalculada del pedido
       const tipsFromPayments = payments.reduce((s, p) => s + (p.tip || 0), 0)
+      const finalTip = Number((ticketTip + tipsFromPayments).toFixed(2))
       const { data, error } = await supabase
         .from("orders")
         .update({
           status: "completed",
           items,
-          total_amount: Number(editTotal.toFixed(2)),
-          tip_amount: Number(((selectedOrder.tip_amount || 0) + tipsFromPayments).toFixed(2)),
+          // total = productos + propina (recalculada sobre el total actual)
+          total_amount: Number((editTotal + ticketTip).toFixed(2)),
+          tip_amount: finalTip,
           delivery_address: editAddress,
           customer_notes: editNotes,
           payments,
@@ -524,9 +575,17 @@ export function PedidosClient({
     }
   }
 
-  // La propina va como línea agregada en el ticket, salvo que ya venga como item (pedidos del POS)
-  const hasPropinaItem = editItems.some((i) => i.name.toLowerCase().includes("propina"))
-  const ticketTip = !hasPropinaItem && (selectedOrder?.tip_amount || 0) > 0 ? selectedOrder!.tip_amount! : 0
+  // Propina: en pedidos del POS todavía sin cobrar se RECALCULA en vivo como el % de la
+  // config sobre el total actual (si agregás productos, cambia). En pedidos ya cobrados
+  // se respeta la propina registrada. Nunca es un producto: es un cálculo sobre el total.
+  const orderIsPosOpen =
+    selectedOrder?.source === "pos" &&
+    selectedOrder?.status !== "completed" &&
+    selectedOrder?.status !== "cancelled"
+  const ticketTip =
+    orderIsPosOpen && posTipEnabled
+      ? Math.round(editTotal * (posTipPercent / 100))
+      : selectedOrder?.tip_amount || 0
 
   // Imprime el ticket con lo que se ve en pantalla (items editados incluidos)
   const handlePrintTicket = () => {
@@ -667,26 +726,45 @@ export function PedidosClient({
     return <MessageCircle className="h-4 w-4 text-green-500" />
   }
 
+  // Colores SÓLIDOS por estado (estilo kanban), no el tinte neón translúcido anterior
   const getCardStyle = (status: string) => {
     switch (status) {
-      case 'pending':    return 'bg-[#fcffeb] dark:bg-[#D1F366]/10 border-[#D1F366] dark:border-[#D1F366]/40 order-card-pending'
-      case 'completed':  return 'bg-slate-50 dark:bg-muted/30 opacity-70 grayscale-[30%] border-slate-200 dark:border-border'
-      case 'cancelled':  return 'bg-slate-50 dark:bg-muted/20 opacity-60 grayscale-[50%] border-slate-200 dark:border-border text-slate-400 dark:text-muted-foreground line-through'
-      case 'ready':      return 'bg-[#f4fcf6] dark:bg-[#1DB954]/10 border-[#1aa34a]/30 dark:border-[#1DB954]/40'
+      case 'pending':    return 'bg-amber-100 border-amber-400 dark:bg-amber-950 dark:border-amber-700'
+      case 'confirmed':  return 'bg-sky-100 border-sky-400 dark:bg-sky-950 dark:border-sky-800'
+      case 'preparing':  return 'bg-orange-100 border-orange-400 dark:bg-orange-950 dark:border-orange-800'
+      case 'ready':      return 'bg-emerald-100 border-emerald-400 dark:bg-emerald-950 dark:border-emerald-800'
+      case 'completed':  return 'bg-slate-100 border-slate-300 dark:bg-muted/40 dark:border-border opacity-80'
+      case 'delivered':  return 'bg-slate-100 border-slate-300 dark:bg-muted/40 dark:border-border opacity-80'
+      case 'cancelled':  return 'bg-rose-50 border-rose-200 dark:bg-rose-950/40 dark:border-rose-900 opacity-70 line-through'
       default:           return 'bg-card border-border'
     }
   }
 
+  // Color del anillo del flash cuando el pedido cambia de estado
+  const getStatusRing = (status: string) => {
+    switch (status) {
+      case 'pending':    return 'ring-amber-400'
+      case 'confirmed':  return 'ring-sky-400'
+      case 'preparing':  return 'ring-orange-400'
+      case 'ready':      return 'ring-emerald-400'
+      case 'completed':
+      case 'delivered':  return 'ring-slate-400'
+      case 'cancelled':  return 'ring-rose-400'
+      default:           return 'ring-[#D1F366]'
+    }
+  }
+
+  // Badges sólidos y saturados, alineados al color de cada estado (resaltan sobre la tarjeta pastel)
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'pending':    return 'bg-[#D1F366] text-[#1C1C28] border border-[#B3D93C]'
-      case 'confirmed':  return 'bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-500/15 dark:text-blue-300 dark:border-blue-500/30'
-      case 'preparing':  return 'bg-yellow-100 text-yellow-700 border border-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-300 dark:border-yellow-500/30'
-      case 'ready':      return 'bg-[#1DB954] text-white border border-[#1aa34a]'
-      case 'completed':  return 'bg-slate-200 text-slate-500 border border-slate-300 dark:bg-muted dark:text-muted-foreground dark:border-border'
-      case 'delivered':  return 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-muted dark:text-muted-foreground dark:border-border'
-      case 'cancelled':  return 'bg-slate-100 text-slate-400 border border-slate-200 line-through dark:bg-muted/50 dark:text-muted-foreground dark:border-border'
-      default:           return 'bg-gray-100 text-gray-600 border border-gray-200 dark:bg-muted dark:text-muted-foreground dark:border-border'
+      case 'pending':    return 'bg-amber-500 text-white border border-amber-600'
+      case 'confirmed':  return 'bg-sky-500 text-white border border-sky-600'
+      case 'preparing':  return 'bg-orange-500 text-white border border-orange-600'
+      case 'ready':      return 'bg-emerald-500 text-white border border-emerald-600'
+      case 'completed':  return 'bg-slate-500 text-white border border-slate-600'
+      case 'delivered':  return 'bg-slate-400 text-white border border-slate-500'
+      case 'cancelled':  return 'bg-rose-500 text-white border border-rose-600 line-through'
+      default:           return 'bg-gray-400 text-white border border-gray-500'
     }
   }
 
@@ -856,16 +934,24 @@ export function PedidosClient({
                 ? "grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"
                 : "grid grid-cols-1 gap-4"
             )}>
+              <AnimatePresence mode="popLayout">
               {filteredOrders.map((order, index) => viewMode === "grid" ? (
                 /* ── Vista tarjeta vertical ── */
-                <div
+                <motion.div
                   key={order.id}
-                  onClick={() => openDetail(order)}
+                  layout
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ x: 340, opacity: 0, scale: 0.9, transition: { duration: 0.32, ease: "easeIn" } }}
+                  transition={{ duration: 0.28, delay: Math.min(index * 0.03, 0.3), ease: "easeOut" }}
+                  onClick={() => (deletingId === order.id ? undefined : openDetail(order))}
                   className={cn(
-                    "rounded-3xl p-4 shadow-sm border transition-all hover:shadow-md cursor-pointer flex flex-col gap-3",
+                    "relative rounded-3xl p-4 shadow-sm border transition-[background-color,border-color,box-shadow] duration-500 hover:shadow-md cursor-pointer flex flex-col gap-3",
                     getCardStyle(order.status)
                   )}
                 >
+                  {renderDeleteOverlay(order.id)}
+                  {renderStatusFlash(order)}
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <span className="text-base font-bold dark:text-white">#{order.id.slice(0, 8).toUpperCase()}</span>
@@ -952,16 +1038,23 @@ export function PedidosClient({
                     </DropdownMenu>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ) : (
-                <div
+                <motion.div
                   key={order.id}
-                  onClick={() => openDetail(order)}
+                  layout
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ x: 340, opacity: 0, scale: 0.95, transition: { duration: 0.32, ease: "easeIn" } }}
+                  transition={{ duration: 0.28, delay: Math.min(index * 0.03, 0.3), ease: "easeOut" }}
+                  onClick={() => (deletingId === order.id ? undefined : openDetail(order))}
                   className={cn(
-                    "rounded-3xl p-5 shadow-sm border transition-all hover:shadow-md cursor-pointer",
+                    "relative rounded-3xl p-5 shadow-sm border transition-[background-color,border-color,box-shadow] duration-500 hover:shadow-md cursor-pointer",
                     getCardStyle(order.status)
                   )}
                 >
+                  {renderDeleteOverlay(order.id)}
+                  {renderStatusFlash(order)}
                   <div className={cn("flex flex-wrap items-center justify-between gap-4", order.status === "cancelled" && "opacity-60")}>
                     {/* Left: ID, status, time */}
                     <div className="flex items-center gap-4 w-full md:w-auto">
@@ -1061,8 +1154,9 @@ export function PedidosClient({
                       </DropdownMenu>
                     </div>
                   </div>
-                </div>
+                </motion.div>
               ))}
+              </AnimatePresence>
             </div>
           )}
 
@@ -1410,8 +1504,15 @@ export function PedidosClient({
                     transition={{ duration: 0.2, ease: "easeOut" }}
                     className="md:overflow-y-auto md:pr-1"
                   >
+                    {ticketTip > 0 && (
+                      <div className="mb-3 rounded-2xl border border-border bg-muted/30 p-3 text-sm">
+                        <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{formatCurrency(editTotal)}</span></div>
+                        <div className="flex justify-between text-muted-foreground"><span>Propina sugerida {posTipPercent}%</span><span>+{formatCurrency(ticketTip)}</span></div>
+                        <div className="mt-1 flex justify-between border-t border-border pt-1 font-bold"><span>Total a cobrar</span><span>{formatCurrency(editTotal + ticketTip)}</span></div>
+                      </div>
+                    )}
                     <OrderCheckoutPanel
-                      total={editTotal}
+                      total={editTotal + ticketTip}
                       items={editItems}
                       showItems={false}
                       initialPayments={selectedOrder.payments}
@@ -1519,7 +1620,11 @@ export function PedidosClient({
                           </div>
                         ))}
                         {ticketTip > 0 && (
-                          <div className="flex justify-between gap-2"><span>Propina / extra</span><span>+{formatCurrency(ticketTip)}</span></div>
+                          <>
+                            <div className="my-2 border-t border-dashed border-neutral-400" />
+                            <div className="flex justify-between gap-2"><span>Subtotal</span><span>{formatCurrency(editTotal)}</span></div>
+                            <div className="flex justify-between gap-2"><span>Propina / extra</span><span>+{formatCurrency(ticketTip)}</span></div>
+                          </>
                         )}
                         <div className="my-2 border-t border-dashed border-neutral-400" />
                         <div className="flex justify-between text-[14px] font-bold"><span>TOTAL</span><span>{formatCurrency(editTotal + ticketTip)}</span></div>
@@ -1805,9 +1910,11 @@ export function PedidosClient({
                       {formatCurrency(editTotal)}
                     </motion.span>
                   </div>
-                  {(selectedOrder.tip_amount || 0) > 0 && (
+                  {orderIsPosOpen && posTipEnabled && ticketTip > 0 ? (
+                    <p className="text-xs font-semibold text-muted-foreground text-right">+ Propina {posTipPercent}% ({formatCurrency(ticketTip)}) se agrega al cobrar</p>
+                  ) : (selectedOrder.tip_amount || 0) > 0 ? (
                     <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 text-right">Propina: {formatCurrency(selectedOrder.tip_amount!)}</p>
-                  )}
+                  ) : null}
                   {selectedOrder.payments && selectedOrder.payments.length > 0 && (
                     <div className="flex flex-wrap justify-end gap-1.5">
                       {selectedOrder.payments.map((p, i) => (
@@ -1887,6 +1994,8 @@ export function PedidosClient({
         open={!!checkoutOrder}
         onOpenChange={(o) => { if (!o) setCheckoutOrder(null) }}
         onFinalized={handleOrderFinalized}
+        tipEnabled={posTipEnabled}
+        tipPercent={posTipPercent}
       />
     </div>
   )

@@ -18,6 +18,8 @@ interface CheckoutOrder {
   items: any[]
   payments?: PaymentRecord[]
   tip_amount?: number
+  source?: string
+  status?: string
 }
 
 export interface PaymentRecord {
@@ -747,25 +749,35 @@ export function OrderCheckoutDialog({
   open,
   onOpenChange,
   onFinalized,
+  tipEnabled = false,
+  tipPercent = 10,
 }: {
   order: CheckoutOrder | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onFinalized: (orderId: string) => void
+  tipEnabled?: boolean
+  tipPercent?: number
 }) {
   const supabase = createClient()
+
+  // Propina recalculada sobre el total actual para pedidos del POS aún sin cobrar
+  const isPosOpen = order?.source === "pos" && order?.status !== "completed" && order?.status !== "cancelled"
+  const orderTip = isPosOpen && tipEnabled ? Math.round((order?.total_amount || 0) * (tipPercent / 100)) : 0
+  const chargeTotal = (order?.total_amount || 0) + orderTip
 
   const finalizeSale = async (payments: PaymentRecord[]) => {
     if (!order) return
     try {
-      // Las propinas dejadas del vuelto se suman a la propina registrada del pedido
+      // Las propinas dejadas del vuelto se suman a la propina recalculada del pedido
       const tipsFromPayments = payments.reduce((s, p) => s + (p.tip || 0), 0)
       const { error } = await supabase
         .from("orders")
         .update({
           status: "completed",
           payments,
-          tip_amount: Number(((order.tip_amount || 0) + tipsFromPayments).toFixed(2)),
+          total_amount: Number(chargeTotal.toFixed(2)),
+          tip_amount: Number((orderTip + tipsFromPayments).toFixed(2)),
         })
         .eq("id", order.id)
       if (error) throw error
@@ -791,18 +803,27 @@ export function OrderCheckoutDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Banknote className="h-5 w-5 text-emerald-600" />
-            Cobrar {formatCurrency(order?.total_amount || 0)}
+            Cobrar {formatCurrency(chargeTotal)}
           </DialogTitle>
         </DialogHeader>
         {open && order && (
-          <OrderCheckoutPanel
-            key={order.id}
-            total={order.total_amount}
-            items={order.items}
-            initialPayments={order.payments}
-            onFinalize={finalizeSale}
-            onPaymentsChange={savePartialPayments}
-          />
+          <>
+            {orderTip > 0 && (
+              <div className="rounded-2xl border border-border bg-muted/30 p-3 text-sm">
+                <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{formatCurrency(order.total_amount)}</span></div>
+                <div className="flex justify-between text-muted-foreground"><span>Propina sugerida {tipPercent}%</span><span>+{formatCurrency(orderTip)}</span></div>
+                <div className="mt-1 flex justify-between border-t border-border pt-1 font-bold"><span>Total a cobrar</span><span>{formatCurrency(chargeTotal)}</span></div>
+              </div>
+            )}
+            <OrderCheckoutPanel
+              key={order.id}
+              total={chargeTotal}
+              items={order.items}
+              initialPayments={order.payments}
+              onFinalize={finalizeSale}
+              onPaymentsChange={savePartialPayments}
+            />
+          </>
         )}
       </DialogContent>
     </Dialog>

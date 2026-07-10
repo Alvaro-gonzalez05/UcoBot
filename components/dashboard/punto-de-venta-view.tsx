@@ -157,7 +157,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     ticket_width: 80,
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [tip, setTip] = useState(0)
+  // Propina: "auto" sigue el % sugerido de la config (se aplica sola), "off" sin propina,
+  // "custom" un monto que cargó el cajero. El monto real se deriva más abajo.
+  const [tipMode, setTipMode] = useState<"auto" | "off" | "custom">("auto")
+  const [customTip, setCustomTip] = useState(0)
   const [amountPaid, setAmountPaid] = useState("")
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false)
 
@@ -288,16 +291,25 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   }, [redeemedReward, subtotalAfterCaps])
 
   const discountedSubtotal = subtotalAfterCaps - rewardDiscount
+
+  // Sugerencia de propina configurada por el negocio
+  const suggestedTip = Math.round(discountedSubtotal * (posSettings.tip_percent / 100))
+  // Monto real de propina (derivado): en "auto" sigue siempre al sugerido → nunca queda
+  // desincronizado ni se "desactiva" solo al cambiar el carrito.
+  const tip = !posSettings.tip_enabled
+    ? 0
+    : tipMode === "auto"
+      ? suggestedTip
+      : tipMode === "custom"
+        ? customTip
+        : 0
+
   const total = discountedSubtotal + tip
   const totalItems = cartItems.reduce((sum, item) => sum + item.quantity, 0)
 
   // Vuelto: lo que paga el cliente menos el total
   const paidNum = parseFloat(amountPaid.replace(",", ".")) || 0
   const change = paidNum > 0 ? paidNum - total : 0
-
-  // Sugerencia de propina configurada por el negocio
-  const suggestedTip = Math.round(discountedSubtotal * (posSettings.tip_percent / 100))
-  const tipApplied = tip > 0
 
   // Trae TODO el catálogo una sola vez: la búsqueda y las categorías filtran
   // en memoria (instantáneo, sin viajes al servidor por cada tecla).
@@ -488,22 +500,18 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         })
       }
 
-      if (tip > 0) {
-        orderItems.push({
-          product_id: null,
-          name: "Propina / extra",
-          quantity: 1,
-          price: Number(tip.toFixed(2)),
-          subtotal: Number(tip.toFixed(2)),
-        })
-      }
+      // La propina NO es un producto: es un cálculo sobre el total. En ventas cobradas
+      // al toque se guarda en tip_amount; en pedidos que se PASAN (pendientes) no se
+      // congela — se recalcula al cobrar en /pedidos según el % de la configuración.
+      const orderTip = status === "completed" ? tip : 0
+      const orderTotal = status === "completed" ? total : discountedSubtotal
 
       // Nota de cobro: medio de pago, canje, y vuelto si se ingresó
       const noteParts = [
         `Venta generada desde Punto de venta. ${status === "completed" && paymentMethod ? `Metodo de pago: ${paymentLabel}` : "Pago pendiente"}`,
       ]
       if (redeemedReward) noteParts.push(`Canje: ${redeemedReward.name}`)
-      if (tip > 0) noteParts.push(`Propina/extra: ${formatCurrency(tip)}`)
+      if (orderTip > 0) noteParts.push(`Propina/extra: ${formatCurrency(orderTip)}`)
       if (paidNum > 0) noteParts.push(`Pagó con ${formatCurrency(paidNum)} · Vuelto: ${formatCurrency(Math.max(0, change))}`)
 
       const { data: createdOrder, error } = await supabase
@@ -513,9 +521,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           client_id: selectedClient?.id || null,
           status: status,
           items: orderItems,
-          total_amount: Number(total.toFixed(2)),
-          tip_amount: Number(tip.toFixed(2)),
-          payments: status === "completed" && paymentMethod ? [{ method: paymentMethod, amount: Number(total.toFixed(2)), label: paymentLabel }] : [],
+          total_amount: Number(orderTotal.toFixed(2)),
+          tip_amount: Number(orderTip.toFixed(2)),
+          payments: status === "completed" && paymentMethod ? [{ method: paymentMethod, amount: Number(orderTotal.toFixed(2)), label: paymentLabel }] : [],
           delivery_phone: selectedClient?.phone || selectedClient?.instagram_username || "venta-local",
           customer_notes: noteParts.join(". "),
           source: "pos",
@@ -685,7 +693,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     setPaymentMethod(null)
     setRedeemedReward(null)
     setRedeemStampGift(false)
-    setTip(0)
+    setTipMode("auto")
+    setCustomTip(0)
     setAmountPaid("")
     setSaleSuccess(null)
     setPosPrintPhase(null)
@@ -1476,10 +1485,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       <span className="text-xs text-slate-400 flex-shrink-0">Propina</span>
                       <button
                         type="button"
-                        onClick={() => setTip(tipApplied ? 0 : suggestedTip)}
+                        onClick={() => setTipMode(tipMode === "auto" ? "off" : "auto")}
                         className={cn(
                           "rounded-full px-3 py-1 text-xs font-bold transition-colors flex-shrink-0",
-                          tipApplied
+                          tipMode === "auto"
                             ? "bg-[#1f2030] text-[#d8ff55]"
                             : "bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground hover:bg-slate-200"
                         )}
@@ -1490,7 +1499,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
                         <NumberInput
                           value={tip || null}
-                          onValueChange={(v) => setTip(v ?? 0)}
+                          onValueChange={(v) => { setTipMode("custom"); setCustomTip(v ?? 0) }}
                           placeholder="Otro monto"
                           className="h-8 pl-5 text-sm"
                         />
@@ -1530,7 +1539,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                             {change > 0 && (
                               <button
                                 type="button"
-                                onClick={() => setTip(Number((tip + change).toFixed(2)))}
+                                onClick={() => { setTipMode("custom"); setCustomTip(Number((tip + change).toFixed(2))) }}
                                 className="rounded-full bg-[#d8ff55]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#1f2030] dark:text-[#d8ff55] hover:bg-[#d8ff55]/35 transition-colors"
                               >
                                 Dejar de propina
@@ -1652,8 +1661,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           setPosSettings(s)
           // Si el medio de pago elegido quedó deshabilitado, pasar al primero válido
           if (paymentMethod && !s.payment_methods.includes(paymentMethod)) setPaymentMethod(null)
-          // Si apagaron la propina, limpiar lo cargado
-          if (!s.tip_enabled) setTip(0)
+          // Al reactivar la propina vuelve al modo automático (aplica el % sugerido solo)
+          if (s.tip_enabled) setTipMode("auto")
         }}
       />
 

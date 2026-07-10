@@ -51,10 +51,11 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
   // Get unique categories
   const categories = [...new Set(products?.map(p => p.category).filter(Boolean))] as string[]
 
-  // Fetch delivery settings + business name (para el ticket impreso)
-  const [{ data: deliverySettings }, { data: profile }] = await Promise.all([
+  // Fetch delivery settings + business name (ticket) + config de propina del POS
+  const [{ data: deliverySettings }, { data: profile }, { data: posSettings }] = await Promise.all([
     supabase.from("delivery_settings").select("*").eq("user_id", ownerId).single(),
     supabase.from("user_profiles").select("business_name").eq("id", ownerId).single(),
+    supabase.from("pos_settings").select("tip_enabled, tip_percent").eq("user_id", ownerId).maybeSingle(),
   ])
 
   return (
@@ -64,6 +65,8 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
       initialCategories={categories}
       deliverySettings={deliverySettings || undefined}
       businessName={profile?.business_name || "Mi Negocio"}
+      posTipEnabled={posSettings?.tip_enabled ?? false}
+      posTipPercent={Number(posSettings?.tip_percent) || 10}
       pagination={{
         page,
         limit,

@@ -35,9 +35,10 @@ const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
 /**
- * Limpia las notas para el ticket: saca el "Método de pago: ..." y el
- * "Pagó con ... · Vuelto ..." que arrastra el punto de venta, porque hasta
- * que la venta no está cobrada no corresponde mostrar un medio de pago.
+ * Limpia las notas para el ticket: saca todo lo interno que arrastra el punto
+ * de venta (origen "Venta generada...", método de pago, "Pagó con... Vuelto...",
+ * y la propina — que ya se muestra como su propia línea). Solo quedan las notas
+ * reales del cliente.
  */
 export function cleanTicketNotes(notes?: string | null): string {
   if (!notes) return ""
@@ -47,6 +48,8 @@ export function cleanTicketNotes(notes?: string | null): string {
     .filter(Boolean)
     .filter((s) => !/^m[eé]todo de pago/i.test(s))
     .filter((s) => !/^pag[oó]\s+con/i.test(s))
+    .filter((s) => !/^venta generada/i.test(s))
+    .filter((s) => !/^propina/i.test(s))
     .join(". ")
 }
 
@@ -91,7 +94,10 @@ function buildTicketInner(t: TicketData): string {
     ${t.orderType ? `<div class="row"><span>Modalidad</span><span>${esc(t.orderType)}</span></div>` : ""}
     <div class="sep"></div>
     ${itemRows}
-    ${t.tipAmount && t.tipAmount > 0 ? `<div class="row"><span>${esc(t.tipLabel || "Propina / extra")}</span><span>+${money(t.tipAmount)}</span></div>` : ""}
+    ${t.tipAmount && t.tipAmount > 0 ? `
+    <div class="sep"></div>
+    <div class="row"><span>Subtotal</span><span>${money(t.total - t.tipAmount)}</span></div>
+    <div class="row"><span>${esc(t.tipLabel || "Propina / extra")}</span><span>+${money(t.tipAmount)}</span></div>` : ""}
     <div class="sep"></div>
     <div class="row total"><span>TOTAL</span><span>${money(t.total)}</span></div>
     ${paymentRows}
