@@ -219,7 +219,8 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   function __closeTicket() {
     if (__closed) return;
     __closed = true;
-    setTimeout(function () { try { window.close() } catch (e) {} }, 150)
+    // Damos aire a que el trabajo de impresión se mande antes de cerrar.
+    setTimeout(function () { try { window.close() } catch (e) {} }, 500)
   }
   window.addEventListener("afterprint", __closeTicket)
   window.addEventListener("load", function () {
@@ -262,25 +263,13 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80, options?: 
         popup.document.write(html)
         popup.document.close()
       }
-
-      const triggerPrint = () => {
-        try {
-          popup.focus()
-          const printBtn = popup.document.querySelector(".btn-print") as HTMLButtonElement | null
-          printBtn?.focus()
-          popup.print()
-        } catch (error) {}
-      }
-
-      if (popup.document.readyState === "complete") {
-        setTimeout(triggerPrint, 250)
-      } else {
-        popup.addEventListener("load", () => setTimeout(triggerPrint, 250), { once: true })
-      }
-
+      // IMPORTANTE: NO llamamos popup.print() acá. El documento del ticket ya
+      // se imprime y se cierra solo (script inline). Llamarlo también desde el
+      // padre generaba un DOBLE disparo de impresión que, junto con el cierre
+      // por afterprint, hacía fallar al plugin ("error al imprimir la página").
       setTimeout(() => {
-        try { URL.revokeObjectURL(popupUrl as string) } catch (error) {}
-      }, 8000)
+        try { if (popupUrl) URL.revokeObjectURL(popupUrl) } catch (error) {}
+      }, 10000)
     } catch (error) {
       try { popup.close() } catch (closeError) {}
     }
