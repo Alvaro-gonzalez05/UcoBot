@@ -7,7 +7,7 @@ import { cn, normalizeSearchText } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote, ChevronLeft } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from "framer-motion"
@@ -174,6 +174,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [amountPaid, setAmountPaid] = useState("")
   const [orderNote, setOrderNote] = useState("")
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false)
+  // Cliente "sin registrar": nombre + mesa, sin guardarlo en la base
+  const [walkin, setWalkin] = useState<{ name: string; table: string } | null>(null)
+  const [clientMode, setClientMode] = useState<"list" | "walkin">("list")
+  const [walkinNameInput, setWalkinNameInput] = useState("")
+  const [walkinTableInput, setWalkinTableInput] = useState("")
 
   const isStampsMode = loyaltySettings?.card_type === "stamps"
 
@@ -552,7 +557,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           total_amount: Number(orderTotal.toFixed(2)),
           tip_amount: Number(orderTip.toFixed(2)),
           payments: status === "completed" && paymentMethod ? [{ method: paymentMethod, amount: Number(orderTotal.toFixed(2)), label: paymentLabel }] : [],
-          delivery_phone: selectedClient?.phone || selectedClient?.instagram_username || "venta-local",
+          // Para walk-in guardamos "Nombre · Mesa X" en delivery_phone (se muestra como cliente)
+          delivery_phone:
+            selectedClient?.phone ||
+            selectedClient?.instagram_username ||
+            (walkin ? `${walkin.name}${walkin.table ? ` · Mesa ${walkin.table}` : ""}` : "venta-local"),
           customer_notes: noteParts.join(". "),
           source: "pos",
         })
@@ -717,6 +726,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const resetSale = () => {
     setCartItems([])
     setSelectedClient(null)
+    setWalkin(null)
+    setClientMode("list")
     setClientSearch("")
     setPaymentMethod(null)
     setRedeemedReward(null)
@@ -747,7 +758,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     return {
       businessName,
       orderId,
-      clientName: selectedClient?.name || undefined,
+      clientName: selectedClient?.name || (walkin ? `${walkin.name}${walkin.table ? ` · Mesa ${walkin.table}` : ""}` : undefined),
       orderType: "Punto de venta",
       items,
       total, // ya incluye propina y descuentos
@@ -1049,14 +1060,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               <div className="flex items-center gap-2">
                 <Popover open={clientPopoverOpen} onOpenChange={setClientPopoverOpen}>
                   <PopoverTrigger asChild>
-                    {selectedClient ? (
+                    {selectedClient || walkin ? (
                       <button
                         type="button"
                         onMouseEnter={() => setClientPopoverOpen(true)}
-                        title={selectedClient.name}
+                        title={selectedClient?.name || walkin?.name}
                         className="flex h-9 w-9 items-center justify-center rounded-full bg-[#1f2030] text-[11px] font-black text-[#d8ff55] ring-2 ring-[#d8ff55] transition-transform hover:scale-105"
                       >
-                        {getInitials(selectedClient.name)}
+                        {getInitials(selectedClient?.name || walkin?.name || "?")}
                       </button>
                     ) : (
                       <button
@@ -1073,38 +1084,64 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     className="w-72 p-0 overflow-hidden"
                     onMouseLeave={() => { if (selectedClient) setClientPopoverOpen(false) }}
                   >
-                    {selectedClient ? (
+                    {selectedClient || walkin ? (
                       <div className="p-4">
                         <div className="flex items-center gap-3">
                           <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-[#1f2030] text-sm font-black text-[#d8ff55]">
-                            {getInitials(selectedClient.name)}
+                            {getInitials(selectedClient?.name || walkin?.name || "?")}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold">{selectedClient.name}</p>
-                            <p className="truncate text-xs text-muted-foreground">{getClientHandle(selectedClient)}</p>
+                            <p className="truncate text-sm font-bold">{selectedClient?.name || walkin?.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {selectedClient ? getClientHandle(selectedClient) : walkin?.table ? `Mesa ${walkin.table}` : "Sin registrar"}
+                            </p>
                           </div>
                         </div>
-                        <div className="mt-3 flex items-center gap-2 rounded-xl bg-muted/50 p-2.5 text-sm">
-                          {isStampsMode ? (
-                            <>
-                              <Stamp className="h-4 w-4 text-[#1C1C28] dark:text-[#D1F366]" />
-                              <span className="font-bold">{selectedClient.stamps || 0}/{loyaltySettings?.stamps_required || 10}</span>
-                              <span className="text-muted-foreground">visitas</span>
-                            </>
-                          ) : (
-                            <>
-                              <Star className="h-4 w-4 text-amber-500" />
-                              <span className="font-bold">{(selectedClient.points || 0).toLocaleString("es-AR")}</span>
-                              <span className="text-muted-foreground">puntos</span>
-                            </>
-                          )}
-                        </div>
+                        {selectedClient && (
+                          <div className="mt-3 flex items-center gap-2 rounded-xl bg-muted/50 p-2.5 text-sm">
+                            {isStampsMode ? (
+                              <>
+                                <Stamp className="h-4 w-4 text-[#1C1C28] dark:text-[#D1F366]" />
+                                <span className="font-bold">{selectedClient.stamps || 0}/{loyaltySettings?.stamps_required || 10}</span>
+                                <span className="text-muted-foreground">visitas</span>
+                              </>
+                            ) : (
+                              <>
+                                <Star className="h-4 w-4 text-amber-500" />
+                                <span className="font-bold">{(selectedClient.points || 0).toLocaleString("es-AR")}</span>
+                                <span className="text-muted-foreground">puntos</span>
+                              </>
+                            )}
+                          </div>
+                        )}
                         <button
                           type="button"
-                          onClick={() => { setSelectedClient(null); setRedeemedReward(null); setRedeemStampGift(false); setClientPopoverOpen(false) }}
+                          onClick={() => { setSelectedClient(null); setWalkin(null); setRedeemedReward(null); setRedeemStampGift(false); setClientPopoverOpen(false) }}
                           className="mt-3 w-full rounded-xl border border-border py-2 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted"
                         >
                           Quitar cliente
+                        </button>
+                      </div>
+                    ) : clientMode === "walkin" ? (
+                      <div className="space-y-3 p-3">
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => setClientMode("list")} className="rounded-lg p-1 hover:bg-muted">
+                            <ChevronLeft className="h-4 w-4" />
+                          </button>
+                          <span className="text-sm font-bold">Cliente sin registrar</span>
+                        </div>
+                        <Input value={walkinNameInput} onChange={(e) => setWalkinNameInput(e.target.value)} placeholder="Nombre (ej: Juan)" className="h-9" autoFocus />
+                        <Input value={walkinTableInput} onChange={(e) => setWalkinTableInput(e.target.value)} placeholder="Mesa (opcional)" className="h-9" />
+                        <button
+                          type="button"
+                          disabled={!walkinNameInput.trim()}
+                          onClick={() => {
+                            setWalkin({ name: walkinNameInput.trim(), table: walkinTableInput.trim() })
+                            setWalkinNameInput(""); setWalkinTableInput(""); setClientMode("list"); setClientPopoverOpen(false)
+                          }}
+                          className="w-full rounded-xl bg-[#d8ff55] py-2 text-xs font-bold text-[#1C1C28] transition-colors hover:bg-[#c8ef42] disabled:opacity-50"
+                        >
+                          Usar cliente
                         </button>
                       </div>
                     ) : (
@@ -1143,6 +1180,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                             <p className="py-3 text-center text-xs text-muted-foreground">Escribí para buscar un cliente.</p>
                           )}
                         </div>
+                        {/* Cliente rápido sin guardarlo en la base (mesa incluida) */}
+                        <button
+                          type="button"
+                          onClick={() => { setWalkinNameInput(clientSearch.trim()); setClientMode("walkin") }}
+                          className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                        >
+                          <UserRound className="h-3.5 w-3.5" /> Cliente sin registrar (nombre + mesa)
+                        </button>
                         <div className="flex items-center gap-2 border-t border-border pt-3">
                           <button
                             type="button"

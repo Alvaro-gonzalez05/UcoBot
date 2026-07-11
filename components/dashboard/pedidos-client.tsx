@@ -11,19 +11,19 @@ import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2, StickyNote } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2, StickyNote, Check, Loader2 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
 import { ProductForm } from "./product-form"
 import { ProductImportWizard } from "./product-import-wizard"
 import { ProductOptionsManager } from "./product-options-manager"
+import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
 import { ProductEditForm } from "./product-edit-form"
 import { OrderCheckoutDialog, OrderCheckoutPanel, type PaymentRecord } from "./order-checkout-dialog"
 import { printTicket, cleanTicketNotes } from "@/lib/print-ticket"
 import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
 import { toast } from "sonner"
-import { DashboardPagination } from "./dashboard-pagination"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
@@ -87,13 +87,10 @@ interface PedidosClientProps {
   businessName?: string
   posTipEnabled?: boolean
   posTipPercent?: number
-  pagination?: {
-    page: number
-    limit: number
-    totalItems: number
-    totalPages: number
-  }
+  optionsByProduct?: Record<string, PosOptionGroup[]>
 }
+
+const PAGE_SIZE = 10
 
 export function PedidosClient({
   userId,
@@ -104,11 +101,22 @@ export function PedidosClient({
   businessName = "Mi Negocio",
   posTipEnabled = false,
   posTipPercent = 10,
-  pagination
+  optionsByProduct = {},
 }: PedidosClientProps) {
   const [orders, setOrders] = useState<Order[]>(initialOrders)
+  // Infinite scroll: hay más para cargar + estado de carga del lote siguiente
+  const [hasMore, setHasMore] = useState(initialOrders.length >= PAGE_SIZE)
+  const [loadingMore, setLoadingMore] = useState(false)
+  // Búsqueda server-side: resultados (o null si no hay búsqueda activa) + estado de carga
+  const [searchOrders, setSearchOrders] = useState<Order[] | null>(null)
+  const [searching, setSearching] = useState(false)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [categories, setCategories] = useState<string[]>(initialCategories)
+  // Si el server manda un nuevo primer lote (refresh), reseteamos la lista y el "hay más".
+  useEffect(() => { setOrders(initialOrders); setHasMore(initialOrders.length >= PAGE_SIZE) }, [initialOrders])
+  useEffect(() => { setProducts(initialProducts) }, [initialProducts])
+  useEffect(() => { setCategories(initialCategories) }, [initialCategories])
   const [isLoading, setIsLoading] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   
@@ -122,8 +130,20 @@ export function PedidosClient({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   // Pedido que acaba de cambiar de estado (para el flash animado en su nuevo color)
   const [poppedId, setPoppedId] = useState<string | null>(null)
+  // Índice para ir recorriendo los pedidos editados con el botón flotante
+  const [editedNav, setEditedNav] = useState(0)
+  // Posición actual (1-based) del pedido editado que estás viendo
+  const [editedPos, setEditedPos] = useState(0)
+  // Cargando: navegando a la página del pedido editado (spinner en el botón)
+  const [editedLoading, setEditedLoading] = useState(false)
+  const pendingPosRef = useRef<number | null>(null)
+  // Burbuja de aviso "¡Tenés pedidos editados!"
+  const [showEditedBubble, setShowEditedBubble] = useState(false)
+  // TODOS los pedidos editados (de todas las páginas), para el botón flotante
+  const [editedOrders, setEditedOrders] = useState<Order[]>([])
+  const pendingScrollRef = useRef<string | null>(null)
   // Estado editable del pedido en la vista previa
-  const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null; options?: any[] }[]>([])
+  const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null; options?: any[]; is_new?: boolean; delivered?: boolean }[]>([])
   const [editStatus, setEditStatus] = useState("pending")
   const [editAddress, setEditAddress] = useState("")
   const [editNotes, setEditNotes] = useState("")
@@ -134,10 +154,14 @@ export function PedidosClient({
   const [isPrintingTicket, setIsPrintingTicket] = useState(false)
   // Animación de impresión a pantalla completa del panel: imprimiendo → impreso
   const [printPhase, setPrintPhase] = useState<null | "printing" | "done">(null)
+  // Toggle manual para incluir la propina en el ticket a imprimir (preview + impresión)
+  const [includeTipInPrint, setIncludeTipInPrint] = useState(false)
   // Feedback "+1" en el dropdown de agregar productos
   const [justAddedRow, setJustAddedRow] = useState<{ id: string; nonce: number } | null>(null)
   // Carrito de selección del dropdown: lo tocado se acumula acá y entra al pedido al confirmar
-  const [staged, setStaged] = useState<{ id: string; name: string; price: number; image_url: string | null; qty: number }[]>([])
+  const [staged, setStaged] = useState<{ lineKey: string; id: string; name: string; price: number; image_url: string | null; qty: number; options?: SelectedOption[] }[]>([])
+  // Producto para el que se están eligiendo opciones al agregar en /pedidos (modal centrado)
+  const [pedidosPicker, setPedidosPicker] = useState<Product | null>(null)
   const [addConfirmPhase, setAddConfirmPhase] = useState(false)
   // Modo del modal de detalle: edición, cobro o vista previa de impresión (se intercambian con animación)
   const [detailMode, setDetailMode] = useState<"edit" | "checkout" | "print">("edit")
@@ -166,6 +190,9 @@ export function PedidosClient({
 
   // Make sure we have a reliable audio element
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  // Auto-guardado del detalle: guarda solo tras cada cambio (sin botón "Guardar")
+  const autoSaveTimer = useRef<number | null>(null)
+  const autoSaveReady = useRef(false)
 
   useEffect(() => {
     // Setup Supabase Realtime for orders table
@@ -173,12 +200,13 @@ export function PedidosClient({
       .channel('orders-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
+        { event: '*', schema: 'public', table: 'orders', filter: `user_id=eq.${userId}` },
         (payload) => {
           if (payload.eventType === 'INSERT') {
             const newOrder = payload.new as Order
+            // Dedup dentro del updater: si ya está, no lo duplicamos
+            setOrders(prev => (prev.some(o => o.id === newOrder.id) ? prev : [newOrder, ...prev]))
             toast.success(`¡Nuevo pedido recibido! (#${newOrder.id.slice(0, 5)})`)
-            setOrders(prev => [newOrder, ...prev])
             
             // Reproducir sonido usando la etiqueta <audio> fijada al dom
             if (audioRef.current) {
@@ -198,6 +226,8 @@ export function PedidosClient({
             const deletedOrder = payload.old as Order
             setOrders(prev => prev.filter(o => o.id !== deletedOrder.id))
           }
+          // Cualquier cambio puede afectar la lista global de editados → la refrescamos
+          loadEditedOrders()
         }
       )
       .subscribe()
@@ -205,19 +235,18 @@ export function PedidosClient({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [supabase])
+  }, [supabase, userId])
 
   // (El resaltado de pedidos pendientes ahora es una animación CSS liviana —
   //  ver .order-card-pending en globals.css. Antes era GSAP animando box-shadow
   //  de forma infinita, que trababa los celulares de gama baja.)
 
   // Filter orders based on search + selected tags + status
-  const filteredOrders = orders.filter(order => {
-    if (orderSearch.trim()) {
-      const q = normalizeSearchText(orderSearch.trim())
-      const hay = normalizeSearchText(`${order.id} ${order.client?.name || ""} ${order.delivery_phone || ""}`)
-      if (!hay.includes(q)) return false
-    }
+  // Con búsqueda activa mostramos los resultados del server; si no, la lista con infinite scroll.
+  const searchActive = orderSearch.trim().length > 0
+  const displayOrders = searchActive ? (searchOrders || []) : orders
+  // Los filtros de estado/etiquetas se aplican del lado del cliente sobre lo mostrado.
+  const filteredOrders = displayOrders.filter(order => {
     if (filterStatuses.length > 0 && !filterStatuses.includes(order.status)) return false
     if (selectedTags.length === 0) return true
     if (!order.tags) return false
@@ -225,6 +254,83 @@ export function PedidosClient({
   })
 
   const activeFilterCount = selectedTags.length + filterStatuses.length
+
+  // ── Infinite scroll: cargar el próximo lote (cursor por created_at, robusto ante realtime) ──
+  const loadMoreOrders = async () => {
+    if (loadingMore || !hasMore || searchActive || orders.length === 0) return
+    setLoadingMore(true)
+    try {
+      const cursor = orders[orders.length - 1].created_at
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
+        .eq("user_id", userId)
+        .lt("created_at", cursor)
+        .order("created_at", { ascending: false })
+        .limit(PAGE_SIZE)
+      if (error) throw error
+      const batch = (data as Order[]) || []
+      setOrders((prev) => {
+        const ids = new Set(prev.map((o) => o.id))
+        return [...prev, ...batch.filter((o) => !ids.has(o.id))]
+      })
+      if (batch.length < PAGE_SIZE) setHasMore(false)
+    } catch (e) {
+      console.error("Error loading more orders:", e)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+  // Ref a la última versión de loadMore para que el observer siempre llame a la actual
+  const loadMoreFnRef = useRef(loadMoreOrders)
+  loadMoreFnRef.current = loadMoreOrders
+
+  // Observer: cuando el sensor del fondo entra en pantalla, carga más
+  useEffect(() => {
+    const el = loadMoreRef.current
+    if (!el || searchActive) return
+    const obs = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMoreFnRef.current() },
+      { rootMargin: "300px" }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [searchActive, hasMore])
+
+  // Búsqueda server-side (encuentra en TODOS los pedidos, no solo los cargados)
+  useEffect(() => {
+    const term = orderSearch.trim()
+    if (!term) { setSearchOrders(null); setSearching(false); return }
+    setSearching(true)
+    const t = window.setTimeout(async () => {
+      try {
+        const sel = `*, client:client_id(name, phone), conversation:conversation_id(platform)`
+        // 1) por teléfono / nombre de walk-in (guardado en delivery_phone)
+        const { data: byPhone } = await supabase
+          .from("orders").select(sel).eq("user_id", userId)
+          .ilike("delivery_phone", `%${term}%`).order("created_at", { ascending: false }).limit(50)
+        // 2) por nombre de cliente registrado
+        const { data: matchClients } = await supabase
+          .from("clients").select("id").eq("user_id", userId).ilike("name", `%${term}%`).limit(100)
+        let byClient: Order[] = []
+        if (matchClients && matchClients.length) {
+          const { data } = await supabase
+            .from("orders").select(sel).eq("user_id", userId)
+            .in("client_id", matchClients.map((c) => c.id)).order("created_at", { ascending: false }).limit(50)
+          byClient = (data as Order[]) || []
+        }
+        const map = new Map<string, Order>()
+        for (const o of [...((byPhone as Order[]) || []), ...byClient]) map.set(o.id, o)
+        setSearchOrders([...map.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+      } catch (e) {
+        console.error("Error searching orders:", e)
+        setSearchOrders([])
+      } finally {
+        setSearching(false)
+      }
+    }, 350)
+    return () => window.clearTimeout(t)
+  }, [orderSearch, userId])
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev =>
@@ -387,9 +493,13 @@ export function PedidosClient({
     // Finalizar exige cobro: al pasar a "completado" abrimos el cobro del pedido.
     if (next === "completed") { openCheckout(order); return }
     try {
+      // Al pasar de "pendiente" a confirmado (o más), el pedido editado queda "recibido":
+      // se limpian las marcas de productos nuevos (dejan de estar resaltados).
+      const clearNew = next !== "pending" && Array.isArray(order.items) && order.items.some((i: any) => i?.is_new)
+      const nextItems = clearNew ? order.items.map((i: any) => ({ ...i, is_new: undefined })) : undefined
       const { data, error } = await supabase
         .from("orders")
-        .update({ status: next })
+        .update({ status: next, ...(nextItems ? { items: nextItems } : {}) })
         .eq("id", order.id)
         .select()
         .single()
@@ -398,11 +508,124 @@ export function PedidosClient({
       // Sin toast: la tarjeta se recolorea al nuevo estado y hace un flash animado
       setPoppedId(order.id)
       window.setTimeout(() => setPoppedId((p) => (p === order.id ? null : p)), 700)
+      loadEditedOrders()
     } catch (error) {
       console.error("Error advancing order status:", error)
       toast.error("No se pudo actualizar el estado")
     }
   }
+
+  // Trae TODOS los pedidos con productos nuevos sin confirmar (de cualquier página)
+  const loadEditedOrders = async () => {
+    try {
+      // OJO: pasamos el jsonb como STRING. Si se pasa un array JS, supabase-js lo trata
+      // como array de Postgres ({...}) y no matchea el jsonb → devolvía vacío.
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
+        .eq("user_id", userId)
+        .filter("items", "cs", JSON.stringify([{ is_new: true }]))
+        .order("created_at", { ascending: false })
+      if (error) throw error
+      setEditedOrders((data as Order[]) || [])
+    } catch (e) {
+      console.error("Error loading edited orders:", e)
+    }
+  }
+  useEffect(() => { loadEditedOrders() }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // El pedido fue editado si tiene productos agregados que todavía no se entregaron
+  const orderHasNewItems = (o: Order) =>
+    Array.isArray(o.items) && o.items.some((i: any) => i?.is_new && !i?.delivered)
+
+  // Lista final de editados: los de la página actual (estado local, siempre confiable) +
+  // los de otras páginas (consulta a la base). Así el botón nunca depende solo de la query.
+  const currentPageIds = new Set(orders.map((o) => o.id))
+  const editedList = [
+    ...orders.filter(orderHasNewItems),
+    ...editedOrders.filter((o) => !currentPageIds.has(o.id) && orderHasNewItems(o)),
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+  // Burbuja de aviso: aparece cuando hay editados y se auto-oculta a los 6s (reaparece si cambia la cantidad)
+  useEffect(() => {
+    if (editedList.length > 0) {
+      setShowEditedBubble(true)
+      const t = window.setTimeout(() => setShowEditedBubble(false), 6000)
+      return () => window.clearTimeout(t)
+    }
+    setShowEditedBubble(false)
+  }, [editedList.length])
+
+  // Hace scroll a una tarjeta de la página actual y la resalta
+  const scrollAndFlash = (orderId: string) => {
+    const el = typeof document !== "undefined" ? document.getElementById(`order-card-${orderId}`) : null
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+    setPoppedId(orderId)
+    window.setTimeout(() => setPoppedId((p) => (p === orderId ? null : p)), 1100)
+  }
+
+  // Carga de una todos los pedidos que faltan hasta el objetivo (por fecha) y luego scrollea.
+  // Sin cambiar de página: la lista es continua (infinite scroll).
+  const navigateToOrder = async (target: Order) => {
+    try {
+      const cursor = orders.length ? orders[orders.length - 1].created_at : new Date().toISOString()
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
+        .eq("user_id", userId)
+        .lt("created_at", cursor)
+        .gte("created_at", target.created_at)
+        .order("created_at", { ascending: false })
+      if (error) throw error
+      const batch = (data as Order[]) || []
+      setOrders((prev) => {
+        const ids = new Set(prev.map((o) => o.id))
+        return [...prev, ...batch.filter((o) => !ids.has(o.id))]
+      })
+      // El efecto de scroll pendiente hará el scroll + posición + apagar el spinner
+      pendingScrollRef.current = target.id
+    } catch (e) {
+      console.error("Error navigating to order:", e)
+      setEditedLoading(false)
+    }
+  }
+
+  // Recorre los pedidos editados (todas las páginas): cada toque va al siguiente
+  const goToNextEdited = () => {
+    if (editedList.length === 0 || editedLoading) return
+    const idx = editedNav % editedList.length
+    const target = editedList[idx]
+    setEditedNav(editedNav + 1)
+    setShowEditedBubble(false)  // al interactuar, ocultamos la burbuja
+    if (orders.some((o) => o.id === target.id)) {
+      setEditedPos(idx + 1)     // ya visible en esta página → actualiza al toque
+      scrollAndFlash(target.id)
+    } else {
+      // Otra página: el numerito NO cambia hasta que el pedido aparezca en pantalla.
+      // Mientras tanto, spinner en el botón.
+      pendingPosRef.current = idx + 1
+      setEditedLoading(true)
+      window.setTimeout(() => setEditedLoading(false), 6000) // fallback por si algo falla
+      navigateToOrder(target)
+    }
+  }
+
+  // Al cambiar de página (llegan nuevos orders), si quedó un scroll pendiente, lo ejecutamos.
+  // Recién ACÁ (cuando el pedido ya está en pantalla) actualizamos el numerito y apagamos el spinner.
+  useEffect(() => {
+    const pid = pendingScrollRef.current
+    if (pid && orders.some((o) => o.id === pid)) {
+      pendingScrollRef.current = null
+      setTimeout(() => {
+        scrollAndFlash(pid)
+        if (pendingPosRef.current != null) {
+          setEditedPos(pendingPosRef.current)
+          pendingPosRef.current = null
+        }
+        setEditedLoading(false)
+      }, 250)
+    }
+  }, [orders]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Abre el diálogo de cobro para cerrar la venta
   const openCheckout = (order: Order) => setCheckoutOrder(order)
@@ -426,32 +649,60 @@ export function PedidosClient({
         quantity: Number(it.quantity) || 1,
         image_url: it.image_url || null,
         options: Array.isArray(it.options) && it.options.length ? it.options : undefined,
+        is_new: !!it.is_new,
+        delivered: !!it.delivered,
       }))
     )
     setAddSearch("")
     setShowAddProduct(false)
     setDetailMode("edit")
     setIsDetailOpen(true)
+    // El auto-save arranca deshabilitado hasta que el modal termina de hidratar,
+    // así no dispara un guardado apenas se cargan los datos del pedido.
+    autoSaveReady.current = false
+    window.setTimeout(() => { autoSaveReady.current = true }, 200)
   }
 
   const editTotal = editItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
 
-  // Tocar un producto NO lo agrega directo: lo suma al carrito de selección del dropdown
-  const stageProduct = (p: Product) => {
+  // Firma de línea: mismo producto con mismas opciones = misma línea (no se mezclan variantes)
+  const lineSig = (productId: string, options: SelectedOption[]) =>
+    productId + "|" + options.map((o) => `${o.group}:${o.name}`).sort().join("|")
+
+  // Suma una línea al carrito de selección (con o sin opciones; el precio ya incluye extras)
+  const stageLine = (p: Product, options: SelectedOption[], extra: number) => {
+    const key = lineSig(p.id, options)
     setStaged((prev) => {
-      const ex = prev.find((s) => s.id === p.id)
-      if (ex) return prev.map((s) => (s.id === p.id ? { ...s, qty: s.qty + 1 } : s))
-      return [...prev, { id: p.id, name: p.name, price: Number(p.price) || 0, image_url: p.image_url || null, qty: 1 }]
+      const ex = prev.find((s) => s.lineKey === key)
+      if (ex) return prev.map((s) => (s.lineKey === key ? { ...s, qty: s.qty + 1 } : s))
+      return [...prev, {
+        lineKey: key,
+        id: p.id,
+        name: p.name,
+        price: Number((Number(p.price) + extra).toFixed(2)),
+        image_url: p.image_url || null,
+        qty: 1,
+        options: options.length ? options : undefined,
+      }]
     })
-    // Feedback "+1" sobre la fila tocada
     setJustAddedRow({ id: p.id, nonce: Date.now() })
     window.setTimeout(() => setJustAddedRow((prev) => (prev?.id === p.id ? null : prev)), 650)
   }
 
-  const unstageProduct = (id: string) => {
+  // Tocar un producto: si tiene opciones abre el modal; si no, lo suma directo
+  const stageProduct = (p: Product) => {
+    const groups = optionsByProduct[p.id]
+    if (groups && groups.length > 0) {
+      setPedidosPicker(p)
+      return
+    }
+    stageLine(p, [], 0)
+  }
+
+  const unstageProduct = (lineKey: string) => {
     setStaged((prev) =>
       prev
-        .map((s) => (s.id === id ? { ...s, qty: s.qty - 1 } : s))
+        .map((s) => (s.lineKey === lineKey ? { ...s, qty: s.qty - 1 } : s))
         .filter((s) => s.qty > 0)
     )
   }
@@ -470,14 +721,19 @@ export function PedidosClient({
       setEditItems((prev) => {
         const next = [...prev]
         const newOnes: typeof prev = []
+        const optsSig = (opts?: any[]) => optionNames(opts).slice().sort().join("|")
         for (const s of staged) {
-          const idx = next.findIndex((i) => i.product_id === s.id)
-          if (idx >= 0) next[idx] = { ...next[idx], quantity: next[idx].quantity + s.qty }
-          else newOnes.push({ product_id: s.id, name: s.name, price: s.price, quantity: s.qty, image_url: s.image_url })
+          // Mismo producto + mismas opciones = misma línea; distinto = línea separada
+          const idx = next.findIndex((i) => i.product_id === s.id && optsSig(i.options) === optsSig(s.options))
+          // is_new marca el producto agregado en una edición (puntito + badge "Editado")
+          if (idx >= 0) next[idx] = { ...next[idx], quantity: next[idx].quantity + s.qty, is_new: true }
+          else newOnes.push({ product_id: s.id, name: s.name, price: s.price, quantity: s.qty, image_url: s.image_url, options: s.options, is_new: true })
         }
         // Los nuevos van arriba para que se los vea entrar (animados)
         return [...newOnes, ...next]
       })
+      // Editar el pedido (agregar productos) lo devuelve a "pendiente" para re-confirmar
+      setEditStatus("pending")
       setAddConfirmPhase(false)
       closeAddDropdown()
     }, 950)
@@ -510,6 +766,22 @@ export function PedidosClient({
   const optionNames = (opts?: any[]): string[] =>
     (opts || []).map((o) => (typeof o === "string" ? o : o?.name)).filter(Boolean)
 
+  // Línea de producto en la tarjeta, resaltando los recién agregados (puntito + color lime)
+  const renderCardItem = (item: any, i: number) => {
+    const isNew = item?.is_new && !item?.delivered
+    return (
+      <div key={i}>
+        <p className={cn("flex items-center gap-1 text-sm font-semibold truncate", isNew ? "text-[#5c7a16] dark:text-[#D1F366]" : "text-foreground")}>
+          {isNew && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#B3D93C]" />}
+          {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
+        </p>
+        {optionNames(item.options).length > 0 && (
+          <p className="pl-4 text-[11px] text-muted-foreground leading-tight truncate">{optionNames(item.options).join(" · ")}</p>
+        )}
+      </div>
+    )
+  }
+
   // Cobra desde el modal: guarda los items editados, los pagos y cierra la venta en un solo paso
   const finalizeFromModal = async (payments: PaymentRecord[]) => {
     if (!selectedOrder) return
@@ -522,6 +794,8 @@ export function PedidosClient({
         subtotal: Number((i.price * i.quantity).toFixed(2)),
         image_url: i.image_url || null,
         options: i.options && i.options.length ? i.options : undefined,
+        is_new: i.is_new || undefined,
+        delivered: i.delivered || undefined,
       }))
       // Las propinas dejadas del vuelto se suman a la propina recalculada del pedido
       const tipsFromPayments = payments.reduce((s, p) => s + (p.tip || 0), 0)
@@ -598,6 +872,12 @@ export function PedidosClient({
   // En pedidos ya cobrados se respeta la propina registrada.
   const ticketTip = orderIsPosOpen ? 0 : (selectedOrder?.tip_amount || 0)
 
+  // Propina para IMPRIMIR: controlada por el toggle "Incluir propina" de la vista de impresión.
+  const suggestedPrintTip = posTipEnabled
+    ? Math.round(editTotal * (posTipPercent / 100))
+    : selectedOrder?.tip_amount || 0
+  const printTip = includeTipInPrint ? suggestedPrintTip : 0
+
   // Imprime el ticket con lo que se ve en pantalla (items editados incluidos)
   const handlePrintTicket = () => {
     if (!selectedOrder) return
@@ -613,8 +893,8 @@ export function PedidosClient({
       clientName: getOrderClientName(selectedOrder),
       orderType: getOrderModalityLabel(selectedOrder),
       items: editItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, options: optionNames(i.options) })),
-      total: editTotal + ticketTip,
-      tipAmount: ticketTip || undefined,
+      total: editTotal + printTip,
+      tipAmount: printTip || undefined,
       payments: selectedOrder.payments,
       notes: editNotes || undefined,
     }, ticketWidth, {
@@ -637,20 +917,55 @@ export function PedidosClient({
     setEditItems((prev) => prev.filter((_, idx) => idx !== index))
   }
 
-  const handleSaveOrder = async () => {
+  // Marca/desmarca un producto como entregado (control de cocina/mostrador). Persiste al toque.
+  // Al entregarlo deja de estar "nuevo" (se resuelve el puntito de editado).
+  const toggleItemDelivered = async (index: number) => {
     if (!selectedOrder) return
-    setIsLoading(true)
+    const nextItems = editItems.map((i, idx) =>
+      idx === index ? { ...i, delivered: !i.delivered, is_new: i.delivered ? i.is_new : false } : i
+    )
+    setEditItems(nextItems)
+    const dbItems = nextItems.map((i) => ({
+      product_id: i.product_id,
+      name: i.name,
+      quantity: i.quantity,
+      price: i.price,
+      subtotal: Number((i.price * i.quantity).toFixed(2)),
+      image_url: i.image_url || null,
+      options: i.options && i.options.length ? i.options : undefined,
+      is_new: i.is_new || undefined,
+      delivered: i.delivered || undefined,
+    }))
     try {
-      const items = editItems.map((i) => ({
-        product_id: i.product_id,
-        name: i.name,
-        quantity: i.quantity,
-        price: i.price,
-        subtotal: Number((i.price * i.quantity).toFixed(2)),
-        image_url: i.image_url || null,
-        options: i.options && i.options.length ? i.options : undefined,
-      }))
-      const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
+      await supabase.from("orders").update({ items: dbItems }).eq("id", selectedOrder.id)
+      setSelectedOrder((prev) => (prev ? { ...prev, items: dbItems } : prev))
+      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, items: dbItems } : o)))
+      loadEditedOrders()
+    } catch (e) {
+      console.error("Error toggling delivered:", e)
+      toast.error("No se pudo actualizar el producto")
+    }
+  }
+
+  // Persiste el detalle editado (items, nota, dirección, estado). Silencioso para el auto-save.
+  const persistOrderEdits = async (opts?: { silent?: boolean }) => {
+    if (!selectedOrder) return
+    // is_new (producto agregado, resaltado) solo tiene sentido mientras el pedido está
+    // "pendiente". Al confirmarlo/avanzarlo se limpia para que quede normal.
+    const keepNew = editStatus === "pending"
+    const items = editItems.map((i) => ({
+      product_id: i.product_id,
+      name: i.name,
+      quantity: i.quantity,
+      price: i.price,
+      subtotal: Number((i.price * i.quantity).toFixed(2)),
+      image_url: i.image_url || null,
+      options: i.options && i.options.length ? i.options : undefined,
+      is_new: keepNew ? (i.is_new || undefined) : undefined,
+      delivered: i.delivered || undefined,
+    }))
+    const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
+    try {
       const { data, error } = await supabase
         .from("orders")
         .update({
@@ -663,19 +978,25 @@ export function PedidosClient({
         .eq("id", selectedOrder.id)
         .select()
         .single()
-
       if (error) throw error
-
-      setOrders(orders.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
-      toast.success("Pedido actualizado correctamente")
-      setIsDetailOpen(false)
+      setSelectedOrder((prev) => (prev ? { ...prev, ...data } : prev))
+      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
+      if (!keepNew) setEditItems((prev) => prev.map((i) => ({ ...i, is_new: false })))
+      loadEditedOrders()
     } catch (error) {
-      console.error("Error updating order:", error)
-      toast.error("No se pudo actualizar el pedido")
-    } finally {
-      setIsLoading(false)
+      console.error("Error saving order:", error)
+      if (!opts?.silent) toast.error("No se pudo guardar el pedido")
     }
   }
+
+  // Auto-guardado: cada cambio en items/nota/dirección/estado se guarda solo (debounce)
+  useEffect(() => {
+    if (!autoSaveReady.current || !isDetailOpen || !selectedOrder || detailMode !== "edit") return
+    if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = window.setTimeout(() => persistOrderEdits({ silent: true }), 700)
+    return () => { if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editItems, editNotes, editAddress, editStatus, isDetailOpen, detailMode])
 
   const formatCurrency = (value: number) =>
     new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2 }).format(value)
@@ -934,17 +1255,25 @@ export function PedidosClient({
           )}
 
           {/* Empty state */}
-          {orders.length === 0 ? (
+          {!searchActive && orders.length === 0 ? (
             <div className="rounded-3xl border border-border bg-card p-12 flex flex-col items-center justify-center text-center shadow-sm">
               <ShoppingCart className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-1">No hay pedidos aún</h3>
               <p className="text-sm text-muted-foreground">Los pedidos de tus clientes aparecerán aquí automáticamente.</p>
             </div>
           ) : filteredOrders.length === 0 ? (
-            <div className="text-center py-10">
-              <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-              <p className="text-muted-foreground">No hay pedidos con los filtros seleccionados.</p>
-            </div>
+            searchActive && searching ? (
+              <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Buscando…
+              </div>
+            ) : (
+              <div className="text-center py-10">
+                <ShoppingCart className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">
+                  {searchActive ? `Sin resultados para "${orderSearch.trim()}".` : "No hay pedidos con los filtros seleccionados."}
+                </p>
+              </div>
+            )
           ) : (
             <div className={cn(
               viewMode === "grid"
@@ -956,6 +1285,7 @@ export function PedidosClient({
                 /* ── Vista tarjeta vertical ── */
                 <motion.div
                   key={order.id}
+                  id={`order-card-${order.id}`}
                   layout
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -976,32 +1306,36 @@ export function PedidosClient({
                         {formatDistanceToNow(new Date(order.created_at), { addSuffix: true, locale: es })}
                       </p>
                     </div>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${getStatusBadgeClass(order.status)}`}>
-                      {getStatusText(order.status).toUpperCase()}
-                    </span>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap ${getStatusBadgeClass(order.status)}`}>
+                        {getStatusText(order.status).toUpperCase()}
+                      </span>
+                      {orderHasNewItems(order) && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-[#B3D93C] px-2 py-0.5 text-[9px] font-black text-[#1C1C28] whitespace-nowrap">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#1C1C28]" /> EDITADO
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="flex-1 rounded-2xl bg-white dark:bg-slate-900 p-3">
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Detalle</span>
-                    <div className="mt-1 space-y-0.5">
+                    <div className={cn("mt-1", Array.isArray(order.items) && order.items.length > 5 ? "flex gap-3" : "space-y-0.5")}>
                       {Array.isArray(order.items) && order.items.length > 0 ? (
-                        <>
-                          {order.items.slice(0, 4).map((item: any, i: number) => (
-                            <div key={i}>
-                              <p className="text-sm font-semibold text-foreground truncate">
-                                {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
-                              </p>
-                              {optionNames(item.options).length > 0 && (
-                                <p className="pl-4 text-[11px] text-muted-foreground leading-tight truncate">
-                                  {optionNames(item.options).join(" · ")}
-                                </p>
-                              )}
-                            </div>
-                          ))}
-                          {order.items.length > 4 && (
-                            <p className="text-xs text-muted-foreground">+{order.items.length - 4} más</p>
-                          )}
-                        </>
+                        order.items.length > 5 ? (
+                          // Muchos productos: dos columnas separadas por una línea vertical (se muestran TODOS)
+                          (() => {
+                            const half = Math.ceil(order.items.length / 2)
+                            const cols = [order.items.slice(0, half), order.items.slice(half)]
+                            return cols.map((col, ci) => (
+                              <div key={ci} className={cn("min-w-0 flex-1 space-y-0.5", ci === 1 && "border-l border-border pl-3")}>
+                                {col.map((item: any, i: number) => renderCardItem(item, ci === 1 ? half + i : i))}
+                              </div>
+                            ))
+                          })()
+                        ) : (
+                          order.items.map((item: any, i: number) => renderCardItem(item, i))
+                        )
                       ) : (
                         <p className="text-sm text-muted-foreground">Sin detalle</p>
                       )}
@@ -1073,6 +1407,7 @@ export function PedidosClient({
               ) : (
                 <motion.div
                   key={order.id}
+                  id={`order-card-${order.id}`}
                   layout
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -1103,6 +1438,11 @@ export function PedidosClient({
                           <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getStatusBadgeClass(order.status)}`}>
                             {getStatusText(order.status).toUpperCase()}
                           </span>
+                          {orderHasNewItems(order) && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-[#B3D93C] px-2 py-0.5 text-[9px] font-black text-[#1C1C28]">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#1C1C28]" /> EDITADO
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {formatDistanceToNow(new Date(order.created_at), { addSuffix: true, locale: es })}
@@ -1203,15 +1543,23 @@ export function PedidosClient({
             </div>
           )}
 
-          {pagination && orders.length > 0 && (
-            <div className="pt-2">
-              <DashboardPagination
-                currentPage={pagination.page}
-                totalPages={pagination.totalPages}
-                totalItems={pagination.totalItems}
-                itemsPerPage={pagination.limit}
-                entityName={{ singular: "pedido", plural: "pedidos" }}
-              />
+          {/* Infinite scroll: sensor + spinner (solo fuera de búsqueda) */}
+          {!searchActive && orders.length > 0 && (
+            <div ref={loadMoreRef} className="flex items-center justify-center py-6">
+              {loadingMore ? (
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Cargando más pedidos…
+                </span>
+              ) : hasMore ? (
+                <span className="h-4 w-4" />
+              ) : filteredOrders.length > 0 ? (
+                <span className="text-xs text-muted-foreground">No hay más pedidos</span>
+              ) : null}
+            </div>
+          )}
+          {searchActive && searching && (
+            <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Buscando…
             </div>
           )}
         </TabsContent>
@@ -1461,8 +1809,85 @@ export function PedidosClient({
         />
       )}
 
+      {/* Botón flotante: recorre los pedidos editados de TODAS las páginas */}
+      <AnimatePresence>
+        {activeTab === "orders" && editedList.length > 0 && (
+          <motion.div
+            key="edited-nav"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 18 }}
+            className="fixed bottom-24 right-4 z-40 flex flex-col items-end gap-2 lg:bottom-6 lg:right-6"
+          >
+            {/* Burbuja de chat que sale (hacia arriba) del icono — se ve bien también en móvil */}
+            <AnimatePresence>
+              {showEditedBubble && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.8 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.8 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
+                  className="relative mr-1 whitespace-nowrap rounded-2xl bg-[#1C1C28] px-3 py-2 text-xs font-bold text-white shadow-xl"
+                >
+                  ¡Tenés pedidos editados!
+                  {/* colita apuntando hacia abajo, al icono */}
+                  <span className="absolute bottom-[-4px] right-5 h-2.5 w-2.5 rotate-45 bg-[#1C1C28]" />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <button
+              type="button"
+              onClick={goToNextEdited}
+              disabled={editedLoading}
+              title="Pedidos editados — tocá para recorrerlos"
+              className="relative flex h-14 w-14 items-center justify-center rounded-full bg-[#B3D93C] shadow-2xl transition-transform hover:scale-105 active:scale-95 disabled:cursor-wait"
+            >
+              {editedLoading ? (
+                <Loader2 className="h-6 w-6 animate-spin text-[#1C1C28]" />
+              ) : (
+                <StickyNote className="h-6 w-6 text-[#1C1C28]" />
+              )}
+              {/* Total de editados (arriba a la derecha) */}
+              <motion.span
+                key={`total-${editedList.length}`}
+                initial={{ scale: 1.5 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-[#1C1C28] px-1 text-xs font-black text-[#D1F366] ring-2 ring-background"
+              >
+                {editedList.length}
+              </motion.span>
+              {/* Posición actual (abajo a la izquierda): en cuál vas */}
+              {editedPos > 0 && editedPos <= editedList.length && (
+                <motion.span
+                  key={`pos-${editedPos}`}
+                  initial={{ scale: 1.5 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 15 }}
+                  className="absolute -bottom-1 -left-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-white px-1 text-xs font-black text-[#1C1C28] ring-2 ring-[#B3D93C]"
+                >
+                  {editedPos}
+                </motion.span>
+              )}
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Vista previa / edición del pedido */}
-      <Dialog open={isDetailOpen} onOpenChange={(o) => { setIsDetailOpen(o); if (!o) { setDetailMode("edit"); setPrintPhase(null) } }}>
+      <Dialog open={isDetailOpen} onOpenChange={(o) => {
+        setIsDetailOpen(o)
+        if (!o) {
+          // Flush del auto-save por si quedó un cambio pendiente al cerrar
+          if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current)
+          if (autoSaveReady.current && detailMode === "edit") persistOrderEdits({ silent: true })
+          autoSaveReady.current = false
+          setDetailMode("edit")
+          setPrintPhase(null)
+        }
+      }}>
         <DialogContent className="max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
           <SheetGrabBar onDismiss={() => { setIsDetailOpen(false); setDetailMode("edit"); setPrintPhase(null) }} />
           <DialogHeader>
@@ -1675,17 +2100,17 @@ export function PedidosClient({
                             <span className="shrink-0">{formatCurrency(item.price * item.quantity)}</span>
                           </div>
                         ))}
-                        {ticketTip > 0 && (
+                        {printTip > 0 && (
                           <>
                             <div className="my-2 border-t border-dashed border-neutral-400" />
                             <div className="flex justify-between gap-2"><span>Subtotal</span><span>{formatCurrency(editTotal)}</span></div>
-                            <div className="flex justify-between gap-2"><span>Propina / extra</span><span>+{formatCurrency(ticketTip)}</span></div>
+                            <div className="flex justify-between gap-2"><span>Propina{posTipEnabled ? ` ${posTipPercent}%` : ""}</span><span>+{formatCurrency(printTip)}</span></div>
                           </>
                         )}
                         <div className="my-2 border-t border-dashed border-neutral-400" />
-                        <div className="flex justify-between text-[14px] font-bold"><span>TOTAL</span><span>{formatCurrency(editTotal + ticketTip)}</span></div>
+                        <div className="flex justify-between text-[14px] font-bold"><span>TOTAL</span><span>{formatCurrency(editTotal + printTip)}</span></div>
                         {selectedOrder.payments && selectedOrder.payments.length > 0 &&
-                          !(selectedOrder.payments.length === 1 && Math.abs(selectedOrder.payments[0].amount - (editTotal + ticketTip)) < 0.01) && (
+                          !(selectedOrder.payments.length === 1 && Math.abs(selectedOrder.payments[0].amount - (editTotal + printTip)) < 0.01) && (
                           <>
                             <div className="my-2 border-t border-dashed border-neutral-400" />
                             {selectedOrder.payments.map((p, i) => (
@@ -1700,9 +2125,28 @@ export function PedidosClient({
                         </motion.div>
                       </div>
                     </div>
+                    {/* Toggle: incluir la propina en el ticket (preview + impresión) */}
+                    <button
+                      type="button"
+                      onClick={() => setIncludeTipInPrint((v) => !v)}
+                      className={cn(
+                        "mt-3 flex w-full shrink-0 items-center gap-2.5 rounded-xl border p-3 text-left transition-colors",
+                        includeTipInPrint ? "border-[#B3D93C] bg-[#D1F366]/15" : "border-border bg-muted/30"
+                      )}
+                    >
+                      <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors", includeTipInPrint ? "border-[#B3D93C] bg-[#B3D93C] text-white" : "border-muted-foreground/40")}>
+                        {includeTipInPrint && <Check className="h-3.5 w-3.5" />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold">Incluir propina</span>
+                        <span className="block text-[11px] text-muted-foreground">
+                          {posTipEnabled ? `Suma ${posTipPercent}% (${formatCurrency(suggestedPrintTip)}) al ticket` : "Suma la propina registrada al ticket"}
+                        </span>
+                      </span>
+                    </button>
                     <Button
                       onClick={handlePrintTicket}
-                      className="mt-3 h-11 w-full shrink-0 rounded-xl bg-[#1f2030] text-[#d8ff55] font-bold hover:bg-[#2a2b3d] gap-2"
+                      className="mt-2 h-11 w-full shrink-0 rounded-xl bg-[#1f2030] text-[#d8ff55] font-bold hover:bg-[#2a2b3d] gap-2"
                     >
                       <Printer className="h-4 w-4" /> Imprimir ticket
                     </Button>
@@ -1869,7 +2313,7 @@ export function PedidosClient({
                                 <AnimatePresence initial={false}>
                                   {staged.map((s) => (
                                     <motion.div
-                                      key={s.id}
+                                      key={s.lineKey}
                                       layout
                                       initial={{ opacity: 0, y: -6 }}
                                       animate={{ opacity: 1, y: 0 }}
@@ -1879,13 +2323,18 @@ export function PedidosClient({
                                     >
                                       <button
                                         type="button"
-                                        onClick={() => unstageProduct(s.id)}
+                                        onClick={() => unstageProduct(s.lineKey)}
                                         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/70 transition-colors active:scale-90"
                                       >
                                         <Minus className="h-3 w-3" />
                                       </button>
                                       <span className="font-black text-[#5c7a16] dark:text-[#D1F366]">{s.qty}x</span>
-                                      <span className="min-w-0 flex-1 truncate font-medium">{s.name}</span>
+                                      <span className="min-w-0 flex-1 truncate font-medium">
+                                        {s.name}
+                                        {s.options && s.options.length > 0 && (
+                                          <span className="text-muted-foreground font-normal"> · {s.options.map((o) => o.name).join(", ")}</span>
+                                        )}
+                                      </span>
                                       <span className="shrink-0 font-semibold">{formatCurrency(s.price * s.qty)}</span>
                                     </motion.div>
                                   ))}
@@ -1919,40 +2368,66 @@ export function PedidosClient({
                     <AnimatePresence initial={false}>
                     {editItems.map((item, index) => (
                       <motion.div
-                        key={item.product_id ?? `custom-${item.name}`}
+                        key={item.product_id ? `${item.product_id}-${index}` : `custom-${index}`}
                         layout
                         initial={{ opacity: 0, y: -12, scale: 0.97 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.95 }}
                         transition={{ duration: 0.18, ease: "easeOut" }}
-                        className="flex items-center gap-3 rounded-2xl bg-muted/40 p-3"
+                        className={cn(
+                          "relative flex items-center gap-3 rounded-2xl p-3 transition-colors",
+                          item.delivered ? "bg-emerald-500 text-white ring-1 ring-emerald-600" : item.is_new ? "bg-[#D1F366]/15 ring-1 ring-[#B3D93C]" : "bg-muted/40"
+                        )}
                       >
-                        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-muted flex items-center justify-center">
+                        {/* Puntito de "recién agregado" (editado) */}
+                        {item.is_new && !item.delivered && (
+                          <span className="absolute -left-1 -top-1 z-10 flex h-3.5 w-3.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B3D93C] opacity-70" />
+                            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-[#B3D93C] ring-2 ring-background" />
+                          </span>
+                        )}
+                        <div className={cn("h-14 w-14 shrink-0 overflow-hidden rounded-xl flex items-center justify-center", item.delivered ? "bg-emerald-600/40" : "bg-muted")}>
                           {item.image_url ? (
                             <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
                           ) : (
-                            <ShoppingBag className="h-5 w-5 text-muted-foreground" />
+                            <ShoppingBag className={cn("h-5 w-5", item.delivered ? "text-white/80" : "text-muted-foreground")} />
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h4 className="text-sm font-semibold leading-tight line-clamp-2">{item.name}</h4>
+                          <div className="flex items-center gap-1.5">
+                            <h4 className={cn("text-sm font-semibold leading-tight line-clamp-2", item.delivered && "line-through")}>{item.name}</h4>
+                            {item.is_new && !item.delivered && (
+                              <span className="shrink-0 rounded-full bg-[#B3D93C] px-1.5 py-0.5 text-[9px] font-black text-[#1C1C28]">NUEVO</span>
+                            )}
+                          </div>
                           {optionNames(item.options).length > 0 && (
-                            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">{optionNames(item.options).join(" · ")}</p>
+                            <p className={cn("text-[11px] leading-tight mt-0.5", item.delivered ? "text-emerald-50" : "text-muted-foreground")}>{optionNames(item.options).join(" · ")}</p>
                           )}
-                          <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(item.price)} / ud</p>
+                          <p className={cn("text-xs mt-0.5", item.delivered ? "text-emerald-50" : "text-muted-foreground")}>{formatCurrency(item.price)} / ud</p>
                           <div className="mt-1.5 flex items-center gap-2">
-                            <button type="button" onClick={() => updateItemQty(index, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-background text-muted-foreground hover:bg-muted transition-colors active:scale-90">
+                            <button type="button" onClick={() => updateItemQty(index, -1)} className={cn("flex h-7 w-7 items-center justify-center rounded-full transition-colors active:scale-90", item.delivered ? "bg-white/20 text-white hover:bg-white/30" : "bg-background text-muted-foreground hover:bg-muted")}>
                               <Minus className="h-3 w-3" />
                             </button>
                             <span className="min-w-4 text-center text-sm font-semibold">{item.quantity}</span>
-                            <button type="button" onClick={() => updateItemQty(index, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-background text-muted-foreground hover:bg-muted transition-colors active:scale-90">
+                            <button type="button" onClick={() => updateItemQty(index, 1)} className={cn("flex h-7 w-7 items-center justify-center rounded-full transition-colors active:scale-90", item.delivered ? "bg-white/20 text-white hover:bg-white/30" : "bg-background text-muted-foreground hover:bg-muted")}>
                               <Plus className="h-3 w-3" />
+                            </button>
+                            {/* Control de cocina/mostrador: marcar entregado (verde más claro para contraste) */}
+                            <button
+                              type="button"
+                              onClick={() => toggleItemDelivered(index)}
+                              className={cn(
+                                "ml-1 flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold transition-colors active:scale-95",
+                                item.delivered ? "bg-emerald-100 text-emerald-700 hover:bg-white" : "bg-background text-muted-foreground hover:bg-muted"
+                              )}
+                            >
+                              <Check className="h-3 w-3" /> {item.delivered ? "Entregado" : "Entregar"}
                             </button>
                           </div>
                         </div>
                         <div className="flex flex-col items-end justify-between self-stretch">
-                          <button type="button" onClick={() => removeEditItem(index)} className="p-1 rounded-full hover:bg-background transition-colors">
-                            <X className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                          <button type="button" onClick={() => removeEditItem(index)} className={cn("p-1 rounded-full transition-colors", item.delivered ? "hover:bg-white/20" : "hover:bg-background")}>
+                            <X className={cn("h-4 w-4", item.delivered ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground")} />
                           </button>
                           <p className="text-sm font-bold">{formatCurrency(item.price * item.quantity)}</p>
                         </div>
@@ -2019,7 +2494,7 @@ export function PedidosClient({
                   type="button"
                   variant="outline"
                   className="rounded-xl gap-1 w-full sm:w-auto"
-                  onClick={() => setDetailMode("print")}
+                  onClick={() => { setIncludeTipInPrint((selectedOrder?.tip_amount || 0) > 0); setDetailMode("print") }}
                 >
                   <Printer className="h-4 w-4" /> Imprimir
                 </Button>
@@ -2036,10 +2511,16 @@ export function PedidosClient({
               </div>
             )}
             {detailMode === "edit" && (
-              <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:w-auto sm:items-center">
-                <Button type="button" variant="outline" className="rounded-xl w-full sm:w-auto" onClick={() => setIsDetailOpen(false)}>Cancelar</Button>
-                <Button type="button" disabled={isLoading} onClick={handleSaveOrder} className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C] w-full sm:w-auto">
-                  {isLoading ? "Guardando..." : "Guardar cambios"}
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <span className="mr-auto hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
+                  <Check className="h-3.5 w-3.5 text-emerald-500" /> Los cambios se guardan solos
+                </span>
+                <Button
+                  type="button"
+                  onClick={async () => { if (autoSaveTimer.current) window.clearTimeout(autoSaveTimer.current); await persistOrderEdits({ silent: true }); setIsDetailOpen(false) }}
+                  className="rounded-xl bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C] w-full sm:w-auto"
+                >
+                  Listo
                 </Button>
               </div>
             )}
@@ -2055,6 +2536,18 @@ export function PedidosClient({
         onFinalized={handleOrderFinalized}
         tipEnabled={posTipEnabled}
         tipPercent={posTipPercent}
+      />
+
+      {/* Modal de opciones al agregar un producto con variantes en el detalle */}
+      <PosOptionPickerDialog
+        open={!!pedidosPicker}
+        product={pedidosPicker}
+        groups={pedidosPicker ? optionsByProduct[pedidosPicker.id] || [] : []}
+        onCancel={() => setPedidosPicker(null)}
+        onConfirm={(selected, extra) => {
+          if (pedidosPicker) stageLine(pedidosPicker, selected, extra)
+          setPedidosPicker(null)
+        }}
       />
     </div>
   )

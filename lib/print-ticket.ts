@@ -212,22 +212,31 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   <button type="button" class="btn-print" onclick="window.print()">Reimprimir</button>
 </div>
 <script>
-  // NO cerramos automáticamente la pestaña tras imprimir: en el POS Android el
-  // plugin de impresión falla ("error al imprimir la página") si la ventana se
-  // cierra durante/después del trabajo. Para volver a la sección está el botón
-  // "Cerrar". La impresión se dispara sola al cargar.
-  window.addEventListener("load", function () {
-    setTimeout(function () {
-      try {
-        window.focus()
-        const printBtn = document.querySelector(".btn-print")
-        printBtn?.focus()
-        window.print()
-      } catch (error) {
-        // El webview del POS puede no abrir el diálogo automáticamente; el botón.
-      }
-    }, 250)
-  })
+  // La impresión se dispara sola al cargar. Cuando el trabajo termina (afterprint)
+  // cerramos la pestaña con un pequeño delay para VOLVER a la app y que se vea la
+  // animación de "impreso". El delay evita el bug del plugin Android que fallaba si
+  // se cerraba durante el trabajo. Si el webview no cierra, queda el botón "Listo".
+  (function () {
+    var closed = false
+    function backToApp() {
+      if (closed) return
+      closed = true
+      setTimeout(function () { try { window.close() } catch (e) {} }, 900)
+    }
+    window.addEventListener("afterprint", backToApp)
+    window.addEventListener("load", function () {
+      setTimeout(function () {
+        try {
+          window.focus()
+          var printBtn = document.querySelector(".btn-print")
+          if (printBtn) printBtn.focus()
+          window.print()
+        } catch (error) {
+          // El webview del POS puede no abrir el diálogo automáticamente; el botón.
+        }
+      }, 250)
+    })
+  })()
 </script>` : ""}</body>
 </html>`
 }

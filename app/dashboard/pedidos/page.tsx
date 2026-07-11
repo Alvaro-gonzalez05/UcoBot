@@ -3,15 +3,9 @@ import { createClient } from "@/lib/supabase/server"
 import { PedidosClient } from "@/components/dashboard/pedidos-client"
 import { getAccountContext } from "@/lib/account"
 
-interface PedidosPageProps {
-  searchParams: {
-    page?: string
-  }
-}
-
-export default async function PedidosPage({ searchParams }: PedidosPageProps) {
+export default async function PedidosPage() {
   const supabase = await createClient()
-  
+
   const { data, error } = await supabase.auth.getUser()
   if (error || !data?.user) {
     redirect("/login")
@@ -20,26 +14,18 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
   const account = await getAccountContext()
   const ownerId = account?.ownerId || data.user.id
 
-  // Parse pagination parameters
-  const page = parseInt(searchParams.page || "1")
-  const limit = 10 // Pedidos por página
-  const offset = (page - 1) * limit
-
-  // Fetch orders for the user with pagination
-  const { data: orders, count } = await supabase
+  // Primer lote para el infinite scroll (los siguientes se cargan del lado del cliente)
+  const PAGE_SIZE = 10
+  const { data: orders } = await supabase
     .from("orders")
     .select(`
       *,
       client:client_id(name, phone),
       conversation:conversation_id(platform)
-    `, { count: "exact" })
+    `)
     .eq("user_id", ownerId)
     .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1)
-
-  // Calculate pagination info
-  const totalItems = count || 0
-  const totalPages = Math.ceil(totalItems / limit)
+    .range(0, PAGE_SIZE - 1)
 
   // Fetch products for the user
   const { data: products } = await supabase
@@ -58,9 +44,27 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
     supabase.from("pos_settings").select("tip_enabled, tip_percent").eq("user_id", ownerId).maybeSingle(),
   ])
 
+  // Opciones/modificadores de producto (mismo mapa que el POS)
+  const [{ data: optGroups }, { data: optItems }, { data: optLinks }] = await Promise.all([
+    supabase.from("product_option_groups").select("*").eq("user_id", ownerId).order("created_at"),
+    supabase.from("product_option_items").select("*").eq("user_id", ownerId).order("sort_order"),
+    supabase.from("product_option_links").select("*").eq("user_id", ownerId),
+  ])
+  const optionsByProduct: Record<string, any[]> = {}
+  for (const link of optLinks || []) {
+    const group = (optGroups || []).find((g) => g.id === link.group_id)
+    if (!group) continue
+    const items = (optItems || [])
+      .filter((i) => i.group_id === group.id)
+      .map((i) => ({ id: i.id, name: i.name, price_delta: Number(i.price_delta) || 0 }))
+    if (items.length === 0) continue
+    ;(optionsByProduct[link.product_id] ??= []).push({ id: group.id, name: group.name, required: group.required, multi: group.multi, items })
+  }
+
   return (
     <PedidosClient
       userId={ownerId}
+      optionsByProduct={optionsByProduct}
       initialOrders={orders || []}
       initialProducts={products || []}
       initialCategories={categories}
@@ -68,12 +72,6 @@ export default async function PedidosPage({ searchParams }: PedidosPageProps) {
       businessName={profile?.business_name || "Mi Negocio"}
       posTipEnabled={posSettings?.tip_enabled ?? false}
       posTipPercent={Number(posSettings?.tip_percent) || 10}
-      pagination={{
-        page,
-        limit,
-        totalItems,
-        totalPages,
-      }}
     />
   )
 }
