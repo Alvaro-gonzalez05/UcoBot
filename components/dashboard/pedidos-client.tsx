@@ -237,6 +237,45 @@ export function PedidosClient({
     }
   }, [supabase, userId])
 
+  // Sincroniza los pedidos recientes desde la base y los mezcla con lo que ya hay.
+  // Cubre el caso: creás un pedido en el POS y entrás a /pedidos (el realtime no
+  // dispara porque el pedido es previo a la suscripción, y Next puede cachear).
+  const syncRecentOrders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(PAGE_SIZE)
+      if (error) throw error
+      const batch = (data as Order[]) || []
+      if (batch.length === 0) return
+      setOrders((prev) => {
+        const map = new Map(prev.map((o) => [o.id, o]))
+        for (const o of batch) map.set(o.id, { ...map.get(o.id), ...o })
+        return Array.from(map.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+      })
+    } catch (e) {
+      console.error("Error syncing recent orders:", e)
+    }
+  }
+
+  // Al montar (entrar a la sección) y al volver a la pestaña, refrescamos.
+  useEffect(() => {
+    syncRecentOrders()
+    const onVisible = () => { if (document.visibilityState === "visible") syncRecentOrders() }
+    document.addEventListener("visibilitychange", onVisible)
+    window.addEventListener("focus", onVisible)
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible)
+      window.removeEventListener("focus", onVisible)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId])
+
   // (El resaltado de pedidos pendientes ahora es una animación CSS liviana —
   //  ver .order-card-pending en globals.css. Antes era GSAP animando box-shadow
   //  de forma infinita, que trababa los celulares de gama baja.)
