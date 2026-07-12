@@ -68,6 +68,7 @@ function buildSplitItems(items: any[] | undefined): SplitItem[] {
     const price = Number(it.price) || 0
     const qty = Math.max(1, Number(it.quantity) || 1)
     if (price < 0) return // líneas de descuento no se dividen entre personas
+    if (it.removed) return // marcadores "−N" de edición: no son productos reales
     out.push({ idx, name: it.name || it.product_name || `Producto ${idx + 1}`, price, qty, image_url: it.image_url || null })
   })
   return out
@@ -772,11 +773,26 @@ export function OrderCheckoutDialog({
     try {
       // Las propinas dejadas del vuelto se suman a la propina recalculada del pedido
       const tipsFromPayments = payments.reduce((s, p) => s + (p.tip || 0), 0)
+      // Cobrar confirma cualquier edición pendiente: los marcadores "−N" desaparecen
+      // y las líneas "+" se fusionan con su base si comparten estado de entrega.
+      const optNames = (opts?: any[]) => (opts || []).map((o: any) => (typeof o === "string" ? o : o?.name)).filter(Boolean)
+      const sig = (i: any) => `${i.product_id ?? ""}|${optNames(i.options).sort().join("|")}`
+      const consolidated: any[] = []
+      for (const raw of (Array.isArray(order.items) ? order.items : [])) {
+        if (raw?.removed) continue
+        const it: any = { ...raw, is_new: undefined }
+        const idx = consolidated.findIndex((o) => sig(o) === sig(it) && !!o.delivered === !!it.delivered)
+        if (idx >= 0) {
+          consolidated[idx].quantity = (consolidated[idx].quantity || 0) + (it.quantity || 0)
+          if (typeof consolidated[idx].price === "number") consolidated[idx].subtotal = Number((consolidated[idx].price * consolidated[idx].quantity).toFixed(2))
+        } else consolidated.push(it)
+      }
       const { error } = await supabase
         .from("orders")
         .update({
           status: "completed",
           payments,
+          items: consolidated,
           total_amount: Number(chargeTotal.toFixed(2)),
           tip_amount: Number((orderTip + tipsFromPayments).toFixed(2)),
         })

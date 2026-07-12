@@ -212,31 +212,23 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   <button type="button" class="btn-print" onclick="window.print()">Reimprimir</button>
 </div>
 <script>
-  // La impresión se dispara sola al cargar. Cuando el trabajo termina (afterprint)
-  // cerramos la pestaña con un pequeño delay para VOLVER a la app y que se vea la
-  // animación de "impreso". El delay evita el bug del plugin Android que fallaba si
-  // se cerraba durante el trabajo. Si el webview no cierra, queda el botón "Listo".
-  (function () {
-    var closed = false
-    function backToApp() {
-      if (closed) return
-      closed = true
-      setTimeout(function () { try { window.close() } catch (e) {} }, 900)
-    }
-    window.addEventListener("afterprint", backToApp)
-    window.addEventListener("load", function () {
-      setTimeout(function () {
-        try {
-          window.focus()
-          var printBtn = document.querySelector(".btn-print")
-          if (printBtn) printBtn.focus()
-          window.print()
-        } catch (error) {
-          // El webview del POS puede no abrir el diálogo automáticamente; el botón.
-        }
-      }, 250)
-    })
-  })()
+  // OJO: NADA de window.close() automático (ni siquiera con afterprint + delay).
+  // En Android, afterprint dispara apenas se abre el diálogo (no al terminar el
+  // trabajo), así que cualquier cierre automático mata al plugin de impresión
+  // ("se produjo un error al imprimir la página"). Ya se probó dos veces.
+  // Para volver a la app está el botón "✓ Listo, volver".
+  window.addEventListener("load", function () {
+    setTimeout(function () {
+      try {
+        window.focus()
+        var printBtn = document.querySelector(".btn-print")
+        if (printBtn) printBtn.focus()
+        window.print()
+      } catch (error) {
+        // El webview del POS puede no abrir el diálogo automáticamente; el botón.
+      }
+    }, 250)
+  })
 </script>` : ""}</body>
 </html>`
 }

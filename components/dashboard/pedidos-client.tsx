@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2, StickyNote, Check, Loader2 } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2, StickyNote, RotateCcw, Check, Loader2 } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -143,7 +143,7 @@ export function PedidosClient({
   const [editedOrders, setEditedOrders] = useState<Order[]>([])
   const pendingScrollRef = useRef<string | null>(null)
   // Estado editable del pedido en la vista previa
-  const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null; options?: any[]; is_new?: boolean; delivered?: boolean }[]>([])
+  const [editItems, setEditItems] = useState<{ product_id: string | null; name: string; price: number; quantity: number; image_url: string | null; options?: any[]; is_new?: boolean; delivered?: boolean; removed?: boolean }[]>([])
   const [editStatus, setEditStatus] = useState("pending")
   const [editAddress, setEditAddress] = useState("")
   const [editNotes, setEditNotes] = useState("")
@@ -494,9 +494,10 @@ export function PedidosClient({
     if (next === "completed") { openCheckout(order); return }
     try {
       // Al pasar de "pendiente" a confirmado (o más), el pedido editado queda "recibido":
-      // se limpian las marcas de productos nuevos (dejan de estar resaltados).
-      const clearNew = next !== "pending" && Array.isArray(order.items) && order.items.some((i: any) => i?.is_new)
-      const nextItems = clearNew ? order.items.map((i: any) => ({ ...i, is_new: undefined })) : undefined
+      // los "−" desaparecen y los "+" se fusionan con su línea original SOLO si están
+      // en el mismo estado de entrega (si la base ya se entregó, quedan separados).
+      const hasMarks = Array.isArray(order.items) && order.items.some((i: any) => i?.is_new || i?.removed)
+      const nextItems = next !== "pending" && hasMarks ? consolidateItems(order.items as any[]) : undefined
       const { data, error } = await supabase
         .from("orders")
         .update({ status: next, ...(nextItems ? { items: nextItems } : {}) })
@@ -515,28 +516,36 @@ export function PedidosClient({
     }
   }
 
-  // Trae TODOS los pedidos con productos nuevos sin confirmar (de cualquier página)
+  // Trae TODOS los pedidos con ediciones sin confirmar (agregados "+" o quitados "−"),
+  // de cualquier página.
   const loadEditedOrders = async () => {
     try {
       // OJO: pasamos el jsonb como STRING. Si se pasa un array JS, supabase-js lo trata
       // como array de Postgres ({...}) y no matchea el jsonb → devolvía vacío.
-      const { data, error } = await supabase
-        .from("orders")
-        .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
-        .eq("user_id", userId)
-        .filter("items", "cs", JSON.stringify([{ is_new: true }]))
-        .order("created_at", { ascending: false })
-      if (error) throw error
-      setEditedOrders((data as Order[]) || [])
+      // Dos consultas (agregados y quitados) porque `cs` no se puede OR-ear fácil.
+      const baseSelect = `*, client:client_id(name, phone), conversation:conversation_id(platform)`
+      const [added, removed] = await Promise.all([
+        supabase.from("orders").select(baseSelect).eq("user_id", userId)
+          .filter("items", "cs", JSON.stringify([{ is_new: true }]))
+          .order("created_at", { ascending: false }),
+        supabase.from("orders").select(baseSelect).eq("user_id", userId)
+          .filter("items", "cs", JSON.stringify([{ removed: true }]))
+          .order("created_at", { ascending: false }),
+      ])
+      if (added.error) throw added.error
+      if (removed.error) throw removed.error
+      const byId = new Map<string, Order>()
+      for (const o of [...(added.data as Order[] || []), ...(removed.data as Order[] || [])]) byId.set(o.id, o)
+      setEditedOrders(Array.from(byId.values()))
     } catch (e) {
       console.error("Error loading edited orders:", e)
     }
   }
   useEffect(() => { loadEditedOrders() }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // El pedido fue editado si tiene productos agregados que todavía no se entregaron
+  // El pedido fue editado si tiene agregados sin entregar o marcadores de quitados
   const orderHasNewItems = (o: Order) =>
-    Array.isArray(o.items) && o.items.some((i: any) => i?.is_new && !i?.delivered)
+    Array.isArray(o.items) && o.items.some((i: any) => (i?.is_new && !i?.delivered) || i?.removed)
 
   // Lista final de editados: los de la página actual (estado local, siempre confiable) +
   // los de otras páginas (consulta a la base). Así el botón nunca depende solo de la query.
@@ -631,8 +640,10 @@ export function PedidosClient({
   const openCheckout = (order: Order) => setCheckoutOrder(order)
 
   const handleOrderFinalized = (orderId: string) => {
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: "completed" } : o)))
+    // El cobro consolidó las marcas de edición en la base → reflejamos lo mismo acá
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: "completed", items: consolidateItems((o.items as any[]) || []) } : o)))
     setCheckoutOrder(null)
+    loadEditedOrders()
   }
 
   // Abre la vista previa/edición del pedido
@@ -651,6 +662,7 @@ export function PedidosClient({
         options: Array.isArray(it.options) && it.options.length ? it.options : undefined,
         is_new: !!it.is_new,
         delivered: !!it.delivered,
+        removed: !!it.removed,
       }))
     )
     setAddSearch("")
@@ -663,7 +675,8 @@ export function PedidosClient({
     window.setTimeout(() => { autoSaveReady.current = true }, 200)
   }
 
-  const editTotal = editItems.reduce((sum, i) => sum + i.price * i.quantity, 0)
+  // Los marcadores "−N" (removed) son solo informativos: no suman al total
+  const editTotal = editItems.reduce((sum, i) => (i.removed ? sum : sum + i.price * i.quantity), 0)
 
   // Firma de línea: mismo producto con mismas opciones = misma línea (no se mezclan variantes)
   const lineSig = (productId: string, options: SelectedOption[]) =>
@@ -723,10 +736,11 @@ export function PedidosClient({
         const newOnes: typeof prev = []
         const optsSig = (opts?: any[]) => optionNames(opts).slice().sort().join("|")
         for (const s of staged) {
-          // Mismo producto + mismas opciones = misma línea; distinto = línea separada
-          const idx = next.findIndex((i) => i.product_id === s.id && optsSig(i.options) === optsSig(s.options))
-          // is_new marca el producto agregado en una edición (puntito + badge "Editado")
-          if (idx >= 0) next[idx] = { ...next[idx], quantity: next[idx].quantity + s.qty, is_new: true }
+          // Lo agregado en una edición SIEMPRE va como línea "+N" aparte (is_new):
+          // no se mezcla con la línea original hasta que se confirme el pedido.
+          // Si ya hay una línea "+" del mismo producto/opciones, se acumula ahí.
+          const idx = next.findIndex((i) => i.is_new && !i.removed && !i.delivered && i.product_id === s.id && optsSig(i.options) === optsSig(s.options))
+          if (idx >= 0) next[idx] = { ...next[idx], quantity: next[idx].quantity + s.qty }
           else newOnes.push({ product_id: s.id, name: s.name, price: s.price, quantity: s.qty, image_url: s.image_url, options: s.options, is_new: true })
         }
         // Los nuevos van arriba para que se los vea entrar (animados)
@@ -766,14 +780,59 @@ export function PedidosClient({
   const optionNames = (opts?: any[]): string[] =>
     (opts || []).map((o) => (typeof o === "string" ? o : o?.name)).filter(Boolean)
 
-  // Línea de producto en la tarjeta, resaltando los recién agregados (puntito + color lime)
+  // Firma de un item para fusionar líneas: mismo producto + mismas opciones
+  const itemSig = (i: { product_id?: string | null; options?: any[] }) =>
+    `${i.product_id ?? ""}|${optionNames(i.options).slice().sort().join("|")}`
+
+  // Fusiona líneas confirmadas iguales que están en el MISMO estado de entrega.
+  // Las "+" (is_new) y los marcadores "−" (removed) nunca se fusionan acá.
+  const mergeSameState = <T extends { product_id?: string | null; quantity: number; options?: any[]; is_new?: boolean; removed?: boolean; delivered?: boolean }>(list: T[]): T[] => {
+    const out: T[] = []
+    for (const it of list) {
+      if (!it.is_new && !it.removed) {
+        const idx = out.findIndex((o) => !o.is_new && !o.removed && itemSig(o) === itemSig(it) && !!o.delivered === !!it.delivered)
+        if (idx >= 0) {
+          const merged: any = { ...out[idx], quantity: out[idx].quantity + it.quantity }
+          if (typeof merged.price === "number") merged.subtotal = Number((merged.price * merged.quantity).toFixed(2))
+          out[idx] = merged
+          continue
+        }
+      }
+      out.push(it)
+    }
+    return out
+  }
+
+  // Consolidación al CONFIRMAR una edición: los marcadores "−N" desaparecen y las
+  // líneas "+N" se funden con la línea original SOLO si comparten estado de entrega.
+  // Si la base ya está entregada y lo nuevo no, quedan separadas hasta emparejarse.
+  const consolidateItems = <T extends { product_id?: string | null; quantity: number; options?: any[]; is_new?: boolean; removed?: boolean; delivered?: boolean }>(list: T[]): T[] =>
+    mergeSameState(list.filter((i) => !i.removed).map((i) => ({ ...i, is_new: undefined })))
+
+  // Línea de producto en la tarjeta. Puntito de estado: sin relleno = pendiente de
+  // entrega, verde lleno = entregado, lima = recién agregado (+), rojo = quitado (−).
   const renderCardItem = (item: any, i: number) => {
-    const isNew = item?.is_new && !item?.delivered
+    const isRemoved = !!item?.removed
+    const isNew = item?.is_new && !item?.delivered && !isRemoved
+    const isDelivered = !!item?.delivered && !isRemoved
+    const name = item.name || item.product_name || `Producto ${i + 1}`
     return (
       <div key={i}>
-        <p className={cn("flex items-center gap-1 text-sm font-semibold truncate", isNew ? "text-[#5c7a16] dark:text-[#D1F366]" : "text-foreground")}>
-          {isNew && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#B3D93C]" />}
-          {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
+        <p className={cn(
+          "flex items-center gap-1.5 text-sm font-semibold truncate",
+          isRemoved ? "text-rose-500 line-through" : isNew ? "text-[#5c7a16] dark:text-[#D1F366]" : "text-foreground"
+        )}>
+          <span className={cn(
+            "h-2 w-2 shrink-0 rounded-full border-2 transition-colors",
+            isDelivered
+              ? "border-emerald-500 bg-emerald-500"
+              : isRemoved
+                ? "border-rose-400 bg-transparent"
+                : isNew
+                  ? "border-[#B3D93C] bg-[#B3D93C]"
+                  : "border-muted-foreground/50 bg-transparent"
+          )} />
+          {isRemoved ? `-${item.quantity}` : isNew ? `+${item.quantity}` : `${item.quantity}x`} {name}
         </p>
         {optionNames(item.options).length > 0 && (
           <p className="pl-4 text-[11px] text-muted-foreground leading-tight truncate">{optionNames(item.options).join(" · ")}</p>
@@ -782,11 +841,12 @@ export function PedidosClient({
     )
   }
 
-  // Cobra desde el modal: guarda los items editados, los pagos y cierra la venta en un solo paso
+  // Cobra desde el modal: guarda los items editados, los pagos y cierra la venta en un solo paso.
+  // Cobrar confirma la edición: los "−" desaparecen y los "+" se consolidan.
   const finalizeFromModal = async (payments: PaymentRecord[]) => {
     if (!selectedOrder) return
     try {
-      const items = editItems.map((i) => ({
+      const items = consolidateItems(editItems).map((i) => ({
         product_id: i.product_id,
         name: i.name,
         quantity: i.quantity,
@@ -794,7 +854,6 @@ export function PedidosClient({
         subtotal: Number((i.price * i.quantity).toFixed(2)),
         image_url: i.image_url || null,
         options: i.options && i.options.length ? i.options : undefined,
-        is_new: i.is_new || undefined,
         delivered: i.delivered || undefined,
       }))
       // Las propinas dejadas del vuelto se suman a la propina recalculada del pedido
@@ -892,7 +951,7 @@ export function PedidosClient({
       orderId: selectedOrder.id,
       clientName: getOrderClientName(selectedOrder),
       orderType: getOrderModalityLabel(selectedOrder),
-      items: editItems.map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, options: optionNames(i.options) })),
+      items: editItems.filter((i) => !i.removed).map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, options: optionNames(i.options) })),
       total: editTotal + printTip,
       tipAmount: printTip || undefined,
       payments: selectedOrder.payments,
@@ -906,24 +965,73 @@ export function PedidosClient({
   }
 
   const updateItemQty = (index: number, delta: number) => {
-    setEditItems((prev) =>
-      prev
+    const target = editItems[index]
+    if (!target || target.removed) return
+    setEditItems((prev) => {
+      const item = prev[index]
+      if (!item) return prev
+      // Línea "+" sin confirmar: se ajusta directo; si llega a 0 desaparece sin marcador
+      if (item.is_new) {
+        return prev
+          .map((i, idx) => (idx === index ? { ...i, quantity: i.quantity + delta } : i))
+          .filter((i) => i.quantity > 0)
+      }
+      if (delta > 0) {
+        // Sumar sobre una línea ya confirmada NO la toca: crea/acumula una línea "+N"
+        // aparte (marcada como editado) que se fusiona recién al confirmar el pedido.
+        const dIdx = prev.findIndex((i) => i.is_new && !i.removed && !i.delivered && itemSig(i) === itemSig(item))
+        if (dIdx >= 0) return prev.map((i, idx) => (idx === dIdx ? { ...i, quantity: i.quantity + delta } : i))
+        return [{ ...item, quantity: delta, is_new: true, delivered: false, removed: false }, ...prev]
+      }
+      // Restar de una línea confirmada: baja la cantidad real y deja un marcador "−N"
+      const next = prev
         .map((i, idx) => (idx === index ? { ...i, quantity: i.quantity + delta } : i))
         .filter((i) => i.quantity > 0)
-    )
+      const gIdx = next.findIndex((i) => i.removed && itemSig(i) === itemSig(item))
+      if (gIdx >= 0) return next.map((i, idx) => (idx === gIdx ? { ...i, quantity: i.quantity + 1 } : i))
+      return [...next, { ...item, quantity: 1, is_new: false, delivered: false, removed: true }]
+    })
+    // Cambiar cantidades de líneas confirmadas devuelve el pedido a "pendiente" (re-confirmar)
+    if (!target.is_new) setEditStatus("pending")
   }
 
   const removeEditItem = (index: number) => {
-    setEditItems((prev) => prev.filter((_, idx) => idx !== index))
+    const target = editItems[index]
+    if (!target) return
+    setEditItems((prev) => {
+      const item = prev[index]
+      if (!item) return prev
+      // X en una línea "+" sin confirmar: se cancela el agregado, sin marcador
+      if (item.is_new) return prev.filter((_, idx) => idx !== index)
+      // X en un marcador "−N": deshacer → la cantidad vuelve a la línea original
+      if (item.removed) {
+        const next = prev.filter((_, idx) => idx !== index)
+        const bIdx = next.findIndex((i) => !i.is_new && !i.removed && itemSig(i) === itemSig(item))
+        if (bIdx >= 0) return next.map((i, idx) => (idx === bIdx ? { ...i, quantity: i.quantity + item.quantity } : i))
+        return [...next, { ...item, removed: false }]
+      }
+      // X en una línea confirmada: se borra entera y queda el marcador "−N"
+      const next = prev.filter((_, idx) => idx !== index)
+      const gIdx = next.findIndex((i) => i.removed && itemSig(i) === itemSig(item))
+      if (gIdx >= 0) return next.map((i, idx) => (idx === gIdx ? { ...i, quantity: i.quantity + item.quantity } : i))
+      return [...next, { ...item, is_new: false, delivered: false, removed: true }]
+    })
+    // Borrar una línea confirmada devuelve el pedido a "pendiente" (los "+" cancelados no)
+    if (!target.is_new && !target.removed) setEditStatus("pending")
   }
 
   // Marca/desmarca un producto como entregado (control de cocina/mostrador). Persiste al toque.
   // Al entregarlo deja de estar "nuevo" (se resuelve el puntito de editado).
   const toggleItemDelivered = async (index: number) => {
     if (!selectedOrder) return
-    const nextItems = editItems.map((i, idx) =>
+    const item = editItems[index]
+    if (!item || item.removed) return
+    // Al entregar, la línea deja de ser "nueva" y, si quedó en el MISMO estado que otra
+    // línea igual (ej: la base ya entregada), recién ahí se fusionan (3+1 → 4).
+    const toggled = editItems.map((i, idx) =>
       idx === index ? { ...i, delivered: !i.delivered, is_new: i.delivered ? i.is_new : false } : i
     )
+    const nextItems = mergeSameState(toggled)
     setEditItems(nextItems)
     const dbItems = nextItems.map((i) => ({
       product_id: i.product_id,
@@ -935,6 +1043,7 @@ export function PedidosClient({
       options: i.options && i.options.length ? i.options : undefined,
       is_new: i.is_new || undefined,
       delivered: i.delivered || undefined,
+      removed: i.removed || undefined,
     }))
     try {
       await supabase.from("orders").update({ items: dbItems }).eq("id", selectedOrder.id)
@@ -950,10 +1059,12 @@ export function PedidosClient({
   // Persiste el detalle editado (items, nota, dirección, estado). Silencioso para el auto-save.
   const persistOrderEdits = async (opts?: { silent?: boolean }) => {
     if (!selectedOrder) return
-    // is_new (producto agregado, resaltado) solo tiene sentido mientras el pedido está
-    // "pendiente". Al confirmarlo/avanzarlo se limpia para que quede normal.
+    // Las marcas de edición ("+" y "−") viven mientras el pedido está "pendiente".
+    // Al confirmarlo/avanzarlo se consolida: los "−" desaparecen y los "+" se funden
+    // con su línea original solo si comparten estado de entrega.
     const keepNew = editStatus === "pending"
-    const items = editItems.map((i) => ({
+    const source = keepNew ? editItems : consolidateItems(editItems)
+    const items = source.map((i) => ({
       product_id: i.product_id,
       name: i.name,
       quantity: i.quantity,
@@ -963,8 +1074,9 @@ export function PedidosClient({
       options: i.options && i.options.length ? i.options : undefined,
       is_new: keepNew ? (i.is_new || undefined) : undefined,
       delivered: i.delivered || undefined,
+      removed: keepNew ? (i.removed || undefined) : undefined,
     }))
-    const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
+    const total = items.reduce((s, i) => (i.removed ? s : s + i.price * i.quantity), 0)
     try {
       const { data, error } = await supabase
         .from("orders")
@@ -981,7 +1093,7 @@ export function PedidosClient({
       if (error) throw error
       setSelectedOrder((prev) => (prev ? { ...prev, ...data } : prev))
       setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
-      if (!keepNew) setEditItems((prev) => prev.map((i) => ({ ...i, is_new: false })))
+      if (!keepNew) setEditItems(source.map((i) => ({ ...i, is_new: false })))
       loadEditedOrders()
     } catch (error) {
       console.error("Error saving order:", error)
@@ -1454,19 +1566,7 @@ export function PedidosClient({
                     <div className="flex-1 min-w-[180px] flex flex-col justify-center px-4 md:px-6 md:border-x border-black/10 dark:border-white/10">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Detalle de Productos</span>
                       {Array.isArray(order.items) && order.items.length > 0 ? (
-                        order.items.map((item: any, i: number) => (
-                          <div key={i}>
-                            <p className="text-sm font-semibold text-foreground">
-                              {item.quantity}x {item.name || item.product_name || `Producto ${i + 1}`}
-                              <span className="text-xs text-muted-foreground font-normal ml-1">${item.price} c/u</span>
-                            </p>
-                            {optionNames(item.options).length > 0 && (
-                              <p className="pl-4 text-[11px] text-muted-foreground leading-tight">
-                                {optionNames(item.options).join(" · ")}
-                              </p>
-                            )}
-                          </div>
-                        ))
+                        order.items.map((item: any, i: number) => renderCardItem(item, i))
                       ) : (
                         <p className="text-sm text-muted-foreground">Sin detalle</p>
                       )}
@@ -1989,7 +2089,7 @@ export function PedidosClient({
                     )}
                     <OrderCheckoutPanel
                       total={editTotal + ticketTip}
-                      items={editItems}
+                      items={editItems.filter((i) => !i.removed)}
                       showItems={false}
                       initialPayments={selectedOrder.payments}
                       onFinalize={finalizeFromModal}
@@ -2089,7 +2189,7 @@ export function PedidosClient({
                         )}
                         <div className="flex justify-between gap-2"><span>Modalidad</span><span>{getOrderModalityLabel(selectedOrder)}</span></div>
                         <div className="my-2 border-t border-dashed border-neutral-400" />
-                        {editItems.map((item, i) => (
+                        {editItems.filter((item) => !item.removed).map((item, i) => (
                           <div key={i} className="flex justify-between gap-2">
                             <span className="min-w-0 break-words">
                               {item.quantity}x {item.name}
@@ -2376,17 +2476,23 @@ export function PedidosClient({
                         transition={{ duration: 0.18, ease: "easeOut" }}
                         className={cn(
                           "relative flex items-center gap-3 rounded-2xl p-3 transition-colors",
-                          item.delivered ? "bg-emerald-500 text-white ring-1 ring-emerald-600" : item.is_new ? "bg-[#D1F366]/15 ring-1 ring-[#B3D93C]" : "bg-muted/40"
+                          item.removed
+                            ? "bg-rose-100 ring-1 ring-rose-300 dark:bg-rose-950 dark:ring-rose-800"
+                            : item.delivered
+                              ? "bg-emerald-500 text-white ring-1 ring-emerald-600"
+                              : item.is_new
+                                ? "bg-[#D1F366]/15 ring-1 ring-[#B3D93C]"
+                                : "bg-muted/40"
                         )}
                       >
-                        {/* Puntito de "recién agregado" (editado) */}
-                        {item.is_new && !item.delivered && (
+                        {/* Puntito de edición: lima = agregado, rojo = quitado */}
+                        {((item.is_new && !item.delivered) || item.removed) && (
                           <span className="absolute -left-1 -top-1 z-10 flex h-3.5 w-3.5">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#B3D93C] opacity-70" />
-                            <span className="relative inline-flex h-3.5 w-3.5 rounded-full bg-[#B3D93C] ring-2 ring-background" />
+                            <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-70", item.removed ? "bg-rose-400" : "bg-[#B3D93C]")} />
+                            <span className={cn("relative inline-flex h-3.5 w-3.5 rounded-full ring-2 ring-background", item.removed ? "bg-rose-400" : "bg-[#B3D93C]")} />
                           </span>
                         )}
-                        <div className={cn("h-14 w-14 shrink-0 overflow-hidden rounded-xl flex items-center justify-center", item.delivered ? "bg-emerald-600/40" : "bg-muted")}>
+                        <div className={cn("h-14 w-14 shrink-0 overflow-hidden rounded-xl flex items-center justify-center", item.delivered ? "bg-emerald-600/40" : "bg-muted", item.removed && "opacity-50 grayscale")}>
                           {item.image_url ? (
                             <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />
                           ) : (
@@ -2395,20 +2501,28 @@ export function PedidosClient({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <h4 className={cn("text-sm font-semibold leading-tight line-clamp-2", item.delivered && "line-through")}>{item.name}</h4>
-                            {item.is_new && !item.delivered && (
+                            <h4 className={cn("text-sm font-semibold leading-tight line-clamp-2", (item.delivered || item.removed) && "line-through", item.removed && "text-rose-600 dark:text-rose-300")}>{item.name}</h4>
+                            {item.is_new && !item.delivered && !item.removed && (
                               <span className="shrink-0 rounded-full bg-[#B3D93C] px-1.5 py-0.5 text-[9px] font-black text-[#1C1C28]">NUEVO</span>
+                            )}
+                            {item.removed && (
+                              <span className="shrink-0 rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] font-black text-white">QUITADO</span>
                             )}
                           </div>
                           {optionNames(item.options).length > 0 && (
                             <p className={cn("text-[11px] leading-tight mt-0.5", item.delivered ? "text-emerald-50" : "text-muted-foreground")}>{optionNames(item.options).join(" · ")}</p>
                           )}
                           <p className={cn("text-xs mt-0.5", item.delivered ? "text-emerald-50" : "text-muted-foreground")}>{formatCurrency(item.price)} / ud</p>
+                          {item.removed ? (
+                            <p className="mt-1.5 text-[11px] font-semibold text-rose-600 dark:text-rose-300">
+                              −{item.quantity} {item.quantity === 1 ? "unidad quitada" : "unidades quitadas"} · se descuenta al confirmar
+                            </p>
+                          ) : (
                           <div className="mt-1.5 flex items-center gap-2">
                             <button type="button" onClick={() => updateItemQty(index, -1)} className={cn("flex h-7 w-7 items-center justify-center rounded-full transition-colors active:scale-90", item.delivered ? "bg-white/20 text-white hover:bg-white/30" : "bg-background text-muted-foreground hover:bg-muted")}>
                               <Minus className="h-3 w-3" />
                             </button>
-                            <span className="min-w-4 text-center text-sm font-semibold">{item.quantity}</span>
+                            <span className="min-w-4 text-center text-sm font-semibold">{item.is_new ? `+${item.quantity}` : item.quantity}</span>
                             <button type="button" onClick={() => updateItemQty(index, 1)} className={cn("flex h-7 w-7 items-center justify-center rounded-full transition-colors active:scale-90", item.delivered ? "bg-white/20 text-white hover:bg-white/30" : "bg-background text-muted-foreground hover:bg-muted")}>
                               <Plus className="h-3 w-3" />
                             </button>
@@ -2424,12 +2538,24 @@ export function PedidosClient({
                               <Check className="h-3 w-3" /> {item.delivered ? "Entregado" : "Entregar"}
                             </button>
                           </div>
+                          )}
                         </div>
                         <div className="flex flex-col items-end justify-between self-stretch">
-                          <button type="button" onClick={() => removeEditItem(index)} className={cn("p-1 rounded-full transition-colors", item.delivered ? "hover:bg-white/20" : "hover:bg-background")}>
-                            <X className={cn("h-4 w-4", item.delivered ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground")} />
+                          <button
+                            type="button"
+                            onClick={() => removeEditItem(index)}
+                            title={item.removed ? "Deshacer (devolver al pedido)" : "Quitar"}
+                            className={cn("p-1 rounded-full transition-colors", item.delivered ? "hover:bg-white/20" : "hover:bg-background")}
+                          >
+                            {item.removed ? (
+                              <RotateCcw className="h-4 w-4 text-rose-500 hover:text-rose-700" />
+                            ) : (
+                              <X className={cn("h-4 w-4", item.delivered ? "text-white/80 hover:text-white" : "text-muted-foreground hover:text-foreground")} />
+                            )}
                           </button>
-                          <p className="text-sm font-bold">{formatCurrency(item.price * item.quantity)}</p>
+                          <p className={cn("text-sm font-bold", item.removed && "text-rose-600 line-through dark:text-rose-300")}>
+                            {item.removed ? "−" : ""}{formatCurrency(item.price * item.quantity)}
+                          </p>
                         </div>
                       </motion.div>
                     ))}
