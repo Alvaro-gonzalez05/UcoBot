@@ -359,8 +359,11 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
       }
       window.addEventListener("message", messageListener)
 
+      // OJO: FB.login NO acepta un callback async (tira "Expression is of type
+      // asyncfunction, not function"). El callback es una función común y la parte
+      // async va adentro, en un IIFE.
       window.FB.login(
-        async (loginResponse: any) => {
+        (loginResponse: any) => {
           window.removeEventListener("message", messageListener)
 
           if (!loginResponse?.authResponse) {
@@ -376,24 +379,26 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
             return
           }
 
-          try {
-            const res = await fetch("/api/auth/meta/whatsapp/callback", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...waInfo, code }),
-            })
-            const json = await res.json()
-            if (!res.ok) {
-              toast.error(json.error || "No se pudo guardar la integración")
-            } else {
-              toast.success("WhatsApp conectado correctamente")
-              await fetchStatus()
+          ;(async () => {
+            try {
+              const res = await fetch("/api/auth/meta/whatsapp/callback", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...waInfo, code }),
+              })
+              const json = await res.json()
+              if (!res.ok) {
+                toast.error(json.error || "No se pudo guardar la integración")
+              } else {
+                toast.success("WhatsApp conectado correctamente")
+                await fetchStatus()
+              }
+            } catch {
+              toast.error("Error de red al guardar la integración")
+            } finally {
+              setConnecting(false)
             }
-          } catch {
-            toast.error("Error de red al guardar la integración")
-          } finally {
-            setConnecting(false)
-          }
+          })()
         },
         {
           config_id: configId,
