@@ -399,7 +399,9 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
           config_id: configId,
           response_type: "code",
           override_default_response_type: true,
-          extras: { version: "v3", featureType: "", sessionInfoVersion: "2" },
+          // Alineado a lo que genera Meta en la URL de onboarding (v4 / sessionInfoVersion 3).
+          // La coexistencia se habilita en la config de Embedded Signup (config_id), no acá.
+          extras: { sessionInfoVersion: "3", version: "v4" },
         }
       )
     } catch (err: any) {

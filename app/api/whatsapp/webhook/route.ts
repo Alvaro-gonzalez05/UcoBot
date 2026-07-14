@@ -87,6 +87,13 @@ export async function POST(request: NextRequest) {
           for (const change of entry.changes) {
             if (change.field === 'messages') {
               await processWhatsAppMessage(change.value, origin)
+            } else {
+              // COEXISTENCIA: campos como history / smb_message_echoes / smb_app_state_sync.
+              // Por ahora los logueamos para ver el formato REAL de Meta y después
+              // implementar el guardado exacto (sincronizar mensajes del celular).
+              try {
+                console.log('[WA coexistence] field:', change.field, JSON.stringify(change.value).slice(0, 2000))
+              } catch { /* noop */ }
             }
           }
         }
