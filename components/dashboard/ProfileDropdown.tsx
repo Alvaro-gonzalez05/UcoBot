@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import {
   Check,
   ChevronUp,
-  Settings,
+  ChevronRight,
   Crown,
   DoorOpen,
   Sun,
@@ -17,6 +17,9 @@ import { useTheme } from "next-themes";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogDescription } from "@/components/ui/dialog";
+import { SheetGrabBar } from "@/components/ui/sheet-grab-bar";
+import { Settings as SettingsView, SETTINGS_SECTIONS, type SettingsSection } from "@/components/dashboard/settings";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
 import LogoutAnimation from "@/components/ui/logout-animation";
@@ -84,8 +87,19 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
     redirectTo: '/'
   });
 
+  // En móvil el panel se muestra como bottom sheet; en escritorio como dropdown
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Sección de configuración abierta (se muestra en su propio sheet)
+  const [openSection, setOpenSection] = useState<SettingsSection | null>(null);
+  const activeSection = SETTINGS_SECTIONS.find((s) => s.id === openSection);
+
   useEffect(() => {
     setMounted(true);
+    const check = () => setIsMobile(window.innerWidth < 640);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
   if (!mounted) {
@@ -106,12 +120,12 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
       .slice(0, 2);
   };
 
+  // Secciones de configuración: se abren como sheet desde acá (los empleados
+  // no ven las que son solo del dueño).
+  const isOwner = !profile?.parent_user_id;
+  const visibleSections = SETTINGS_SECTIONS.filter((s) => !s.ownerOnly || isOwner);
+
   const menuItems = [
-    {
-      icon: <Settings className="w-5 h-5" />,
-      label: "Configuración",
-      onClick: () => { setIsOpen(false); router.push("/dashboard/configuracion"); }
-    },
     {
       icon: <DoorOpen className="w-5 h-5" />,
       label: "Cerrar Sesión",
@@ -130,6 +144,289 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
   const panelMotionOffset =
     position === "header" ? { y: -10 } : position === "downbar" ? { y: 10 } : { x: -10 };
 
+  // Contenido del panel: se reutiliza igual en el dropdown de escritorio
+  // y en el bottom sheet de móvil.
+  const panelContent = (
+    <>
+      {/* Profile Header */}
+      <motion.div
+        className="p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-200"
+        transition={{ duration: 0.2 }}
+      >
+        <div className="flex items-center">
+          <motion.div
+            className="relative w-10 h-10 sm:w-12 sm:h-12 mr-3 sm:mr-4"
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+          >
+            <div className="absolute inset-1 rounded-full overflow-hidden">
+              <div className="w-full h-full bg-primary text-primary-foreground flex items-center justify-center rounded-full text-sm sm:text-lg font-medium">
+                {getInitials(profile?.business_name || user.email || "U")}
+              </div>
+            </div>
+          </motion.div>
+          <div className="flex-1">
+            <div className="flex items-center">
+              <h2 className="text-lg sm:text-xl font-bold text-neutral-900 dark:text-white">
+                {profile?.business_name || "Mi Negocio"}
+              </h2>
+              <motion.div
+                className="ml-2 flex items-center justify-center w-5 h-5 bg-blue-500 rounded-full"
+                whileHover={{ scale: 1.1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 10 }}
+              >
+                <Check className="w-3 h-3 text-white" />
+              </motion.div>
+            </div>
+            <p className="text-neutral-500 dark:text-neutral-400 text-sm">
+              {user.email}
+            </p>
+          </div>
+          <motion.button
+            className="text-neutral-500 dark:text-neutral-400"
+            onClick={() => setIsOpen(!isOpen)}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <motion.div
+              animate={{ rotate: isOpen ? 0 : 180 }}
+              transition={{ duration: 0.3 }}
+            >
+              <ChevronUp className="w-5 h-5" />
+            </motion.div>
+          </motion.button>
+        </div>
+      </motion.div>
+
+      {/* Card Section — Mercado Pago */}
+      <div className="p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700">
+        <motion.div
+          onClick={needsSub ? handleSubscribe : undefined}
+          className={`rounded-2xl p-5 overflow-hidden relative text-white transition-transform duration-300 hover:scale-[1.02] ${needsSub ? "cursor-pointer" : ""}`}
+          style={{ background: "linear-gradient(135deg, #2D9BF0 0%, #009EE3 55%, #0077C8 100%)" }}
+          transition={{ type: "spring", stiffness: 300, damping: 15 }}
+        >
+          {/* brillo decorativo */}
+          <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/15 blur-xl" />
+
+          {/* Top: logo + wordmark */}
+          <div className="flex items-center justify-between mb-8 relative z-10">
+            <div className="flex items-center gap-2">
+              <SiMercadopago className="h-8 w-8 text-white" />
+              <span className="font-bold tracking-tight text-[15px]">Mercado Pago</span>
+            </div>
+            {subLoading && <Loader2 className="h-4 w-4 animate-spin text-white/80" />}
+          </div>
+
+          {/* Negocio */}
+          <p className="relative z-10 text-xs text-white/70 mb-0.5">Suscripción UcoBot</p>
+          <p className="relative z-10 font-semibold text-lg leading-tight mb-3">
+            {profile?.business_name || "Mi Negocio"}
+          </p>
+
+          {/* Estado + precio */}
+          <div className="relative z-10 flex items-end justify-between">
+            <div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm">
+                {isExempt ? (
+                  <>Pago manual</>
+                ) : isActivePaid ? (
+                  <><CheckCircle2 className="h-3 w-3" /> Activa</>
+                ) : profile?.subscription_status === "past_due" ? (
+                  <>Pago vencido</>
+                ) : daysLeft !== null ? (
+                  <>Prueba · {daysLeft} día{daysLeft !== 1 ? "s" : ""}</>
+                ) : (
+                  <>Sin abono</>
+                )}
+              </span>
+              {needsSub && (
+                <p className="mt-1.5 text-[11px] text-white/80">Tocá para suscribirte →</p>
+              )}
+            </div>
+            <div className="text-right">
+              <p className="text-base font-black leading-none">$90.000</p>
+              <p className="text-[10px] text-white/70">ARS/mes</p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Theme Toggle */}
+      <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
+        <div className="flex bg-neutral-100 dark:bg-neutral-700 rounded-lg p-1">
+          <motion.button
+            className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md ${
+              theme === "light"
+                ? "bg-white dark:bg-neutral-600 shadow-sm"
+                : ""
+            }`}
+            onClick={() => setTheme("light")}
+            whileHover={{ scale: theme !== "light" ? 1.03 : 1 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <Sun
+              className={`w-4 h-4 mr-2 ${
+                theme === "light"
+                  ? "text-amber-500"
+                  : "text-neutral-500 dark:text-neutral-400"
+              }`}
+            />
+            <span
+              className={
+                theme === "light"
+                  ? "text-neutral-900 dark:text-white font-medium"
+                  : "text-neutral-500 dark:text-neutral-400"
+              }
+            >
+              Claro
+            </span>
+          </motion.button>
+          <motion.button
+            className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md ${
+              theme === "dark" ? "bg-neutral-600 shadow-sm" : ""
+            }`}
+            onClick={() => setTheme("dark")}
+            whileHover={{ scale: theme !== "dark" ? 1.03 : 1 }}
+            whileTap={{ scale: 0.97 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <Moon
+              className={`w-4 h-4 mr-2 ${
+                theme === "dark"
+                  ? "text-indigo-300"
+                  : "text-neutral-500 dark:text-neutral-400"
+              }`}
+            />
+            <span
+              className={
+                theme === "dark"
+                  ? "text-white font-medium"
+                  : "text-neutral-500 dark:text-neutral-400"
+              }
+            >
+              Oscuro
+            </span>
+          </motion.button>
+        </div>
+      </div>
+
+      {/* Suscripción */}
+      <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
+        <div
+          className={`flex items-center justify-between p-2 rounded-lg ${needsSub ? "cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700/50" : ""}`}
+          onClick={needsSub ? handleSubscribe : undefined}
+        >
+          <div className="flex items-center text-neutral-700 dark:text-neutral-300">
+            <Crown className="w-5 h-5 mr-3 text-amber-500" />
+            <span>{subItemLabel}</span>
+          </div>
+          {needsSub ? (
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              disabled={subLoading}
+              onClick={(e) => { e.stopPropagation(); handleSubscribe(); }}
+              className="px-4 py-1.5 rounded-lg bg-[#009EE3] text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-60"
+            >
+              {subLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {profile?.subscription_status === "past_due" ? "Reactivar" : "Suscribirme"}
+            </motion.button>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" /> Activa
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Secciones de configuración: cada una abre su propio sheet */}
+      <div className="p-4 space-y-1 border-b border-neutral-200 dark:border-neutral-700">
+        <p className="px-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+          Configuración
+        </p>
+        {visibleSections.map((s) => {
+          const Icon = s.icon;
+          return (
+            <motion.div
+              key={s.id}
+              className="flex cursor-pointer items-center justify-between rounded-lg p-2 text-neutral-700 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-700/50"
+              onClick={() => { setIsOpen(false); setOpenSection(s.id); }}
+              whileTap={{ scale: 0.98 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            >
+              <div className="flex min-w-0 items-center">
+                <span className="mr-3 shrink-0"><Icon className="h-5 w-5" /></span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{s.label}</p>
+                  <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">{s.description}</p>
+                </div>
+              </div>
+              <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Menu Items */}
+      <div className="p-4 space-y-2 border-b border-neutral-200 dark:border-neutral-700">
+        {menuItems.map((item, index) => (
+          <motion.div
+            key={index}
+            className={`flex items-center justify-between p-2 rounded-lg transition-all duration-200 cursor-pointer ${
+              item.danger
+                ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:pl-6"
+                : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 hover:pl-6"
+            }`}
+            onClick={item.onClick}
+            whileTap={{ scale: 0.98 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            <div className="flex items-center">
+              <span className="mr-3">{item.icon}</span>
+              <span>{item.label}</span>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-200">
+        <div className="flex items-center">
+          <motion.div
+            className="w-6 h-6 mr-2 bg-white dark:bg-neutral-700 rounded-full flex items-center justify-center shadow-sm"
+            whileHover={{ scale: 1.1, rotate: 10 }}
+            transition={{ type: "spring", stiffness: 400, damping: 10 }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z"
+                fill={theme === "light" ? "black" : "white"}
+              />
+              <path
+                d="M12 17C14.7614 17 17 14.7614 17 12C17 9.23858 14.7614 7 12 7C9.23858 7 7 9.23858 7 12C7 14.7614 9.23858 17 12 17Z"
+                fill={theme === "light" ? "black" : "white"}
+              />
+            </svg>
+          </motion.div>
+          <span className="text-neutral-900 dark:text-white font-medium">
+            UcoBot
+          </span>
+        </div>
+        <div className="text-neutral-500 dark:text-neutral-400 text-sm">
+          v1.0
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="relative">
       {/* Trigger: avatar por defecto o trigger custom (downbar) */}
@@ -146,8 +443,22 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
         </button>
       )}
 
+      {/* MÓVIL: bottom sheet con ranura de agarre (mismo patrón que el resto de la
+          app). Va con el Dialog de Radix porque portea al <body>: el <nav> del
+          downbar tiene un transform y eso rompería un `fixed` propio. */}
+      <Dialog open={isOpen && isMobile} onOpenChange={setIsOpen}>
+        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col gap-0 rounded-2xl p-0 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[90dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+          <DialogTitle className="sr-only">Perfil</DialogTitle>
+          <div className="px-4 pt-4">
+            <SheetGrabBar onDismiss={() => setIsOpen(false)} />
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">{panelContent}</div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ESCRITORIO: dropdown anclado al trigger */}
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && !isMobile && (
           <>
             {/* Overlay */}
             <div
@@ -160,261 +471,32 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
               animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95, ...panelMotionOffset }}
               transition={{ duration: 0.2 }}
-              className={`absolute ${panelPosition} z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-white/75 dark:bg-[#1C1C28]/80 backdrop-blur-2xl backdrop-saturate-150 shadow-[0_8px_32px_rgba(0,0,0,0.25)] border border-white/40 dark:border-white/10 [&::-webkit-scrollbar]:hidden`}
+              className={`absolute ${panelPosition} z-50 w-80 sm:w-96 max-h-[80vh] overflow-y-auto rounded-2xl sm:rounded-3xl bg-white dark:bg-[#1C1C28] shadow-[0_8px_32px_rgba(0,0,0,0.25)] border border-neutral-200 dark:border-neutral-800 [&::-webkit-scrollbar]:hidden`}
               style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
-              {/* Profile Header */}
-              <motion.div
-                className="p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700 hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-200"
-                transition={{ duration: 0.2 }}
-              >
-                <div className="flex items-center">
-                  <motion.div
-                    className="relative w-10 h-10 sm:w-12 sm:h-12 mr-3 sm:mr-4"
-                    whileHover={{ scale: 1.05 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                  >
-                    <div className="absolute inset-1 rounded-full overflow-hidden">
-                      <div className="w-full h-full bg-primary text-primary-foreground flex items-center justify-center rounded-full text-sm sm:text-lg font-medium">
-                        {getInitials(profile?.business_name || user.email || "U")}
-                      </div>
-                    </div>
-                  </motion.div>
-                  <div className="flex-1">
-                    <div className="flex items-center">
-                      <h2 className="text-lg sm:text-xl font-bold text-neutral-900 dark:text-white">
-                        {profile?.business_name || "Mi Negocio"}
-                      </h2>
-                      <motion.div
-                        className="ml-2 flex items-center justify-center w-5 h-5 bg-blue-500 rounded-full"
-                        whileHover={{ scale: 1.1 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                      >
-                        <Check className="w-3 h-3 text-white" />
-                      </motion.div>
-                    </div>
-                    <p className="text-neutral-500 dark:text-neutral-400 text-sm">
-                      {user.email}
-                    </p>
-                  </div>
-                  <motion.button
-                    className="text-neutral-500 dark:text-neutral-400"
-                    onClick={() => setIsOpen(!isOpen)}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    <motion.div
-                      animate={{ rotate: isOpen ? 0 : 180 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <ChevronUp className="w-5 h-5" />
-                    </motion.div>
-                  </motion.button>
-                </div>
-              </motion.div>
-
-              {/* Card Section — Mercado Pago */}
-              <div className="p-4 sm:p-6 border-b border-neutral-200 dark:border-neutral-700">
-                <motion.div
-                  onClick={needsSub ? handleSubscribe : undefined}
-                  className={`rounded-2xl p-5 overflow-hidden relative text-white transition-transform duration-300 hover:scale-[1.02] ${needsSub ? "cursor-pointer" : ""}`}
-                  style={{ background: "linear-gradient(135deg, #2D9BF0 0%, #009EE3 55%, #0077C8 100%)" }}
-                  transition={{ type: "spring", stiffness: 300, damping: 15 }}
-                >
-                  {/* brillo decorativo */}
-                  <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/15 blur-xl" />
-
-                  {/* Top: logo + wordmark */}
-                  <div className="flex items-center justify-between mb-8 relative z-10">
-                    <div className="flex items-center gap-2">
-                      <SiMercadopago className="h-8 w-8 text-white" />
-                      <span className="font-bold tracking-tight text-[15px]">Mercado Pago</span>
-                    </div>
-                    {subLoading && <Loader2 className="h-4 w-4 animate-spin text-white/80" />}
-                  </div>
-
-                  {/* Negocio */}
-                  <p className="relative z-10 text-xs text-white/70 mb-0.5">Suscripción UcoBot</p>
-                  <p className="relative z-10 font-semibold text-lg leading-tight mb-3">
-                    {profile?.business_name || "Mi Negocio"}
-                  </p>
-
-                  {/* Estado + precio */}
-                  <div className="relative z-10 flex items-end justify-between">
-                    <div>
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-bold backdrop-blur-sm">
-                        {isExempt ? (
-                          <>Pago manual</>
-                        ) : isActivePaid ? (
-                          <><CheckCircle2 className="h-3 w-3" /> Activa</>
-                        ) : profile?.subscription_status === "past_due" ? (
-                          <>Pago vencido</>
-                        ) : daysLeft !== null ? (
-                          <>Prueba · {daysLeft} día{daysLeft !== 1 ? "s" : ""}</>
-                        ) : (
-                          <>Sin abono</>
-                        )}
-                      </span>
-                      {needsSub && (
-                        <p className="mt-1.5 text-[11px] text-white/80">Tocá para suscribirte →</p>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <p className="text-base font-black leading-none">$90.000</p>
-                      <p className="text-[10px] text-white/70">ARS/mes</p>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-
-              {/* Theme Toggle */}
-              <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
-                <div className="flex bg-neutral-100 dark:bg-neutral-700 rounded-lg p-1">
-                  <motion.button
-                    className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md ${
-                      theme === "light"
-                        ? "bg-white dark:bg-neutral-600 shadow-sm"
-                        : ""
-                    }`}
-                    onClick={() => setTheme("light")}
-                    whileHover={{ scale: theme !== "light" ? 1.03 : 1 }}
-                    whileTap={{ scale: 0.97 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  >
-                    <Sun
-                      className={`w-4 h-4 mr-2 ${
-                        theme === "light"
-                          ? "text-amber-500"
-                          : "text-neutral-500 dark:text-neutral-400"
-                      }`}
-                    />
-                    <span
-                      className={
-                        theme === "light"
-                          ? "text-neutral-900 dark:text-white font-medium"
-                          : "text-neutral-500 dark:text-neutral-400"
-                      }
-                    >
-                      Claro
-                    </span>
-                  </motion.button>
-                  <motion.button
-                    className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md ${
-                      theme === "dark" ? "bg-neutral-600 shadow-sm" : ""
-                    }`}
-                    onClick={() => setTheme("dark")}
-                    whileHover={{ scale: theme !== "dark" ? 1.03 : 1 }}
-                    whileTap={{ scale: 0.97 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  >
-                    <Moon
-                      className={`w-4 h-4 mr-2 ${
-                        theme === "dark"
-                          ? "text-indigo-300"
-                          : "text-neutral-500 dark:text-neutral-400"
-                      }`}
-                    />
-                    <span
-                      className={
-                        theme === "dark"
-                          ? "text-white font-medium"
-                          : "text-neutral-500 dark:text-neutral-400"
-                      }
-                    >
-                      Oscuro
-                    </span>
-                  </motion.button>
-                </div>
-              </div>
-
-              {/* Suscripción */}
-              <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
-                <div
-                  className={`flex items-center justify-between p-2 rounded-lg ${needsSub ? "cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-700/50" : ""}`}
-                  onClick={needsSub ? handleSubscribe : undefined}
-                >
-                  <div className="flex items-center text-neutral-700 dark:text-neutral-300">
-                    <Crown className="w-5 h-5 mr-3 text-amber-500" />
-                    <span>{subItemLabel}</span>
-                  </div>
-                  {needsSub ? (
-                    <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      disabled={subLoading}
-                      onClick={(e) => { e.stopPropagation(); handleSubscribe(); }}
-                      className="px-4 py-1.5 rounded-lg bg-[#009EE3] text-white font-bold text-sm flex items-center gap-1.5 disabled:opacity-60"
-                    >
-                      {subLoading && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      {profile?.subscription_status === "past_due" ? "Reactivar" : "Suscribirme"}
-                    </motion.button>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                      <CheckCircle2 className="h-4 w-4" /> Activa
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Menu Items */}
-              <div className="p-4 space-y-2 border-b border-neutral-200 dark:border-neutral-700">
-                {menuItems.map((item, index) => (
-                  <motion.div
-                    key={index}
-                    className={`flex items-center justify-between p-2 rounded-lg transition-all duration-200 cursor-pointer ${
-                      item.danger
-                        ? "text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:pl-6"
-                        : "text-neutral-700 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-700/50 hover:pl-6"
-                    }`}
-                    onClick={item.onClick}
-                    whileTap={{ scale: 0.98 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 17 }}
-                  >
-                    <div className="flex items-center">
-                      <span className="mr-3">{item.icon}</span>
-                      <span>{item.label}</span>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              {/* Footer */}
-              <div className="p-4 flex items-center justify-between hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors duration-200">
-                <div className="flex items-center">
-                  <motion.div
-                    className="w-6 h-6 mr-2 bg-white dark:bg-neutral-700 rounded-full flex items-center justify-center shadow-sm"
-                    whileHover={{ scale: 1.1, rotate: 10 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                  >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z"
-                        fill={theme === "light" ? "black" : "white"}
-                      />
-                      <path
-                        d="M12 17C14.7614 17 17 14.7614 17 12C17 9.23858 14.7614 7 12 7C9.23858 7 7 9.23858 7 12C7 14.7614 9.23858 17 12 17Z"
-                        fill={theme === "light" ? "black" : "white"}
-                      />
-                    </svg>
-                  </motion.div>
-                  <span className="text-neutral-900 dark:text-white font-medium">
-                    UcoBot
-                  </span>
-                </div>
-                <div className="text-neutral-500 dark:text-neutral-400 text-sm">
-                  v1.0
-                </div>
-              </div>
+              {panelContent}
             </motion.div>
           </>
         )}
       </AnimatePresence>
+
+      {/* Sheet de la sección de configuración elegida (sheet en móvil, modal en PC).
+          Reusa el MISMO contenido que los tabs de /configuracion vía `section`. */}
+      <Dialog open={!!openSection} onOpenChange={(o) => { if (!o) setOpenSection(null); }}>
+        <DialogContent className="max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col gap-0 rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[90dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+          <SheetGrabBar onDismiss={() => setOpenSection(null)} />
+          <DialogHeader className="shrink-0 text-left">
+            <DialogTitle className="flex items-center gap-2">
+              {activeSection && <activeSection.icon className="h-5 w-5" />}
+              {activeSection?.label}
+            </DialogTitle>
+            <DialogDescription>{activeSection?.description}</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto pt-4 -mx-1 px-1">
+            {openSection && <SettingsView section={openSection} />}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Logout Animation */}
       <LogoutAnimation {...animationProps} />

@@ -13,7 +13,8 @@ import { TeamManagement } from "@/components/dashboard/team-management"
 import { MpConnectCard } from "@/components/dashboard/mp-connect-card"
 import {
   User, Bell, CreditCard, Shield, LogOut, Trash2,
-  LayoutDashboard, Camera, Eye, EyeOff, GripVertical,
+  LayoutDashboard, Camera, Eye, EyeOff, GripVertical, Store, Users,
+  type LucideIcon,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -43,7 +44,39 @@ interface SidebarSectionConfig {
   visible: boolean
 }
 
-export function Settings() {
+/** Cada "tab" de configuración. Se abren como sheet desde el perfil. */
+export type SettingsSection =
+  | "perfil"
+  | "negocio"
+  | "panel"
+  | "equipo"
+  | "integraciones"
+  | "seguridad"
+  | "notificaciones"
+
+/** Catálogo de secciones (lo usa el sheet del perfil para armar la lista) */
+export const SETTINGS_SECTIONS: {
+  id: SettingsSection
+  label: string
+  description: string
+  icon: LucideIcon
+  ownerOnly?: boolean
+}[] = [
+  { id: "perfil", label: "Perfil", description: "Tu nombre, foto y datos", icon: User },
+  { id: "negocio", label: "Mi negocio", description: "La info que usa la IA", icon: Store },
+  { id: "panel", label: "Panel lateral", description: "Qué secciones se ven", icon: LayoutDashboard },
+  { id: "equipo", label: "Equipo", description: "Cuentas de tus empleados", icon: Users, ownerOnly: true },
+  { id: "integraciones", label: "Integraciones", description: "Cobros con Mercado Pago", icon: CreditCard, ownerOnly: true },
+  { id: "seguridad", label: "Seguridad", description: "Contraseña y cuenta", icon: Shield },
+  { id: "notificaciones", label: "Notificaciones", description: "Alertas y emails", icon: Bell },
+]
+
+interface SettingsProps {
+  /** Si se pasa, renderiza SOLO esa sección (sin tabs). Lo usa el sheet del perfil. */
+  section?: SettingsSection
+}
+
+export function Settings({ section }: SettingsProps = {}) {
   const supabase = createClient()
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -251,6 +284,354 @@ export function Settings() {
     )
   }
 
+  // Contenido de cada sección. Se usa en los tabs de /configuracion y también
+  // en los sheets del perfil (ProfileDropdown) → sin duplicar código.
+  const sectionContent: Record<SettingsSection, React.ReactNode> = {
+    negocio: (
+      <>
+              {userId && <BusinessInfoPanel userId={userId} />}
+      </>
+    ),
+    perfil: (
+      <>
+              <ScrollFadeIn delay={0.1}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <User className="h-5 w-5" />
+                      Datos del perfil
+                    </CardTitle>
+                    <CardDescription>Tu nombre, foto y datos del negocio</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Avatar */}
+                    <div className="flex items-center gap-5">
+                      <div className="relative">
+                        {displayAvatar ? (
+                          <img
+                            src={displayAvatar}
+                            alt="Foto de perfil"
+                            className="w-20 h-20 rounded-full object-cover border-2 border-border"
+                          />
+                        ) : (
+                          <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center text-2xl font-bold text-muted-foreground border-2 border-border">
+                            {(fullName || businessName || email).charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:opacity-90 transition-opacity"
+                        >
+                          <Camera className="h-3.5 w-3.5" />
+                        </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleAvatarChange}
+                        />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{fullName || businessName || "Sin nombre"}</p>
+                        <p className="text-xs text-muted-foreground">{email}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Miembro desde {createdAt ? new Date(createdAt).toLocaleDateString("es-AR") : "—"}
+                        </p>
+                        <Badge variant="secondary" className="mt-1.5 text-xs">
+                          Plan {planLabel[planType] ?? planType}
+                        </Badge>
+                      </div>
+                    </div>
+    
+                    <Separator />
+    
+                    {/* Fields */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="full_name">Nombre completo</Label>
+                        <Input
+                          id="full_name"
+                          placeholder="Tu nombre"
+                          value={fullName}
+                          onChange={e => setFullName(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="business_name">Nombre del negocio</Label>
+                        <Input
+                          id="business_name"
+                          placeholder="Mi negocio"
+                          value={businessName}
+                          onChange={e => setBusinessName(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Email</Label>
+                        <div className="flex items-center gap-2">
+                          <Input value={email} disabled className="bg-muted flex-1" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => { setShowEmailChange(v => !v); setNewEmail("") }}
+                          >
+                            {showEmailChange ? "Cancelar" : "Cambiar"}
+                          </Button>
+                        </div>
+                        {showEmailChange && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <Input
+                              type="email"
+                              placeholder="Nuevo correo electrónico"
+                              value={newEmail}
+                              onChange={e => setNewEmail(e.target.value)}
+                              className="flex-1"
+                              onKeyDown={e => e.key === "Enter" && changeEmail()}
+                            />
+                            <Button
+                              size="sm"
+                              disabled={isSavingEmail || !newEmail.trim() || newEmail === email}
+                              onClick={changeEmail}
+                            >
+                              {isSavingEmail ? "Enviando..." : "Confirmar"}
+                            </Button>
+                          </div>
+                        )}
+                        {showEmailChange && (
+                          <p className="text-xs text-muted-foreground">Se enviará un link de confirmación al nuevo correo.</p>
+                        )}
+                      </div>
+                    </div>
+    
+                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-fit">
+                      <Button onClick={saveProfile} disabled={isSavingProfile}>
+                        {isSavingProfile ? "Guardando..." : "Guardar perfil"}
+                      </Button>
+                    </motion.div>
+                  </CardContent>
+                </Card>
+              </ScrollFadeIn>
+      </>
+    ),
+    panel: (
+      <>
+              <ScrollFadeIn delay={0.1}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <LayoutDashboard className="h-5 w-5" />
+                      Secciones del panel lateral
+                    </CardTitle>
+                    <CardDescription>
+                      Elegí que secciones mostrar en tu sidebar y renombralas como quieras para tu negocio
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="space-y-1">
+                      {sidebarSections.map((section, index) => (
+                        <motion.div
+                          key={section.id}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: index * 0.04 }}
+                          className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                            section.visible ? "bg-background" : "bg-muted/30 opacity-60"
+                          }`}
+                        >
+                          <GripVertical className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />
+    
+                          {/* Icon preview */}
+                          <span className="material-symbols-outlined text-base text-muted-foreground flex-shrink-0">
+                            {section.icon}
+                          </span>
+    
+                          {/* Rename input */}
+                          <Input
+                            value={section.label}
+                            onChange={e => updateSection(section.id, "label", e.target.value)}
+                            className="h-8 text-sm border-0 bg-transparent px-0 focus-visible:ring-0 focus-visible:ring-offset-0 font-medium"
+                            disabled={!section.visible}
+                          />
+    
+                          {/* Visibility toggle */}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs text-muted-foreground hidden sm:inline">
+                              {section.visible ? "Visible" : "Oculta"}
+                            </span>
+                            <Switch
+                              checked={section.visible}
+                              onCheckedChange={v => updateSection(section.id, "visible", v)}
+                            />
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+    
+                    <div className="pt-2">
+                      <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-fit">
+                        <Button onClick={saveSidebarConfig} disabled={isSavingSidebar}>
+                          {isSavingSidebar ? "Guardando..." : "Guardar configuracion del panel"}
+                        </Button>
+                      </motion.div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </ScrollFadeIn>
+      </>
+    ),
+    equipo: (
+      <>
+                <TeamManagement />
+      </>
+    ),
+    integraciones: (
+      <>
+                <Suspense fallback={null}>
+                  <MpConnectCard />
+                </Suspense>
+      </>
+    ),
+    seguridad: (
+      <>
+              <ScrollFadeIn delay={0.1}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="h-5 w-5" />
+                      Cambiar contrasena
+                    </CardTitle>
+                    <CardDescription>Actualiza tu contrasena periodicamente para mayor seguridad</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2 max-w-sm">
+                      <Label htmlFor="new_password">Nueva contrasena</Label>
+                      <div className="relative">
+                        <Input
+                          id="new_password"
+                          type={showNew ? "text" : "password"}
+                          placeholder="Minimo 6 caracteres"
+                          value={newPassword}
+                          onChange={e => setNewPassword(e.target.value)}
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNew(!showNew)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+    
+                    <div className="space-y-2 max-w-sm">
+                      <Label htmlFor="confirm_password">Confirmar contrasena</Label>
+                      <div className="relative">
+                        <Input
+                          id="confirm_password"
+                          type={showConfirm ? "text" : "password"}
+                          placeholder="Repetir contrasena"
+                          value={confirmPassword}
+                          onChange={e => setConfirmPassword(e.target.value)}
+                          className="pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirm(!showConfirm)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {confirmPassword && newPassword !== confirmPassword && (
+                        <p className="text-xs text-destructive">Las contrasenas no coinciden</p>
+                      )}
+                    </div>
+    
+                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-fit">
+                      <Button
+                        onClick={savePassword}
+                        disabled={isSavingPassword || !newPassword || newPassword !== confirmPassword}
+                      >
+                        {isSavingPassword ? "Actualizando..." : "Actualizar contrasena"}
+                      </Button>
+                    </motion.div>
+                  </CardContent>
+                </Card>
+    
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <LogOut className="h-5 w-5" />
+                      Sesion
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium">Cerrar sesion</p>
+                        <p className="text-xs text-muted-foreground">Salis de tu cuenta en este dispositivo</p>
+                      </div>
+                      <Button variant="outline" onClick={signOut}>
+                        <LogOut className="h-4 w-4 mr-2" />
+                        Cerrar sesion
+                      </Button>
+                    </div>
+                    <Separator />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-destructive">Eliminar cuenta</p>
+                        <p className="text-xs text-muted-foreground">Esta accion es permanente e irreversible</p>
+                      </div>
+                      <Button variant="destructive" disabled>
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Eliminar cuenta
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </ScrollFadeIn>
+      </>
+    ),
+    notificaciones: (
+      <>
+              <ScrollFadeIn delay={0.1}>
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Bell className="h-5 w-5" />
+                      Preferencias de notificaciones
+                    </CardTitle>
+                    <CardDescription>Configura como y cuando queres recibir notificaciones</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    {[
+                      { key: "email", label: "Notificaciones por email", desc: "Recibe actualizaciones importantes por correo" },
+                      { key: "push",  label: "Notificaciones push",      desc: "Alertas en tiempo real en tu dispositivo" },
+                      { key: "marketing", label: "Emails de marketing",  desc: "Consejos y novedades del producto" },
+                      { key: "bots",  label: "Alertas de bots",          desc: "Estado e incidentes de tus bots" },
+                    ].map(item => (
+                      <div key={item.key} className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{item.label}</p>
+                          <p className="text-xs text-muted-foreground">{item.desc}</p>
+                        </div>
+                        <Switch defaultChecked={item.key !== "marketing"} />
+                      </div>
+                    ))}
+                    <Button variant="outline">Guardar preferencias</Button>
+                  </CardContent>
+                </Card>
+              </ScrollFadeIn>
+      </>
+    ),
+  }
+
+  // Modo "una sola sección" (lo usa el sheet del perfil): sin tabs ni encabezado
+  if (section) {
+    return <div className="space-y-4">{sectionContent[section]}</div>
+  }
+
   return (
     <div className="space-y-6">
       <ScrollSlideUp>
@@ -271,347 +652,17 @@ export function Settings() {
           <TabsTrigger value="notificaciones">Notificaciones</TabsTrigger>
         </TabsList>
 
-        {/* ── MI NEGOCIO ─────────────────────────────────────────────────── */}
-        <TabsContent value="negocio" className="space-y-4">
-          {userId && <BusinessInfoPanel userId={userId} />}
-        </TabsContent>
-
-        {/* ── PERFIL ──────────────────────────────────────────────────────── */}
-        <TabsContent value="perfil" className="space-y-4">
-          <ScrollFadeIn delay={0.1}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Datos del perfil
-                </CardTitle>
-                <CardDescription>Tu nombre, foto y datos del negocio</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Avatar */}
-                <div className="flex items-center gap-5">
-                  <div className="relative">
-                    {displayAvatar ? (
-                      <img
-                        src={displayAvatar}
-                        alt="Foto de perfil"
-                        className="w-20 h-20 rounded-full object-cover border-2 border-border"
-                      />
-                    ) : (
-                      <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center text-2xl font-bold text-muted-foreground border-2 border-border">
-                        {(fullName || businessName || email).charAt(0).toUpperCase()}
-                      </div>
-                    )}
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute bottom-0 right-0 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:opacity-90 transition-opacity"
-                    >
-                      <Camera className="h-3.5 w-3.5" />
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleAvatarChange}
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{fullName || businessName || "Sin nombre"}</p>
-                    <p className="text-xs text-muted-foreground">{email}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Miembro desde {createdAt ? new Date(createdAt).toLocaleDateString("es-AR") : "—"}
-                    </p>
-                    <Badge variant="secondary" className="mt-1.5 text-xs">
-                      Plan {planLabel[planType] ?? planType}
-                    </Badge>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="full_name">Nombre completo</Label>
-                    <Input
-                      id="full_name"
-                      placeholder="Tu nombre"
-                      value={fullName}
-                      onChange={e => setFullName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="business_name">Nombre del negocio</Label>
-                    <Input
-                      id="business_name"
-                      placeholder="Mi negocio"
-                      value={businessName}
-                      onChange={e => setBusinessName(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Email</Label>
-                    <div className="flex items-center gap-2">
-                      <Input value={email} disabled className="bg-muted flex-1" />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => { setShowEmailChange(v => !v); setNewEmail("") }}
-                      >
-                        {showEmailChange ? "Cancelar" : "Cambiar"}
-                      </Button>
-                    </div>
-                    {showEmailChange && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <Input
-                          type="email"
-                          placeholder="Nuevo correo electrónico"
-                          value={newEmail}
-                          onChange={e => setNewEmail(e.target.value)}
-                          className="flex-1"
-                          onKeyDown={e => e.key === "Enter" && changeEmail()}
-                        />
-                        <Button
-                          size="sm"
-                          disabled={isSavingEmail || !newEmail.trim() || newEmail === email}
-                          onClick={changeEmail}
-                        >
-                          {isSavingEmail ? "Enviando..." : "Confirmar"}
-                        </Button>
-                      </div>
-                    )}
-                    {showEmailChange && (
-                      <p className="text-xs text-muted-foreground">Se enviará un link de confirmación al nuevo correo.</p>
-                    )}
-                  </div>
-                </div>
-
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-fit">
-                  <Button onClick={saveProfile} disabled={isSavingProfile}>
-                    {isSavingProfile ? "Guardando..." : "Guardar perfil"}
-                  </Button>
-                </motion.div>
-              </CardContent>
-            </Card>
-          </ScrollFadeIn>
-        </TabsContent>
-
-        {/* ── PANEL LATERAL ────────────────────────────────────────────────── */}
-        <TabsContent value="panel" className="space-y-4">
-          <ScrollFadeIn delay={0.1}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <LayoutDashboard className="h-5 w-5" />
-                  Secciones del panel lateral
-                </CardTitle>
-                <CardDescription>
-                  Elegí que secciones mostrar en tu sidebar y renombralas como quieras para tu negocio
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <div className="space-y-1">
-                  {sidebarSections.map((section, index) => (
-                    <motion.div
-                      key={section.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.04 }}
-                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                        section.visible ? "bg-background" : "bg-muted/30 opacity-60"
-                      }`}
-                    >
-                      <GripVertical className="h-4 w-4 text-muted-foreground/40 flex-shrink-0" />
-
-                      {/* Icon preview */}
-                      <span className="material-symbols-outlined text-base text-muted-foreground flex-shrink-0">
-                        {section.icon}
-                      </span>
-
-                      {/* Rename input */}
-                      <Input
-                        value={section.label}
-                        onChange={e => updateSection(section.id, "label", e.target.value)}
-                        className="h-8 text-sm border-0 bg-transparent px-0 focus-visible:ring-0 focus-visible:ring-offset-0 font-medium"
-                        disabled={!section.visible}
-                      />
-
-                      {/* Visibility toggle */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-muted-foreground hidden sm:inline">
-                          {section.visible ? "Visible" : "Oculta"}
-                        </span>
-                        <Switch
-                          checked={section.visible}
-                          onCheckedChange={v => updateSection(section.id, "visible", v)}
-                        />
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-
-                <div className="pt-2">
-                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-fit">
-                    <Button onClick={saveSidebarConfig} disabled={isSavingSidebar}>
-                      {isSavingSidebar ? "Guardando..." : "Guardar configuracion del panel"}
-                    </Button>
-                  </motion.div>
-                </div>
-              </CardContent>
-            </Card>
-          </ScrollFadeIn>
-        </TabsContent>
-
-        {/* ── EQUIPO (solo dueño) ──────────────────────────────────────────── */}
+        <TabsContent value="negocio" className="space-y-4">{sectionContent.negocio}</TabsContent>
+        <TabsContent value="perfil" className="space-y-4">{sectionContent.perfil}</TabsContent>
+        <TabsContent value="panel" className="space-y-4">{sectionContent.panel}</TabsContent>
         {isOwner && (
-          <TabsContent value="equipo" className="space-y-4">
-            <TeamManagement />
-          </TabsContent>
+          <TabsContent value="equipo" className="space-y-4">{sectionContent.equipo}</TabsContent>
         )}
-
-        {/* ── INTEGRACIONES (solo dueño) ───────────────────────────────────── */}
         {isOwner && (
-          <TabsContent value="integraciones" className="space-y-4">
-            <Suspense fallback={null}>
-              <MpConnectCard />
-            </Suspense>
-          </TabsContent>
+          <TabsContent value="integraciones" className="space-y-4">{sectionContent.integraciones}</TabsContent>
         )}
-
-        {/* ── SEGURIDAD ────────────────────────────────────────────────────── */}
-        <TabsContent value="seguridad" className="space-y-4">
-          <ScrollFadeIn delay={0.1}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Cambiar contrasena
-                </CardTitle>
-                <CardDescription>Actualiza tu contrasena periodicamente para mayor seguridad</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2 max-w-sm">
-                  <Label htmlFor="new_password">Nueva contrasena</Label>
-                  <div className="relative">
-                    <Input
-                      id="new_password"
-                      type={showNew ? "text" : "password"}
-                      placeholder="Minimo 6 caracteres"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNew(!showNew)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2 max-w-sm">
-                  <Label htmlFor="confirm_password">Confirmar contrasena</Label>
-                  <div className="relative">
-                    <Input
-                      id="confirm_password"
-                      type={showConfirm ? "text" : "password"}
-                      placeholder="Repetir contrasena"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      className="pr-10"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirm(!showConfirm)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  {confirmPassword && newPassword !== confirmPassword && (
-                    <p className="text-xs text-destructive">Las contrasenas no coinciden</p>
-                  )}
-                </div>
-
-                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="w-fit">
-                  <Button
-                    onClick={savePassword}
-                    disabled={isSavingPassword || !newPassword || newPassword !== confirmPassword}
-                  >
-                    {isSavingPassword ? "Actualizando..." : "Actualizar contrasena"}
-                  </Button>
-                </motion.div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <LogOut className="h-5 w-5" />
-                  Sesion
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">Cerrar sesion</p>
-                    <p className="text-xs text-muted-foreground">Salis de tu cuenta en este dispositivo</p>
-                  </div>
-                  <Button variant="outline" onClick={signOut}>
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Cerrar sesion
-                  </Button>
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-destructive">Eliminar cuenta</p>
-                    <p className="text-xs text-muted-foreground">Esta accion es permanente e irreversible</p>
-                  </div>
-                  <Button variant="destructive" disabled>
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Eliminar cuenta
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </ScrollFadeIn>
-        </TabsContent>
-
-        {/* ── NOTIFICACIONES ───────────────────────────────────────────────── */}
-        <TabsContent value="notificaciones" className="space-y-4">
-          <ScrollFadeIn delay={0.1}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Preferencias de notificaciones
-                </CardTitle>
-                <CardDescription>Configura como y cuando queres recibir notificaciones</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-5">
-                {[
-                  { key: "email", label: "Notificaciones por email", desc: "Recibe actualizaciones importantes por correo" },
-                  { key: "push",  label: "Notificaciones push",      desc: "Alertas en tiempo real en tu dispositivo" },
-                  { key: "marketing", label: "Emails de marketing",  desc: "Consejos y novedades del producto" },
-                  { key: "bots",  label: "Alertas de bots",          desc: "Estado e incidentes de tus bots" },
-                ].map(item => (
-                  <div key={item.key} className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium">{item.label}</p>
-                      <p className="text-xs text-muted-foreground">{item.desc}</p>
-                    </div>
-                    <Switch defaultChecked={item.key !== "marketing"} />
-                  </div>
-                ))}
-                <Button variant="outline">Guardar preferencias</Button>
-              </CardContent>
-            </Card>
-          </ScrollFadeIn>
-        </TabsContent>
+        <TabsContent value="seguridad" className="space-y-4">{sectionContent.seguridad}</TabsContent>
+        <TabsContent value="notificaciones" className="space-y-4">{sectionContent.notificaciones}</TabsContent>
       </Tabs>
     </div>
   )
