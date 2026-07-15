@@ -53,7 +53,9 @@ AS $$
       COALESCE(t.description, '')::text,
       COALESCE(t.payment_method, '')::text,
       t.amount::numeric,
-      t.transaction_date::timestamptz,
+      -- transaction_date es DATE (sin hora): día = el que eligió el usuario,
+      -- hora = cuando lo registró (created_at). Si no, el feed mostraría 00:00.
+      (t.transaction_date::timestamp + COALESCE(t.created_at, now())::time) AT TIME ZONE 'UTC',
       t.id
     FROM public.financial_transactions t
     WHERE t.user_id = (SELECT auth.uid())

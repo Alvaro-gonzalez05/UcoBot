@@ -192,7 +192,10 @@ const emptyForm = {
 }
 
 export function FinanzasView({ userId }: FinanzasViewProps) {
-  const supabase = createClient()
+  // OJO: createClient() devuelve una instancia NUEVA en cada render. Como el
+  // cliente está en las dependencias de los useCallback/useEffect, sin memoizar
+  // se re-disparaban en loop infinito ("Maximum update depth exceeded").
+  const supabase = useMemo(() => createClient(), [])
   const router = useRouter()
 
   const [period, setPeriod] = useState<Period>("this_month")
@@ -539,6 +542,38 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
   const movDate = (iso: string) =>
     new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short" })
 
+  // Hora del movimiento (las ventas traen su hora real; los manuales, la de carga)
+  const movTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+
+  // Título del separador de fecha: Hoy / Ayer / "12 de julio"
+  const dayLabel = (iso: string) => {
+    const d = new Date(iso)
+    const today = new Date()
+    const yesterday = new Date()
+    yesterday.setDate(today.getDate() - 1)
+    if (d.toDateString() === today.toDateString()) return "Hoy"
+    if (d.toDateString() === yesterday.toDateString()) return "Ayer"
+    return d.toLocaleDateString("es-AR", {
+      day: "numeric",
+      month: "long",
+      ...(d.getFullYear() !== today.getFullYear() ? { year: "numeric" as const } : {}),
+    })
+  }
+
+  // Los movimientos vienen ordenados por fecha desc → los agrupamos por día
+  const movementGroups = useMemo(() => {
+    const groups: { key: string; label: string; items: Movement[] }[] = []
+    for (const m of movements) {
+      const key = new Date(m.date).toDateString()
+      const last = groups[groups.length - 1]
+      if (last && last.key === key) last.items.push(m)
+      else groups.push({ key, label: dayLabel(m.date), items: [m] })
+    }
+    return groups
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [movements])
+
   // Al tocar un movimiento: si es manual → editar; si es venta → abrir su detalle
   const openMovement = async (m: Movement) => {
     if (m.kind === "manual") {
@@ -622,7 +657,9 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
               className="flex snap-x snap-mandatory gap-3 overflow-x-auto hide-scrollbar md:grid md:grid-cols-3 md:gap-4 md:overflow-visible"
             >
               {heroCards.map((c) => (
-                <div key={c.key} className="w-full shrink-0 snap-center md:w-auto">
+                // snap-always (scroll-snap-stop) = un deslizada avanza SOLO una tarjeta,
+                // por más fuerte que sea: para llegar a la última hay que deslizar 2 veces.
+                <div key={c.key} className="w-full shrink-0 snap-center snap-always md:w-auto">
                   <div className="rounded-3xl bg-[#1C1C28] p-6 text-center shadow-[0_16px_40px_-12px_rgba(17,24,39,0.5)] md:h-full">
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
                       {c.label}
@@ -725,60 +762,75 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                 ventas, y los gastos e ingresos que cargues con los botones de arriba.
               </div>
             ) : (
-              <div className="divide-y divide-border/50">
-                {movements.map((m) => (
-                  <div
-                    key={m.key}
-                    onClick={() => openMovement(m)}
-                    className="group flex cursor-pointer items-center gap-3 py-3"
-                  >
-                    <span
-                      className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                        m.type === "expense"
-                          ? "bg-rose-500/15 text-rose-500"
-                          : "bg-[#D1F366]/20 text-[#5c7a16] dark:text-[#D1F366]"
-                      )}
-                    >
-                      {m.type === "expense" ? (
-                        <ArrowDown className="h-4 w-4" strokeWidth={2.5} />
-                      ) : (
-                        <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
-                      )}
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{m.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[m.subtitle, movDate(m.date)].filter(Boolean).join(" · ")}
-                      </p>
+              // Agrupados por día: una barrita con la fecha y debajo sus movimientos
+              <div className="space-y-1">
+                {movementGroups.map((g) => (
+                  <div key={g.key}>
+                    {/* Barrita divisora con la fecha; debajo, los movimientos de ese día */}
+                    <div className="flex items-center gap-2 pb-1 pt-3">
+                      <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        {g.label}
+                      </span>
+                      <span className="h-px flex-1 bg-border" />
                     </div>
 
-                    <div className="shrink-0 text-right">
-                      <p
-                        className={cn(
-                          "text-sm font-bold",
-                          m.type === "expense" ? "text-rose-500" : "text-[#5c7a16] dark:text-[#D1F366]"
-                        )}
-                      >
-                        {m.type === "expense" ? "-" : "+"}
-                        {formatMoney(m.amount)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">{m.meta}</p>
-                    </div>
-
-                    {/* Solo los movimientos manuales se borran desde acá; las ventas no */}
-                    <div className="flex w-8 shrink-0 items-center justify-center">
-                      {m.kind === "manual" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground opacity-100 transition-opacity hover:text-red-500 md:opacity-0 md:group-hover:opacity-100"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(m.refId) }}
+                    <div className="divide-y divide-border/50">
+                      {g.items.map((m) => (
+                        <div
+                          key={m.key}
+                          onClick={() => openMovement(m)}
+                          className="group flex cursor-pointer items-center gap-3 py-3"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
+                          <span
+                            className={cn(
+                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                              m.type === "expense"
+                                ? "bg-rose-500/15 text-rose-500"
+                                : "bg-[#D1F366]/20 text-[#5c7a16] dark:text-[#D1F366]"
+                            )}
+                          >
+                            {m.type === "expense" ? (
+                              <ArrowDown className="h-4 w-4" strokeWidth={2.5} />
+                            ) : (
+                              <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+                            )}
+                          </span>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{m.title}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {[m.subtitle, movTime(m.date)].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <p
+                              className={cn(
+                                "text-sm font-bold",
+                                m.type === "expense" ? "text-rose-500" : "text-[#5c7a16] dark:text-[#D1F366]"
+                              )}
+                            >
+                              {m.type === "expense" ? "-" : "+"}
+                              {formatMoney(m.amount)}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">{m.meta}</p>
+                          </div>
+
+                          {/* Solo los movimientos manuales se borran desde acá; las ventas no */}
+                          <div className="flex w-8 shrink-0 items-center justify-center">
+                            {m.kind === "manual" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground opacity-100 transition-opacity hover:text-red-500 md:opacity-0 md:group-hover:opacity-100"
+                                onClick={(e) => { e.stopPropagation(); setDeleteId(m.refId) }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -985,7 +1037,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
             </DialogTitle>
             <DialogDescription>
               {saleDetail
-                ? `Pedido #${saleDetail.id.slice(0, 8).toUpperCase()} · ${new Date(saleDetail.created_at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}`
+                ? `Pedido #${saleDetail.id.slice(0, 8).toUpperCase()} · ${dayLabel(saleDetail.created_at)} a las ${movTime(saleDetail.created_at)}`
                 : "Cargando…"}
             </DialogDescription>
           </DialogHeader>
