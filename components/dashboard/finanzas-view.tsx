@@ -60,6 +60,7 @@ interface FinancialTransaction {
 }
 
 interface OrderRow {
+  id: string
   total_amount: number
   source: "bot" | "pos"
   status: string
@@ -188,14 +189,14 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
           .order("created_at", { ascending: false }),
         supabase
           .from("orders")
-          .select("total_amount, source, status, created_at")
+          .select("id, total_amount, source, status, created_at")
           .eq("user_id", userId)
           .neq("status", "cancelled")
           .gte("created_at", from.toISOString())
           .lte("created_at", to.toISOString()),
         supabase
           .from("orders")
-          .select("total_amount, source, status, created_at")
+          .select("id, total_amount, source, status, created_at")
           .eq("user_id", userId)
           .neq("status", "cancelled")
           .gte("created_at", sixMonthsAgo.toISOString()),
@@ -399,7 +400,36 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
     el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" })
   }
 
-  const visibleTx = showAllTx ? transactions : transactions.slice(0, 6)
+  // Feed único de movimientos: las VENTAS (bot / punto de venta) + los movimientos
+  // manuales (ingresos y gastos cargados a mano), ordenados por fecha.
+  // Antes la lista solo mostraba los manuales: si el negocio solo vendía, se veía vacía.
+  const movements = [
+    ...transactions.map((t) => ({
+      key: `tx-${t.id}`,
+      type: t.type,
+      title: categoryLabel(t.type, t.category),
+      subtitle: t.description || "",
+      meta: paymentMethods.find((p) => p.id === t.payment_method)?.label || "",
+      amount: Number(t.amount),
+      date: `${t.transaction_date}T00:00:00`,
+      tx: t as FinancialTransaction | undefined,
+    })),
+    ...orders.map((o) => ({
+      key: `order-${o.id}`,
+      type: "income" as const,
+      title: o.source === "bot" ? "Venta por el bot" : "Venta en el punto de venta",
+      subtitle: "",
+      meta: o.source === "bot" ? "Bot" : "Punto de venta",
+      amount: Number(o.total_amount || 0),
+      date: o.created_at,
+      tx: undefined as FinancialTransaction | undefined,
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  const visibleMovs = showAllTx ? movements : movements.slice(0, 6)
+
+  const movDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short" })
 
   return (
     <div className="space-y-6">
@@ -535,39 +565,39 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
           <section className="executive-card">
             <div className="mb-1 flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold">Movimientos</h2>
-              {transactions.length > 6 && (
+              {movements.length > 6 && (
                 <button
                   type="button"
                   onClick={() => setShowAllTx((v) => !v)}
                   className="rounded-full bg-muted px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
                 >
-                  {showAllTx ? "Ver menos" : "Ver todos"}
+                  {showAllTx ? "Ver menos" : `Ver todos (${movements.length})`}
                 </button>
               )}
             </div>
 
-            {transactions.length === 0 ? (
+            {movements.length === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                No hay movimientos en {periodLabels[period].toLowerCase()}. Registrá tu primer
-                gasto o ingreso con los botones de arriba.
+                No hay movimientos en {periodLabels[period].toLowerCase()}. Acá vas a ver tus
+                ventas, y los gastos e ingresos que cargues con los botones de arriba.
               </div>
             ) : (
               <div className="divide-y divide-border/50">
-                {visibleTx.map((tx) => (
+                {visibleMovs.map((m) => (
                   <div
-                    key={tx.id}
-                    onClick={() => openEdit(tx)}
-                    className="group flex cursor-pointer items-center gap-3 py-3"
+                    key={m.key}
+                    onClick={() => m.tx && openEdit(m.tx)}
+                    className={cn("group flex items-center gap-3 py-3", m.tx && "cursor-pointer")}
                   >
                     <span
                       className={cn(
                         "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                        tx.type === "expense"
+                        m.type === "expense"
                           ? "bg-rose-500/15 text-rose-500"
                           : "bg-[#D1F366]/20 text-[#5c7a16] dark:text-[#D1F366]"
                       )}
                     >
-                      {tx.type === "expense" ? (
+                      {m.type === "expense" ? (
                         <ArrowDown className="h-4 w-4" strokeWidth={2.5} />
                       ) : (
                         <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
@@ -575,15 +605,9 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                     </span>
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">
-                        {categoryLabel(tx.type, tx.category)}
-                      </p>
+                      <p className="truncate text-sm font-semibold">{m.title}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {tx.description ? `${tx.description} · ` : ""}
-                        {new Date(tx.transaction_date + "T00:00:00").toLocaleDateString("es-AR", {
-                          day: "numeric",
-                          month: "short",
-                        })}
+                        {[m.subtitle, movDate(m.date)].filter(Boolean).join(" · ")}
                       </p>
                     </div>
 
@@ -591,27 +615,27 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                       <p
                         className={cn(
                           "text-sm font-bold",
-                          tx.type === "expense" ? "text-rose-500" : "text-[#5c7a16] dark:text-[#D1F366]"
+                          m.type === "expense" ? "text-rose-500" : "text-[#5c7a16] dark:text-[#D1F366]"
                         )}
                       >
-                        {tx.type === "expense" ? "-" : "+"}
-                        {formatMoney(Number(tx.amount))}
+                        {m.type === "expense" ? "-" : "+"}
+                        {formatMoney(m.amount)}
                       </p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {paymentMethods.find((p) => p.id === tx.payment_method)?.label || ""}
-                      </p>
+                      <p className="text-[11px] text-muted-foreground">{m.meta}</p>
                     </div>
 
-                    {/* Acciones: siempre visibles en mobile, al pasar el mouse en desktop */}
-                    <div className="flex shrink-0 items-center opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                        onClick={(e) => { e.stopPropagation(); setDeleteId(tx.id) }}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                    {/* Solo los movimientos manuales se editan/borran; las ventas no */}
+                    <div className="flex w-8 shrink-0 items-center justify-center">
+                      {m.tx && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground opacity-100 transition-opacity hover:text-red-500 md:opacity-0 md:group-hover:opacity-100"
+                          onClick={(e) => { e.stopPropagation(); setDeleteId(m.tx!.id) }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}
