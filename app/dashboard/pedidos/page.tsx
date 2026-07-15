@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { PedidosClient } from "@/components/dashboard/pedidos-client"
@@ -62,16 +63,19 @@ export default async function PedidosPage() {
   }
 
   return (
-    <PedidosClient
-      userId={ownerId}
-      optionsByProduct={optionsByProduct}
-      initialOrders={orders || []}
-      initialProducts={products || []}
-      initialCategories={categories}
-      deliverySettings={deliverySettings || undefined}
-      businessName={profile?.business_name || "Mi Negocio"}
-      posTipEnabled={posSettings?.tip_enabled ?? false}
-      posTipPercent={Number(posSettings?.tip_percent) || 10}
-    />
+    // Suspense: PedidosClient usa useSearchParams (deep link ?order=<id> desde Finanzas)
+    <Suspense fallback={null}>
+      <PedidosClient
+        userId={ownerId}
+        optionsByProduct={optionsByProduct}
+        initialOrders={orders || []}
+        initialProducts={products || []}
+        initialCategories={categories}
+        deliverySettings={deliverySettings || undefined}
+        businessName={profile?.business_name || "Mi Negocio"}
+        posTipEnabled={posSettings?.tip_enabled ?? false}
+        posTipPercent={Number(posSettings?.tip_percent) || 10}
+      />
+    </Suspense>
   )
 }

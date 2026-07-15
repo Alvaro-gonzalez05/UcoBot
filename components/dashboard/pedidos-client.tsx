@@ -27,7 +27,7 @@ import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { createClient } from "@/lib/supabase/client"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn, normalizeSearchText } from "@/lib/utils"
@@ -172,6 +172,7 @@ export function PedidosClient({
   const [productTabCategory, setProductTabCategory] = useState("Todos")
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   // Ancho del ticket configurado por el negocio (58/80mm) para imprimir bien
   useEffect(() => {
@@ -262,6 +263,35 @@ export function PedidosClient({
       console.error("Error syncing recent orders:", e)
     }
   }
+
+  // Deep link desde Finanzas: /dashboard/pedidos?order=<id> abre ese pedido.
+  const deepLinkDone = useRef(false)
+  useEffect(() => {
+    const wanted = searchParams?.get("order")
+    if (!wanted || deepLinkDone.current) return
+    deepLinkDone.current = true
+    const open = async () => {
+      try {
+        const local = orders.find((o) => o.id === wanted)
+        if (local) { openDetail(local); return }
+        const { data, error } = await supabase
+          .from("orders")
+          .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
+          .eq("id", wanted)
+          .single()
+        if (error) throw error
+        if (data) openDetail(data as Order)
+      } catch (e) {
+        console.error("Error abriendo el pedido del link:", e)
+        toast.error("No se encontró ese pedido")
+      } finally {
+        // Limpiamos el parámetro para que no se reabra al navegar/refrescar
+        router.replace("/dashboard/pedidos")
+      }
+    }
+    open()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   // Al montar (entrar a la sección) y al volver a la pestaña, refrescamos.
   useEffect(() => {

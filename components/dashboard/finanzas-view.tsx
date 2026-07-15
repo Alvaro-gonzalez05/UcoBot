@@ -41,7 +41,8 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts"
-import { Loader2, Plus, Pencil, Trash2, Bot, Store, PenLine, ArrowUp, ArrowDown, BarChart3 } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Bot, Store, PenLine, ArrowUp, ArrowDown, BarChart3, ShoppingCart } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -66,6 +67,51 @@ interface OrderRow {
   status: string
   created_at: string
 }
+
+// Una fila del feed de movimientos (viene de la RPC finance_movements)
+interface Movement {
+  key: string
+  kind: "sale" | "manual"
+  type: "income" | "expense"
+  title: string
+  subtitle: string
+  meta: string
+  amount: number
+  date: string
+  refId: string
+}
+
+interface Totals {
+  ventasBot: number
+  ventasPos: number
+  ingresosManuales: number
+  gastos: number
+  cantVentas: number
+}
+
+const emptyTotals: Totals = {
+  ventasBot: 0,
+  ventasPos: 0,
+  ingresosManuales: 0,
+  gastos: 0,
+  cantVentas: 0,
+}
+
+// Detalle de una venta (para el sheet)
+interface SaleDetail {
+  id: string
+  total_amount: number
+  status: string
+  source: "bot" | "pos"
+  created_at: string
+  items: any[]
+  customer_notes: string | null
+  delivery_phone: string | null
+  client?: { name?: string } | null
+}
+
+// Cuántos movimientos trae cada tanda del scroll infinito
+const MOVS_PAGE = 10
 
 type Period = "this_month" | "last_month" | "last_3_months" | "this_year"
 
@@ -147,13 +193,20 @@ const emptyForm = {
 
 export function FinanzasView({ userId }: FinanzasViewProps) {
   const supabase = createClient()
+  const router = useRouter()
 
   const [period, setPeriod] = useState<Period>("this_month")
   const [loading, setLoading] = useState(true)
-  const [transactions, setTransactions] = useState<FinancialTransaction[]>([])
-  const [orders, setOrders] = useState<OrderRow[]>([])
   const [chartOrders, setChartOrders] = useState<OrderRow[]>([])
   const [chartTransactions, setChartTransactions] = useState<FinancialTransaction[]>([])
+
+  // Totales del período (salen de un SUM en la base, no de traer todas las filas)
+  const [totals, setTotals] = useState<Totals>({ ...emptyTotals })
+
+  // Feed de movimientos paginado (10 por tanda, scroll infinito)
+  const [movements, setMovements] = useState<Movement[]>([])
+  const [movsLoading, setMovsLoading] = useState(false)
+  const [movsHasMore, setMovsHasMore] = useState(true)
 
   // Form dialog
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -165,85 +218,168 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
   // Carrusel de tarjetas (mobile): se desliza entre Total ganado / Gastos / Ganancia neta
   const heroRef = useRef<HTMLDivElement>(null)
   const [heroIdx, setHeroIdx] = useState(0)
-  // Lista de movimientos: por defecto solo los últimos, con "Ver todos"
-  const [showAllTx, setShowAllTx] = useState(false)
   const [showChart, setShowChart] = useState(false)
 
-  const fetchData = useCallback(async () => {
+  // Detalle de una venta (sheet)
+  const [saleId, setSaleId] = useState<string | null>(null)
+  const [saleDetail, setSaleDetail] = useState<SaleDetail | null>(null)
+  const [saleLoading, setSaleLoading] = useState(false)
+
+  // ── Totales del período ─────────────────────────────────────────────────
+  const fetchTotals = useCallback(async () => {
     setLoading(true)
     try {
       const { from, to } = getPeriodRange(period)
-      const sixMonthsAgo = new Date()
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
-      sixMonthsAgo.setDate(1)
-      sixMonthsAgo.setHours(0, 0, 0, 0)
-
-      const [txRes, ordersRes, chartOrdersRes, chartTxRes] = await Promise.all([
-        supabase
-          .from("financial_transactions")
-          .select("id, type, category, description, amount, transaction_date, payment_method")
-          .eq("user_id", userId)
-          .gte("transaction_date", toDateInput(from))
-          .lte("transaction_date", toDateInput(to))
-          .order("transaction_date", { ascending: false })
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("orders")
-          .select("id, total_amount, source, status, created_at")
-          .eq("user_id", userId)
-          .neq("status", "cancelled")
-          .gte("created_at", from.toISOString())
-          .lte("created_at", to.toISOString()),
-        supabase
-          .from("orders")
-          .select("id, total_amount, source, status, created_at")
-          .eq("user_id", userId)
-          .neq("status", "cancelled")
-          .gte("created_at", sixMonthsAgo.toISOString()),
-        supabase
-          .from("financial_transactions")
-          .select("id, type, category, description, amount, transaction_date, payment_method")
-          .eq("user_id", userId)
-          .gte("transaction_date", toDateInput(sixMonthsAgo)),
-      ])
-
-      setTransactions((txRes.data as FinancialTransaction[]) || [])
-      setOrders((ordersRes.data as OrderRow[]) || [])
-      setChartOrders((chartOrdersRes.data as OrderRow[]) || [])
-      setChartTransactions((chartTxRes.data as FinancialTransaction[]) || [])
+      const { data, error } = await supabase.rpc("finance_totals", {
+        p_from: from.toISOString(),
+        p_to: to.toISOString(),
+      })
+      if (error) throw error
+      const row = (Array.isArray(data) ? data[0] : data) as any
+      setTotals({
+        ventasBot: Number(row?.ventas_bot || 0),
+        ventasPos: Number(row?.ventas_pos || 0),
+        ingresosManuales: Number(row?.ingresos_manuales || 0),
+        gastos: Number(row?.gastos || 0),
+        cantVentas: Number(row?.cant_ventas || 0),
+      })
     } catch (err) {
-      console.error("Error fetching finance data:", err)
-      toast.error("No se pudieron cargar los datos de finanzas")
+      console.error("Error fetching finance totals:", err)
+      toast.error("No se pudieron cargar los totales")
     } finally {
       setLoading(false)
     }
-  }, [period, userId])
+  }, [period, supabase])
 
+  // ── Movimientos: primera tanda / siguientes (scroll infinito) ───────────
+  const fetchMovements = useCallback(
+    async (offset: number) => {
+      const { from, to } = getPeriodRange(period)
+      const { data, error } = await supabase.rpc("finance_movements", {
+        p_from: from.toISOString(),
+        p_to: to.toISOString(),
+        p_limit: MOVS_PAGE,
+        p_offset: offset,
+      })
+      if (error) throw error
+      const rows = ((data as any[]) || []).map((r) => ({
+        key: String(r.key),
+        kind: r.kind as "sale" | "manual",
+        type: r.type as "income" | "expense",
+        title: r.kind === "manual" ? categoryLabel(r.type, r.title) : String(r.title),
+        subtitle: String(r.subtitle || ""),
+        meta: r.kind === "manual"
+          ? paymentMethods.find((p) => p.id === r.meta)?.label || ""
+          : String(r.meta || ""),
+        amount: Number(r.amount || 0),
+        date: String(r.occurred_at),
+        refId: String(r.ref_id),
+      })) as Movement[]
+      return rows
+    },
+    [period, supabase]
+  )
+
+  const reloadMovements = useCallback(async () => {
+    setMovsLoading(true)
+    try {
+      const rows = await fetchMovements(0)
+      setMovements(rows)
+      setMovsHasMore(rows.length === MOVS_PAGE)
+    } catch (err) {
+      console.error("Error fetching movements:", err)
+    } finally {
+      setMovsLoading(false)
+    }
+  }, [fetchMovements])
+
+  const loadMoreMovements = useCallback(async () => {
+    if (movsLoading || !movsHasMore) return
+    setMovsLoading(true)
+    try {
+      const rows = await fetchMovements(movements.length)
+      setMovements((prev) => {
+        const seen = new Set(prev.map((m) => m.key))
+        return [...prev, ...rows.filter((r) => !seen.has(r.key))]
+      })
+      setMovsHasMore(rows.length === MOVS_PAGE)
+    } catch (err) {
+      console.error("Error loading more movements:", err)
+    } finally {
+      setMovsLoading(false)
+    }
+  }, [fetchMovements, movements.length, movsHasMore, movsLoading])
+
+  // Al cambiar el período: totales + primera tanda de movimientos
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
+    fetchTotals()
+    setMovements([])
+    setMovsHasMore(true)
+    reloadMovements()
+  }, [fetchTotals, reloadMovements])
 
-  // ── Métricas del período ────────────────────────────────────────────────
+  // Refresca todo (después de crear/editar/borrar un movimiento)
+  const refreshAll = useCallback(() => {
+    fetchTotals()
+    reloadMovements()
+    setChartLoaded(false)
+  }, [fetchTotals, reloadMovements])
+
+  // Observer del scroll infinito
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const loadMoreRef = useRef(loadMoreMovements)
+  loadMoreRef.current = loadMoreMovements
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMoreRef.current() },
+      { rootMargin: "200px" }
+    )
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [movsHasMore])
+
+  // ── Gráfico: se carga recién cuando lo abrís (no pesa en la carga inicial) ──
+  const [chartLoaded, setChartLoaded] = useState(false)
+  useEffect(() => {
+    if (!showChart || chartLoaded) return
+    const load = async () => {
+      try {
+        const sixMonthsAgo = new Date()
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5)
+        sixMonthsAgo.setDate(1)
+        sixMonthsAgo.setHours(0, 0, 0, 0)
+        const [chartOrdersRes, chartTxRes] = await Promise.all([
+          supabase
+            .from("orders")
+            .select("id, total_amount, source, status, created_at")
+            .eq("user_id", userId)
+            .neq("status", "cancelled")
+            .gte("created_at", sixMonthsAgo.toISOString()),
+          supabase
+            .from("financial_transactions")
+            .select("id, type, category, description, amount, transaction_date, payment_method")
+            .eq("user_id", userId)
+            .gte("transaction_date", toDateInput(sixMonthsAgo)),
+        ])
+        setChartOrders((chartOrdersRes.data as OrderRow[]) || [])
+        setChartTransactions((chartTxRes.data as FinancialTransaction[]) || [])
+        setChartLoaded(true)
+      } catch (err) {
+        console.error("Error loading chart data:", err)
+      }
+    }
+    load()
+  }, [showChart, chartLoaded, supabase, userId])
+
+  // ── Métricas del período (derivadas de los totales) ──────────────────────
   const stats = useMemo(() => {
-    const ventasBot = orders
-      .filter((o) => o.source === "bot")
-      .reduce((sum, o) => sum + Number(o.total_amount || 0), 0)
-    const ventasPos = orders
-      .filter((o) => o.source === "pos")
-      .reduce((sum, o) => sum + Number(o.total_amount || 0), 0)
-    const ingresosManuales = transactions
-      .filter((t) => t.type === "income")
-      .reduce((sum, t) => sum + Number(t.amount), 0)
-    const gastos = transactions
-      .filter((t) => t.type === "expense")
-      .reduce((sum, t) => sum + Number(t.amount), 0)
-
-    const ingresosTotales = ventasBot + ventasPos + ingresosManuales
-    const ganancia = ingresosTotales - gastos
+    const ingresosTotales = totals.ventasBot + totals.ventasPos + totals.ingresosManuales
+    const ganancia = ingresosTotales - totals.gastos
     const margen = ingresosTotales > 0 ? (ganancia / ingresosTotales) * 100 : 0
-
-    return { ventasBot, ventasPos, ingresosManuales, gastos, ingresosTotales, ganancia, margen, cantVentas: orders.length }
-  }, [orders, transactions])
+    return { ...totals, ingresosTotales, ganancia, margen }
+  }, [totals])
 
   // ── Datos del gráfico: ingresos vs gastos últimos 6 meses ───────────────
   const chartData = useMemo(() => {
@@ -335,7 +471,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
             : "Ingreso registrado"
       )
       setDialogOpen(false)
-      fetchData()
+      refreshAll()
     } catch (err) {
       console.error("Error saving transaction:", err)
       toast.error("No se pudo guardar el movimiento")
@@ -350,7 +486,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
       const { error } = await supabase.from("financial_transactions").delete().eq("id", deleteId)
       if (error) throw error
       toast.success("Movimiento eliminado")
-      fetchData()
+      refreshAll()
     } catch (err) {
       console.error("Error deleting transaction:", err)
       toast.error("No se pudo eliminar el movimiento")
@@ -400,36 +536,51 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
     el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" })
   }
 
-  // Feed único de movimientos: las VENTAS (bot / punto de venta) + los movimientos
-  // manuales (ingresos y gastos cargados a mano), ordenados por fecha.
-  // Antes la lista solo mostraba los manuales: si el negocio solo vendía, se veía vacía.
-  const movements = [
-    ...transactions.map((t) => ({
-      key: `tx-${t.id}`,
-      type: t.type,
-      title: categoryLabel(t.type, t.category),
-      subtitle: t.description || "",
-      meta: paymentMethods.find((p) => p.id === t.payment_method)?.label || "",
-      amount: Number(t.amount),
-      date: `${t.transaction_date}T00:00:00`,
-      tx: t as FinancialTransaction | undefined,
-    })),
-    ...orders.map((o) => ({
-      key: `order-${o.id}`,
-      type: "income" as const,
-      title: o.source === "bot" ? "Venta por el bot" : "Venta en el punto de venta",
-      subtitle: "",
-      meta: o.source === "bot" ? "Bot" : "Punto de venta",
-      amount: Number(o.total_amount || 0),
-      date: o.created_at,
-      tx: undefined as FinancialTransaction | undefined,
-    })),
-  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-
-  const visibleMovs = showAllTx ? movements : movements.slice(0, 6)
-
   const movDate = (iso: string) =>
     new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short" })
+
+  // Al tocar un movimiento: si es manual → editar; si es venta → abrir su detalle
+  const openMovement = async (m: Movement) => {
+    if (m.kind === "manual") {
+      const tx = await fetchTransaction(m.refId)
+      if (tx) openEdit(tx)
+      return
+    }
+    setSaleId(m.refId)
+    setSaleDetail(null)
+    setSaleLoading(true)
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("id, total_amount, status, source, created_at, items, customer_notes, delivery_phone, client:client_id(name)")
+        .eq("id", m.refId)
+        .single()
+      if (error) throw error
+      setSaleDetail(data as unknown as SaleDetail)
+    } catch (err) {
+      console.error("Error loading sale detail:", err)
+      toast.error("No se pudo cargar la venta")
+    } finally {
+      setSaleLoading(false)
+    }
+  }
+
+  // El feed no trae la fila completa del movimiento manual: la buscamos para editar
+  const fetchTransaction = async (id: string): Promise<FinancialTransaction | null> => {
+    try {
+      const { data, error } = await supabase
+        .from("financial_transactions")
+        .select("id, type, category, description, amount, transaction_date, payment_method")
+        .eq("id", id)
+        .single()
+      if (error) throw error
+      return data as FinancialTransaction
+    } catch (err) {
+      console.error("Error loading transaction:", err)
+      toast.error("No se pudo abrir el movimiento")
+      return null
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -565,29 +716,21 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
           <section className="executive-card">
             <div className="mb-1 flex items-center justify-between gap-2">
               <h2 className="text-sm font-bold">Movimientos</h2>
-              {movements.length > 6 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllTx((v) => !v)}
-                  className="rounded-full bg-muted px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {showAllTx ? "Ver menos" : `Ver todos (${movements.length})`}
-                </button>
-              )}
+              <span className="text-[11px] text-muted-foreground">{periodLabels[period]}</span>
             </div>
 
-            {movements.length === 0 ? (
+            {movements.length === 0 && !movsLoading ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 No hay movimientos en {periodLabels[period].toLowerCase()}. Acá vas a ver tus
                 ventas, y los gastos e ingresos que cargues con los botones de arriba.
               </div>
             ) : (
               <div className="divide-y divide-border/50">
-                {visibleMovs.map((m) => (
+                {movements.map((m) => (
                   <div
                     key={m.key}
-                    onClick={() => m.tx && openEdit(m.tx)}
-                    className={cn("group flex items-center gap-3 py-3", m.tx && "cursor-pointer")}
+                    onClick={() => openMovement(m)}
+                    className="group flex cursor-pointer items-center gap-3 py-3"
                   >
                     <span
                       className={cn(
@@ -624,14 +767,14 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                       <p className="text-[11px] text-muted-foreground">{m.meta}</p>
                     </div>
 
-                    {/* Solo los movimientos manuales se editan/borran; las ventas no */}
+                    {/* Solo los movimientos manuales se borran desde acá; las ventas no */}
                     <div className="flex w-8 shrink-0 items-center justify-center">
-                      {m.tx && (
+                      {m.kind === "manual" && (
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-muted-foreground opacity-100 transition-opacity hover:text-red-500 md:opacity-0 md:group-hover:opacity-100"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(m.tx!.id) }}
+                          onClick={(e) => { e.stopPropagation(); setDeleteId(m.refId) }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -641,6 +784,15 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                 ))}
               </div>
             )}
+
+            {/* Sensor del scroll infinito: al asomarse, trae la próxima tanda */}
+            <div ref={sentinelRef} className="flex justify-center py-4">
+              {movsLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : !movsHasMore && movements.length > 0 ? (
+                <span className="text-[11px] text-muted-foreground">No hay más movimientos</span>
+              ) : null}
+            </div>
           </section>
 
           {/* Gráfico ingresos vs gastos (se muestra con el botón "Gráfico") */}
@@ -818,6 +970,96 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
               ) : (
                 "Registrar"
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detalle de una venta (sheet abajo en mobile, modal en desktop) */}
+      <Dialog open={!!saleId} onOpenChange={(o) => { if (!o) { setSaleId(null); setSaleDetail(null) } }}>
+        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {saleDetail?.source === "bot" ? <Bot className="h-5 w-5" /> : <Store className="h-5 w-5" />}
+              {saleDetail ? (saleDetail.source === "bot" ? "Venta por el bot" : "Venta en el punto de venta") : "Venta"}
+            </DialogTitle>
+            <DialogDescription>
+              {saleDetail
+                ? `Pedido #${saleDetail.id.slice(0, 8).toUpperCase()} · ${new Date(saleDetail.created_at).toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" })}`
+                : "Cargando…"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {saleLoading || !saleDetail ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground">Cliente</p>
+                  <p className="font-medium">
+                    {saleDetail.client?.name ||
+                      (saleDetail.delivery_phone && saleDetail.delivery_phone !== "venta-local"
+                        ? saleDetail.delivery_phone
+                        : "Cliente anónimo")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Estado</p>
+                  <p className="font-medium capitalize">{saleDetail.status}</p>
+                </div>
+              </div>
+
+              <p className="mt-4 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Productos
+              </p>
+              <div className="mt-2 space-y-2">
+                {Array.isArray(saleDetail.items) && saleDetail.items.length > 0 ? (
+                  saleDetail.items
+                    .filter((it: any) => !it?.removed)
+                    .map((it: any, i: number) => (
+                      <div key={i} className="flex items-start justify-between gap-2 rounded-xl bg-muted/40 px-3 py-2">
+                        <span className="min-w-0 text-sm">
+                          {it.quantity}x {it.name || it.product_name || `Producto ${i + 1}`}
+                          {Array.isArray(it.options) && it.options.length > 0 && (
+                            <span className="block text-[11px] text-muted-foreground">
+                              {it.options.map((o: any) => (typeof o === "string" ? o : o?.name)).filter(Boolean).join(" · ")}
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 text-sm font-semibold">
+                          {formatMoney((Number(it.price) || 0) * (Number(it.quantity) || 1))}
+                        </span>
+                      </div>
+                    ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">Sin detalle de productos</p>
+                )}
+              </div>
+
+              {saleDetail.customer_notes && (
+                <p className="mt-3 rounded-xl bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                  {saleDetail.customer_notes}
+                </p>
+              )}
+
+              <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Total</span>
+                <span className="text-xl font-black">{formatMoney(Number(saleDetail.total_amount || 0))}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-3 shrink-0">
+            <Button
+              onClick={() => saleDetail && router.push(`/dashboard/pedidos?order=${saleDetail.id}`)}
+              disabled={!saleDetail}
+              className="w-full gap-2 rounded-xl bg-[#D1F366] font-bold text-[#1C1C28] hover:bg-[#B3D93C]"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Ver el pedido
             </Button>
           </div>
         </DialogContent>
