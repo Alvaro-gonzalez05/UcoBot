@@ -498,7 +498,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
   const categories = form.type === "expense" ? expenseCategories : incomeCategories
 
   // ── Tarjetas del carrusel (mobile) / grilla (desktop) ───────────────────
-  const nExpenses = transactions.filter((t) => t.type === "expense").length
+  const nExpenses = movements.filter((t) => t.type === "expense").length
   const heroCards = [
     {
       key: "ingresos",
