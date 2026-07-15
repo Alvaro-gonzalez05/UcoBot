@@ -23,6 +23,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { MetaConnectionCard } from "./meta-connection-card"
+import { WhatsappQualityCard } from "./whatsapp-quality-card"
 import { WhatsAppTemplatesManager } from "./whatsapp-templates-manager"
 import {
   Plus,
@@ -840,6 +841,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
             {(["whatsapp", "instagram", "messenger"] as const).map((p) => (
               <MetaConnectionCard key={p} platform={p} onStatusChange={handleConnectionStatus} />
             ))}
+
+            <WhatsappQualityCard />
 
             <div className="executive-card">
               <Button

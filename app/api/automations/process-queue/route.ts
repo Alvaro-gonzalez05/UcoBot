@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { createNotification } from '@/lib/notifications'
 import { getWhatsAppToken, getInstagramToken, getGraphVersion } from '@/lib/meta/credentials'
+import { getNumberQuality, isSendAllowed } from '@/lib/meta/quality'
 
 // Endpoint para procesar la cola de mensajes programados
 // Se puede llamar manualmente o desde un cron job
@@ -400,6 +401,19 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{ success: b
     if (!whatsappConfig.phone_number_id || !whatsappToken) {
       console.error('[WhatsApp] Missing required config fields:', whatsappConfig)
       return { success: false, error: 'WhatsApp configuration incomplete' }
+    }
+
+    // Gate de calidad. Esta cola es reengagement proactivo (follow-ups, promociones),
+    // que es exactamente el patrón que degrada la calidad del número cuando el
+    // destinatario no lo espera. Se corta con calidad YELLOW o peor.
+    const quality = await getNumberQuality(whatsappConfig.phone_number_id)
+    const gate = isSendAllowed(quality, 'marketing')
+    if (!gate.allowed) {
+      console.warn('[WhatsApp] Envío automático bloqueado por calidad:', {
+        phone_number_id: whatsappConfig.phone_number_id,
+        reason: gate.reason,
+      })
+      return { success: false, error: `Bloqueado por calidad del número: ${gate.reason}` }
     }
 
     // Preparar el mensaje para WhatsApp Business API

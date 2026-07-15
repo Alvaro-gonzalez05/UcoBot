@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
+import { getNumberQuality, isSendAllowed } from "@/lib/meta/quality"
 
 /**
  * Envía una plantilla de WhatsApp aprobada para REABRIR la ventana de 24 hs
@@ -63,6 +64,20 @@ export async function POST(request: NextRequest) {
     const phoneNumberId = integration?.config?.phone_number_id
     if (!accessToken || !phoneNumberId) {
       return NextResponse.json({ error: "WhatsApp no está configurado correctamente" }, { status: 400 })
+    }
+
+    // Gate de calidad. Este envío reabre la ventana de 24 hs, así que cuenta
+    // contra la calidad del número si el destinatario lo bloquea o reporta.
+    // Lo tratamos como 'utility': hay un agente humano trabajando esta
+    // conversación puntual, no un cron disparando a una lista. Con calidad RED
+    // o número flaggeado igual se corta.
+    const quality = await getNumberQuality(phoneNumberId)
+    const gate = isSendAllowed(quality, "utility")
+    if (!gate.allowed) {
+      return NextResponse.json(
+        { error: `Envío bloqueado por calidad del número: ${gate.reason}. Revisá el estado del número antes de reintentar.` },
+        { status: 403 }
+      )
     }
 
     // Componentes: los que mandó el front (header/body/botones) o, si no, body simple

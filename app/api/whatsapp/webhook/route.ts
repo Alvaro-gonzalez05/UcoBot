@@ -3,6 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cookies } from 'next/headers'
 import { getWhatsAppToken } from '@/lib/meta/credentials'
 import { storeWhatsAppMedia } from '@/lib/meta/store-media'
+import { handleQualityUpdate } from '@/lib/meta/quality'
 
 // Webhook verification (GET request)
 export async function GET(request: NextRequest) {
@@ -87,6 +88,14 @@ export async function POST(request: NextRequest) {
           for (const change of entry.changes) {
             if (change.field === 'messages') {
               await processWhatsAppMessage(change.value, origin)
+            } else if (change.field === 'phone_number_quality_update') {
+              // Meta avisa acá cuando baja la calidad de un número. Es la única
+              // señal temprana antes de que inhabilite el número o el negocio.
+              try {
+                await handleQualityUpdate(entry.id ?? null, change.value)
+              } catch (e) {
+                console.error('[WA quality] error procesando evento:', e)
+              }
             } else {
               // COEXISTENCIA: campos como history / smb_message_echoes / smb_app_state_sync.
               // Por ahora los logueamos para ver el formato REAL de Meta y después
