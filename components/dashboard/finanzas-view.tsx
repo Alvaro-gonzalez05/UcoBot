@@ -530,6 +530,12 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
     const i = Math.round(el.scrollLeft / el.clientWidth)
     setHeroIdx(Math.max(0, Math.min(heroCards.length - 1, i)))
   }
+  const onHeroTouchEnd = () => {
+    const el = heroRef.current
+    if (!el || el.clientWidth === 0) return
+    const i = Math.round(el.scrollLeft / el.clientWidth)
+    goHero(i)
+  }
   const goHero = (i: number) => {
     const el = heroRef.current
     if (!el) return
@@ -538,6 +544,22 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
 
   const movDate = (iso: string) =>
     new Date(iso).toLocaleDateString("es-AR", { day: "numeric", month: "short" })
+
+  const movTime = (iso: string) =>
+    new Date(iso).toLocaleTimeString("es-AR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    })
+
+  const movementsByDay = useMemo(() => {
+    return movements.reduce((acc, m) => {
+      const dayKey = new Date(m.date).toISOString().slice(0, 10)
+      if (!acc[dayKey]) acc[dayKey] = []
+      acc[dayKey].push(m)
+      return acc
+    }, {} as Record<string, Movement[]>)
+  }, [movements])
 
   // Al tocar un movimiento: si es manual → editar; si es venta → abrir su detalle
   const openMovement = async (m: Movement) => {
@@ -619,10 +641,15 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
             <div
               ref={heroRef}
               onScroll={onHeroScroll}
+              onTouchEnd={onHeroTouchEnd}
               className="flex snap-x snap-mandatory gap-3 overflow-x-auto hide-scrollbar md:grid md:grid-cols-3 md:gap-4 md:overflow-visible"
             >
               {heroCards.map((c) => (
-                <div key={c.key} className="w-full shrink-0 snap-center md:w-auto">
+                <div
+                  key={c.key}
+                  className="w-full shrink-0 snap-center md:w-auto"
+                  style={{ scrollSnapStop: "always" }}
+                >
                   <div className="rounded-3xl bg-[#1C1C28] p-6 text-center shadow-[0_16px_40px_-12px_rgba(17,24,39,0.5)] md:h-full">
                     <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
                       {c.label}
@@ -725,60 +752,72 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
                 ventas, y los gastos e ingresos que cargues con los botones de arriba.
               </div>
             ) : (
-              <div className="divide-y divide-border/50">
-                {movements.map((m) => (
-                  <div
-                    key={m.key}
-                    onClick={() => openMovement(m)}
-                    className="group flex cursor-pointer items-center gap-3 py-3"
-                  >
-                    <span
-                      className={cn(
-                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                        m.type === "expense"
-                          ? "bg-rose-500/15 text-rose-500"
-                          : "bg-[#D1F366]/20 text-[#5c7a16] dark:text-[#D1F366]"
-                      )}
-                    >
-                      {m.type === "expense" ? (
-                        <ArrowDown className="h-4 w-4" strokeWidth={2.5} />
-                      ) : (
-                        <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
-                      )}
-                    </span>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{m.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {[m.subtitle, movDate(m.date)].filter(Boolean).join(" · ")}
-                      </p>
+              <div className="space-y-4">
+                {Object.entries(movementsByDay).map(([dayKey, dayMovements]) => (
+                  <div key={dayKey} className="rounded-3xl bg-muted/40 p-3">
+                    <div className="mb-3 rounded-full bg-muted px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      {new Date(dayKey).toLocaleDateString("es-AR", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "short",
+                      })}
                     </div>
-
-                    <div className="shrink-0 text-right">
-                      <p
-                        className={cn(
-                          "text-sm font-bold",
-                          m.type === "expense" ? "text-rose-500" : "text-[#5c7a16] dark:text-[#D1F366]"
-                        )}
-                      >
-                        {m.type === "expense" ? "-" : "+"}
-                        {formatMoney(m.amount)}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">{m.meta}</p>
-                    </div>
-
-                    {/* Solo los movimientos manuales se borran desde acá; las ventas no */}
-                    <div className="flex w-8 shrink-0 items-center justify-center">
-                      {m.kind === "manual" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground opacity-100 transition-opacity hover:text-red-500 md:opacity-0 md:group-hover:opacity-100"
-                          onClick={(e) => { e.stopPropagation(); setDeleteId(m.refId) }}
+                    <div className="divide-y divide-border/50 rounded-3xl bg-[#0f172a]/80">
+                      {dayMovements.map((m) => (
+                        <div
+                          key={m.key}
+                          onClick={() => openMovement(m)}
+                          className="group flex cursor-pointer items-center gap-3 px-4 py-3"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      )}
+                          <span
+                            className={cn(
+                              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                              m.type === "expense"
+                                ? "bg-rose-500/15 text-rose-500"
+                                : "bg-[#D1F366]/20 text-[#5c7a16] dark:text-[#D1F366]"
+                            )}
+                          >
+                            {m.type === "expense" ? (
+                              <ArrowDown className="h-4 w-4" strokeWidth={2.5} />
+                            ) : (
+                              <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+                            )}
+                          </span>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold">{m.title}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {[m.subtitle, movTime(m.date)].filter(Boolean).join(" · ")}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0 text-right">
+                            <p
+                              className={cn(
+                                "text-sm font-bold",
+                                m.type === "expense" ? "text-rose-500" : "text-[#5c7a16] dark:text-[#D1F366]"
+                              )}
+                            >
+                              {m.type === "expense" ? "-" : "+"}
+                              {formatMoney(m.amount)}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">{m.meta}</p>
+                          </div>
+
+                          <div className="flex w-8 shrink-0 items-center justify-center">
+                            {m.kind === "manual" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground opacity-100 transition-opacity hover:text-red-500 md:opacity-0 md:group-hover:opacity-100"
+                                onClick={(e) => { e.stopPropagation(); setDeleteId(m.refId) }}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
