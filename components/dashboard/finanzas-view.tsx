@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -41,7 +41,7 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts"
-import { Loader2, Plus, Pencil, Trash2, Bot, Store, PenLine } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Bot, Store, PenLine, ArrowUp, ArrowDown, BarChart3 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
@@ -160,6 +160,13 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
   const [form, setForm] = useState({ ...emptyForm })
   const [saving, setSaving] = useState(false)
   const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  // Carrusel de tarjetas (mobile): se desliza entre Total ganado / Gastos / Ganancia neta
+  const heroRef = useRef<HTMLDivElement>(null)
+  const [heroIdx, setHeroIdx] = useState(0)
+  // Lista de movimientos: por defecto solo los últimos, con "Ver todos"
+  const [showAllTx, setShowAllTx] = useState(false)
+  const [showChart, setShowChart] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -353,6 +360,47 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
 
   const categories = form.type === "expense" ? expenseCategories : incomeCategories
 
+  // ── Tarjetas del carrusel (mobile) / grilla (desktop) ───────────────────
+  const nExpenses = transactions.filter((t) => t.type === "expense").length
+  const heroCards = [
+    {
+      key: "ingresos",
+      label: "Total ganado",
+      value: stats.ingresosTotales,
+      accent: "text-[#D1F366]",
+      sub: `${stats.cantVentas} venta${stats.cantVentas === 1 ? "" : "s"} + ingresos manuales`,
+    },
+    {
+      key: "gastos",
+      label: "Gastos",
+      value: stats.gastos,
+      accent: "text-rose-400",
+      sub: `${nExpenses} gasto${nExpenses === 1 ? "" : "s"} registrado${nExpenses === 1 ? "" : "s"}`,
+    },
+    {
+      key: "neta",
+      label: "Ganancia neta",
+      value: stats.ganancia,
+      accent: stats.ganancia < 0 ? "text-rose-400" : "text-[#D1F366]",
+      sub: `Margen del ${stats.margen.toFixed(1)}% sobre ingresos`,
+    },
+  ]
+
+  // El índice activo sale del scroll real (así funciona el swipe nativo del celu)
+  const onHeroScroll = () => {
+    const el = heroRef.current
+    if (!el || el.clientWidth === 0) return
+    const i = Math.round(el.scrollLeft / el.clientWidth)
+    setHeroIdx(Math.max(0, Math.min(heroCards.length - 1, i)))
+  }
+  const goHero = (i: number) => {
+    const el = heroRef.current
+    if (!el) return
+    el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" })
+  }
+
+  const visibleTx = showAllTx ? transactions : transactions.slice(0, 6)
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -365,7 +413,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
         </div>
         <div className="flex items-center gap-2">
           <Select value={period} onValueChange={(v) => setPeriod(v as Period)}>
-            <SelectTrigger className="w-[170px] input-field">
+            <SelectTrigger className="w-full sm:w-[170px] input-field">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -385,92 +433,194 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
         </div>
       ) : (
         <>
-          {/* KPI Cards */}
-          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-              <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-2xl flex items-center justify-center text-green-500 mb-4">
-                <span className="material-symbols-outlined text-2xl">trending_up</span>
-              </div>
-              <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">
-                Ingresos totales
-              </h3>
-              <p className="text-3xl font-black mt-1">{formatMoney(stats.ingresosTotales)}</p>
-              <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                {stats.cantVentas} venta{stats.cantVentas === 1 ? "" : "s"} + ingresos manuales en{" "}
-                {periodLabels[period].toLowerCase()}
-              </p>
+          {/* ── Tarjetas: se deslizan en mobile (3 puntitos), grilla en desktop ── */}
+          <section>
+            <div
+              ref={heroRef}
+              onScroll={onHeroScroll}
+              className="flex snap-x snap-mandatory gap-3 overflow-x-auto hide-scrollbar md:grid md:grid-cols-3 md:gap-4 md:overflow-visible"
+            >
+              {heroCards.map((c) => (
+                <div key={c.key} className="w-full shrink-0 snap-center md:w-auto">
+                  <div className="rounded-3xl bg-[#1C1C28] p-6 text-center shadow-[0_16px_40px_-12px_rgba(17,24,39,0.5)] md:h-full">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/45">
+                      {c.label}
+                    </p>
+                    <p className={cn("mt-2 text-4xl font-black tracking-tight sm:text-[2.75rem]", c.accent)}>
+                      {formatMoney(c.value)}
+                    </p>
+                    <p className="mt-2 text-[11px] leading-relaxed text-white/40">{c.sub}</p>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-              <div className="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-2xl flex items-center justify-center text-red-500 mb-4">
-                <span className="material-symbols-outlined text-2xl">trending_down</span>
-              </div>
-              <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">
-                Gastos
-              </h3>
-              <p className="text-3xl font-black mt-1">{formatMoney(stats.gastos)}</p>
-              <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                {transactions.filter((t) => t.type === "expense").length} gasto
-                {transactions.filter((t) => t.type === "expense").length === 1 ? "" : "s"} registrado
-                {transactions.filter((t) => t.type === "expense").length === 1 ? "" : "s"}
-              </p>
-            </div>
-
-            <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-              <div className="w-12 h-12 bg-[#D1F366]/10 rounded-2xl flex items-center justify-center text-[#D1F366] mb-4">
-                <span className="material-symbols-outlined text-2xl">savings</span>
-              </div>
-              <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">
-                Ganancia neta
-              </h3>
-              <p
-                className={cn(
-                  "text-3xl font-black mt-1",
-                  stats.ganancia < 0 && "text-red-500"
-                )}
-              >
-                {formatMoney(stats.ganancia)}
-              </p>
-              <p className="text-[11px] text-[#64748B] mt-4 leading-relaxed">
-                Margen del {stats.margen.toFixed(1)}% sobre ingresos
-              </p>
-            </div>
-
-            <div className="executive-card group hover:translate-y-[-2px] transition-transform">
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-2xl flex items-center justify-center text-blue-500 mb-4">
-                <span className="material-symbols-outlined text-2xl">storefront</span>
-              </div>
-              <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">
-                Origen de ventas
-              </h3>
-              <div className="mt-2 space-y-1.5">
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <Bot className="w-3.5 h-3.5" />
-                    Bot
-                  </span>
-                  <span className="font-bold">{formatMoney(stats.ventasBot)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <Store className="w-3.5 h-3.5" />
-                    Punto de venta
-                  </span>
-                  <span className="font-bold">{formatMoney(stats.ventasPos)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <PenLine className="w-3.5 h-3.5" />
-                    Manuales
-                  </span>
-                  <span className="font-bold">{formatMoney(stats.ingresosManuales)}</span>
-                </div>
-              </div>
+            {/* Puntitos (solo mobile: en desktop se ven las 3 juntas) */}
+            <div className="mt-3 flex justify-center gap-1.5 md:hidden">
+              {heroCards.map((c, i) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  aria-label={`Ver ${c.label}`}
+                  onClick={() => goHero(i)}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    i === heroIdx ? "w-6 bg-[#D1F366]" : "w-1.5 bg-muted-foreground/30"
+                  )}
+                />
+              ))}
             </div>
           </section>
 
-          {/* Gráfico ingresos vs gastos */}
+          {/* ── Acciones rápidas ── */}
+          <section className="flex items-start justify-center gap-8 sm:gap-12">
+            <button
+              type="button"
+              onClick={() => openCreate("income")}
+              className="group flex flex-col items-center gap-2"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#D1F366] text-[#1C1C28] shadow-md transition-transform group-hover:scale-105 group-active:scale-90">
+                <ArrowUp className="h-5 w-5" strokeWidth={2.5} />
+              </span>
+              <span className="text-xs font-semibold">Ingreso</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => openCreate("expense")}
+              className="group flex flex-col items-center gap-2"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-white shadow-md transition-transform group-hover:scale-105 group-active:scale-90">
+                <ArrowDown className="h-5 w-5" strokeWidth={2.5} />
+              </span>
+              <span className="text-xs font-semibold">Gasto</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowChart((v) => !v)}
+              className="group flex flex-col items-center gap-2"
+            >
+              <span className={cn(
+                "flex h-14 w-14 items-center justify-center rounded-full shadow-md transition-transform group-hover:scale-105 group-active:scale-90",
+                showChart ? "bg-[#1f2030] text-[#d8ff55]" : "bg-muted text-muted-foreground"
+              )}>
+                <BarChart3 className="h-5 w-5" strokeWidth={2.5} />
+              </span>
+              <span className="text-xs font-semibold">Gráfico</span>
+            </button>
+          </section>
+
+          {/* ── Origen de las ventas (resumen compacto) ── */}
           <section className="executive-card">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Origen de las ventas
+            </h2>
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-4">
+              {[
+                { icon: Bot, label: "Bot", value: stats.ventasBot },
+                { icon: Store, label: "Punto de venta", value: stats.ventasPos },
+                { icon: PenLine, label: "Manuales", value: stats.ingresosManuales },
+              ].map(({ icon: Icon, label, value }) => (
+                <div key={label} className="flex items-center justify-between gap-2 rounded-2xl bg-muted/40 px-3 py-2.5 sm:flex-col sm:items-start sm:gap-1">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Icon className="h-3.5 w-3.5" />
+                    {label}
+                  </span>
+                  <span className="text-sm font-bold sm:text-lg">{formatMoney(value)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ── Movimientos (estilo lista) ── */}
+          <section className="executive-card">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold">Movimientos</h2>
+              {transactions.length > 6 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllTx((v) => !v)}
+                  className="rounded-full bg-muted px-3 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {showAllTx ? "Ver menos" : "Ver todos"}
+                </button>
+              )}
+            </div>
+
+            {transactions.length === 0 ? (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                No hay movimientos en {periodLabels[period].toLowerCase()}. Registrá tu primer
+                gasto o ingreso con los botones de arriba.
+              </div>
+            ) : (
+              <div className="divide-y divide-border/50">
+                {visibleTx.map((tx) => (
+                  <div
+                    key={tx.id}
+                    onClick={() => openEdit(tx)}
+                    className="group flex cursor-pointer items-center gap-3 py-3"
+                  >
+                    <span
+                      className={cn(
+                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                        tx.type === "expense"
+                          ? "bg-rose-500/15 text-rose-500"
+                          : "bg-[#D1F366]/20 text-[#5c7a16] dark:text-[#D1F366]"
+                      )}
+                    >
+                      {tx.type === "expense" ? (
+                        <ArrowDown className="h-4 w-4" strokeWidth={2.5} />
+                      ) : (
+                        <ArrowUp className="h-4 w-4" strokeWidth={2.5} />
+                      )}
+                    </span>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold">
+                        {categoryLabel(tx.type, tx.category)}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {tx.description ? `${tx.description} · ` : ""}
+                        {new Date(tx.transaction_date + "T00:00:00").toLocaleDateString("es-AR", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={cn(
+                          "text-sm font-bold",
+                          tx.type === "expense" ? "text-rose-500" : "text-[#5c7a16] dark:text-[#D1F366]"
+                        )}
+                      >
+                        {tx.type === "expense" ? "-" : "+"}
+                        {formatMoney(Number(tx.amount))}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {paymentMethods.find((p) => p.id === tx.payment_method)?.label || ""}
+                      </p>
+                    </div>
+
+                    {/* Acciones: siempre visibles en mobile, al pasar el mouse en desktop */}
+                    <div className="flex shrink-0 items-center opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-red-500"
+                        onClick={(e) => { e.stopPropagation(); setDeleteId(tx.id) }}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Gráfico ingresos vs gastos (se muestra con el botón "Gráfico") */}
+          <section className={cn("executive-card", !showChart && "hidden")}>
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-bold">Ingresos vs Gastos</h2>
@@ -515,105 +665,6 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
             </p>
           </section>
 
-          {/* Movimientos manuales */}
-          <section className="executive-card space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-bold">Movimientos manuales</h2>
-                <p className="text-xs text-muted-foreground">
-                  Gastos e ingresos que no pasan por el bot ni el punto de venta
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5 text-xs"
-                  onClick={() => openCreate("income")}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Ingreso
-                </Button>
-                <Button
-                  size="sm"
-                  className="gap-1.5 text-xs bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold"
-                  onClick={() => openCreate("expense")}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Gasto
-                </Button>
-              </div>
-            </div>
-
-            {transactions.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">
-                No hay movimientos en {periodLabels[period].toLowerCase()}. Registrá tu primer
-                gasto o ingreso con los botones de arriba.
-              </div>
-            ) : (
-              <div className="divide-y divide-border/50">
-                {transactions.map((tx) => (
-                  <div key={tx.id} className="flex items-center gap-3 py-3">
-                    <Badge
-                      className={cn(
-                        "flex-shrink-0",
-                        tx.type === "expense"
-                          ? "bg-red-500/15 text-red-500 border-red-500/30 hover:bg-red-500/20"
-                          : "bg-green-500/15 text-green-600 border-green-500/30 hover:bg-green-500/20"
-                      )}
-                    >
-                      {tx.type === "expense" ? "Gasto" : "Ingreso"}
-                    </Badge>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {categoryLabel(tx.type, tx.category)}
-                        {tx.description ? (
-                          <span className="text-muted-foreground font-normal"> · {tx.description}</span>
-                        ) : null}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(tx.transaction_date + "T00:00:00").toLocaleDateString("es-AR", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                        {tx.payment_method
-                          ? ` · ${paymentMethods.find((p) => p.id === tx.payment_method)?.label || tx.payment_method}`
-                          : ""}
-                      </p>
-                    </div>
-                    <p
-                      className={cn(
-                        "text-sm font-bold flex-shrink-0",
-                        tx.type === "expense" ? "text-red-500" : "text-green-600"
-                      )}
-                    >
-                      {tx.type === "expense" ? "-" : "+"}
-                      {formatMoney(Number(tx.amount))}
-                    </p>
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground"
-                        onClick={() => openEdit(tx)}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-red-500"
-                        onClick={() => setDeleteId(tx.id)}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
         </>
       )}
 
