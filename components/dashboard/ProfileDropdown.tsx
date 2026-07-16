@@ -5,6 +5,7 @@ import {
   Check,
   ChevronUp,
   ChevronRight,
+  ChevronLeft,
   Crown,
   DoorOpen,
   Sun,
@@ -447,7 +448,7 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
           app). Va con el Dialog de Radix porque portea al <body>: el <nav> del
           downbar tiene un transform y eso rompería un `fixed` propio. */}
       <Dialog open={isOpen && isMobile} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col gap-0 rounded-2xl p-0 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[90dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col gap-0 rounded-2xl p-0 app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[90dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
           <DialogTitle className="sr-only">Perfil</DialogTitle>
           <div className="px-4 pt-4">
             <SheetGrabBar onDismiss={() => setIsOpen(false)} />
@@ -483,8 +484,17 @@ export default function ProfileDropdown({ user, profile, position = "sidebar", t
       {/* Sheet de la sección de configuración elegida (sheet en móvil, modal en PC).
           Reusa el MISMO contenido que los tabs de /configuracion vía `section`. */}
       <Dialog open={!!openSection} onOpenChange={(o) => { if (!o) setOpenSection(null); }}>
-        <DialogContent className="max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col gap-0 rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[90dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <DialogContent className="max-w-2xl w-full max-h-[92vh] overflow-hidden flex flex-col gap-0 rounded-2xl p-4 sm:p-6 app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[90dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
           <SheetGrabBar onDismiss={() => setOpenSection(null)} />
+          {/* Volver: cierra esta sección y reabre el panel del perfil (animación inversa) */}
+          <button
+            type="button"
+            onClick={() => { setOpenSection(null); setIsOpen(true); }}
+            className="mb-1 -ml-1 flex w-fit items-center gap-1 rounded-lg px-2 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Volver
+          </button>
           <DialogHeader className="shrink-0 text-left">
             <DialogTitle className="flex items-center gap-2">
               {activeSection && <activeSection.icon className="h-5 w-5" />}

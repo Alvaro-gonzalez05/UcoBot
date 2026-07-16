@@ -899,7 +899,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
 
       {/* Dialog alta/edición */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
           {/* Ranura de agarre: arrastrar hacia abajo cierra (solo móvil) */}
           <SheetGrabBar onDismiss={() => setDialogOpen(false)} />
           <DialogHeader>
@@ -1032,7 +1032,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
 
       {/* Detalle de una venta (sheet abajo en mobile, modal en desktop) */}
       <Dialog open={!!saleId} onOpenChange={(o) => { if (!o) { setSaleId(null); setSaleDetail(null) } }}>
-        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <DialogContent className="max-w-md w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
           {/* Ranura de agarre: se arrastra hacia abajo para cerrar (solo móvil) */}
           <SheetGrabBar onDismiss={() => { setSaleId(null); setSaleDetail(null) }} />
           <DialogHeader>

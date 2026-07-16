@@ -561,7 +561,7 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
 
       {/* Detalles de la reserva (bottom sheet en móvil) */}
       <Dialog open={!!viewReservation} onOpenChange={(o) => !o && setViewReservation(null)}>
-        <DialogContent className="w-full rounded-2xl max-h-[92vh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <DialogContent className="w-full rounded-2xl max-h-[92vh] overflow-y-auto app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
           <SheetGrabBar onDismiss={() => setViewReservation(null)} />
           <DialogHeader>
             <DialogTitle>Detalles de la Reserva</DialogTitle>
@@ -604,7 +604,7 @@ export function ReservasClient({ reservations, pagination, demo = false }: Reser
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="w-full rounded-2xl max-h-[92vh] overflow-y-auto max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <DialogContent className="w-full rounded-2xl max-h-[92vh] overflow-y-auto app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
           <SheetGrabBar onDismiss={() => setIsEditDialogOpen(false)} />
           <DialogHeader>
             <DialogTitle>Editar / Reprogramar Reserva</DialogTitle>
