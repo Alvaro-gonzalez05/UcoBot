@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle2, Loader2, Link2, AlertCircle, RefreshCw, Instagram, Settings2, Copy } from "lucide-react"
+import { CheckCircle2, Loader2, Link2, AlertCircle, RefreshCw, Instagram, Settings2, Copy, QrCode } from "lucide-react"
 import { FaWhatsapp, FaFacebookMessenger } from "react-icons/fa"
 import { toast } from "sonner"
 
@@ -274,11 +274,119 @@ function ManualWhatsAppDialog({
   )
 }
 
+/**
+ * Diálogo de conexión vía Evolution API (WhatsApp Web, QR).
+ * Tercera opción de conexión, junto a Manual y Embedded Signup.
+ * Puente temporal mientras se resuelve el Tech Provider de Meta.
+ */
+function EvolutionConnectDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onSaved: () => void
+}) {
+  const [qr, setQr] = useState<string | null>(null)
+  const [starting, setStarting] = useState(false)
+  const [state, setState] = useState<string>("idle")
+
+  useEffect(() => {
+    if (!open) {
+      setQr(null)
+      setState("idle")
+      return
+    }
+
+    let cancelled = false
+    let pollTimer: ReturnType<typeof setInterval> | null = null
+
+    const start = async () => {
+      setStarting(true)
+      try {
+        const res = await fetch("/api/integrations/whatsapp/evolution", { method: "POST" })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error || "No se pudo iniciar Evolution")
+        if (cancelled) return
+        setQr(json.qr || null)
+        setState("connecting")
+
+        // Poll de estado hasta que el usuario escanee el QR
+        pollTimer = setInterval(async () => {
+          try {
+            const sRes = await fetch("/api/integrations/whatsapp/evolution")
+            const sJson = await sRes.json()
+            if (cancelled) return
+            setState(sJson.state || "unknown")
+            if (sJson.state === "open") {
+              if (pollTimer) clearInterval(pollTimer)
+              toast.success("WhatsApp conectado vía Evolution")
+              onSaved()
+              onOpenChange(false)
+            }
+          } catch {
+            /* seguir pollando */
+          }
+        }, 3000)
+      } catch (err: any) {
+        if (!cancelled) toast.error(err?.message || "Error iniciando Evolution")
+        onOpenChange(false)
+      } finally {
+        if (!cancelled) setStarting(false)
+      }
+    }
+
+    start()
+    return () => {
+      cancelled = true
+      if (pollTimer) clearInterval(pollTimer)
+    }
+  }, [open])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Conectar mediante Evolution API</DialogTitle>
+          <DialogDescription>
+            Escaneá el QR desde WhatsApp → Dispositivos vinculados. Esta conexión usa
+            WhatsApp Web (no oficial): recomendada solo como solución temporal.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col items-center gap-3 py-2">
+          {starting && (
+            <div className="flex items-center gap-2 text-muted-foreground text-sm">
+              <Loader2 className="h-4 w-4 animate-spin" /> Creando instancia…
+            </div>
+          )}
+          {qr ? (
+            // El QR viene como data URI base64 desde Evolution
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={qr} alt="QR de WhatsApp" className="w-64 h-64 rounded-lg border" />
+          ) : (
+            !starting && (
+              <p className="text-sm text-muted-foreground text-center">
+                Esperando QR… Si no aparece en unos segundos, cerrá y reintentá.
+              </p>
+            )
+          )}
+          <p className="text-xs text-muted-foreground">
+            Estado: {state === "open" ? "Conectado" : state === "connecting" ? "Esperando escaneo" : state}
+          </p>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionCardProps) {
   const [status, setStatus] = useState<IntegrationStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
+  const [evolutionOpen, setEvolutionOpen] = useState(false)
 
   const fetchStatus = async () => {
     try {
@@ -571,15 +679,26 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
               )}
             </Button>
             {platform === "whatsapp" && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full text-xs gap-2"
-                onClick={() => setManualOpen(true)}
-              >
-                <Settings2 className="w-3.5 h-3.5" />
-                Configurar manualmente
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs gap-2"
+                  onClick={() => setManualOpen(true)}
+                >
+                  <Settings2 className="w-3.5 h-3.5" />
+                  Configurar manualmente
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs gap-2"
+                  onClick={() => setEvolutionOpen(true)}
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  Conectar mediante Evolution API
+                </Button>
+              </>
             )}
           </div>
         )}
@@ -589,6 +708,13 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
         <ManualWhatsAppDialog
           open={manualOpen}
           onOpenChange={setManualOpen}
+          onSaved={fetchStatus}
+        />
+      )}
+      {platform === "whatsapp" && (
+        <EvolutionConnectDialog
+          open={evolutionOpen}
+          onOpenChange={setEvolutionOpen}
           onSaved={fetchStatus}
         />
       )}

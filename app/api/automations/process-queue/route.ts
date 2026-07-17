@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { createNotification } from '@/lib/notifications'
 import { getWhatsAppToken, getInstagramToken, getGraphVersion } from '@/lib/meta/credentials'
 import { getNumberQuality, isSendAllowed } from '@/lib/meta/quality'
+import { getWhatsAppProvider } from '@/lib/whatsapp/provider'
 
 // Endpoint para procesar la cola de mensajes programados
 // Se puede llamar manualmente o desde un cron job
@@ -416,6 +417,37 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{ success: b
       return { success: false, error: `Bloqueado por calidad del número: ${gate.reason}` }
     }
 
+    // ── Anti-ban (solo Evolution / no oficial) ─────────────────────────────
+    // En Cloud API esto NO se aplica: Meta ya gestiona rate y reputación.
+    // En Baileys, el patrón "de máquina" (ráfagas parejas, volumen alto) es la
+    // señal #1 de baneo del número real. Mitigación, no garantía.
+    if (whatsappConfig.provider === 'evolution') {
+      // 1) Límite diario por número (configurable por integración)
+      const dailyCap = Number(whatsappConfig.evolution_daily_cap) || 100
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+      const { count: sentToday } = await supabase
+        .from('scheduled_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', message.user_id)
+        .eq('status', 'sent')
+        .gte('sent_at', todayStart.toISOString())
+      if ((sentToday || 0) >= dailyCap) {
+        return { success: false, error: `Anti-ban: límite diario alcanzado (${dailyCap}). Reintenta mañana.` }
+      }
+
+      // 2) Ventana horaria comercial (mensajes automáticos a las 3am = spam)
+      const hour = new Date().getHours()
+      const hourStart = Number(whatsappConfig.evolution_hour_start) || 9
+      const hourEnd = Number(whatsappConfig.evolution_hour_end) || 21
+      if (hour < hourStart || hour >= hourEnd) {
+        return { success: false, error: `Anti-ban: fuera de ventana horaria (${hourStart}-${hourEnd}h)` }
+      }
+
+      // 3) Delay aleatorio 3-10s: rompe el patrón de ráfaga pareja
+      const delay = 3000 + Math.floor(Math.random() * 7000)
+      await new Promise((r) => setTimeout(r, delay))
+    }
+
     // Preparar el mensaje para WhatsApp Business API
     let messagePayload: any = {
       messaging_product: 'whatsapp',
@@ -455,7 +487,22 @@ async function sendWhatsAppMessage(message: any, bot: any): Promise<{ success: b
 
     console.log('[WhatsApp] Sending payload:', JSON.stringify(messagePayload, null, 2))
 
-    // Enviar via WhatsApp Business API
+    // Evolution: sin plantillas — degradar a texto plano por el provider
+    if (whatsappConfig.provider === 'evolution') {
+      const provider = getWhatsAppProvider(integration)
+      if (!provider) {
+        return { success: false, error: 'Evolution no configurado en el servidor' }
+      }
+      const text = message.metadata?.is_meta_template
+        ? (message.message_content || message.metadata?.rendered_text || '')
+        : message.message_content
+      if (!text) {
+        return { success: false, error: 'Mensaje sin contenido de texto para Evolution' }
+      }
+      return provider.sendText(message.recipient_phone, text)
+    }
+
+    // Cloud API (Meta oficial): plantillas y texto, comportamiento histórico
     const response = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${whatsappConfig.phone_number_id}/messages`, {
       method: 'POST',
       headers: {

@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { getWhatsAppToken } from '@/lib/meta/credentials'
 import { storeWhatsAppMedia } from '@/lib/meta/store-media'
 import { handleQualityUpdate } from '@/lib/meta/quality'
+import { getWhatsAppProvider } from '@/lib/whatsapp/provider'
 
 // Webhook verification (GET request)
 export async function GET(request: NextRequest) {
@@ -597,13 +598,10 @@ async function generateAndSendAIResponse(
     const aiResponse = await response.json()
 
     if (aiResponse.response) {
-      // Token propio del cliente primero (configuración manual / legacy):
-      // el System Token solo sirve para WABAs conectados vía Embedded Signup.
-      const accessToken = integration.config?.access_token || process.env.WHATSAPP_SYSTEM_TOKEN
-      const phoneNumberId = integration.config?.phone_number_id
-
-      if (!accessToken || !phoneNumberId) {
-        console.error('Missing WhatsApp credentials (no system token in env and no per-client token in config)')
+      // Capa de proveedores: cloud (Meta) o evolution, según la integración.
+      const provider = getWhatsAppProvider(integration)
+      if (!provider) {
+        console.error('Missing WhatsApp provider configuration for integration')
         return
       }
 
@@ -614,8 +612,15 @@ async function generateAndSendAIResponse(
 
       let sent = false
       for (let i = 0; i < parts.length; i++) {
-        const ok = await sendWhatsAppMessage(accessToken, phoneNumberId, senderPhone, parts[i])
-        sent = sent || ok
+        // Limpieza histórica de caracteres problemáticos (paridad con Cloud API)
+        const cleanPart = provider.name === 'cloud'
+          ? parts[i]
+              .replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
+              .replace(/[^\x00-\xFF]/g, '')
+              .trim()
+          : parts[i]
+        const result = await provider.sendText(senderPhone, cleanPart)
+        sent = sent || result.success
         // Pequeña pausa entre mensajes para que se sienta natural
         if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 1200))
       }
@@ -637,52 +642,3 @@ async function generateAndSendAIResponse(
   }
 }
 
-async function sendWhatsAppMessage(accessToken: string, phoneNumberId: string, recipientPhone: string, message: string) {
-  try {
-    // Normalize phone number for Argentina (remove extra 9)
-    let normalizedPhone = recipientPhone
-    if (recipientPhone.startsWith('549')) {
-      normalizedPhone = '54' + recipientPhone.substring(3)
-    }
-    
-    // Clean message to avoid encoding issues
-    const cleanMessage = message
-      .replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
-      .replace(/[^\x00-\xFF]/g, '')
-      .trim()
-    
-    const tokenToUse = accessToken.trim()
-
-    const requestBody = {
-      messaging_product: 'whatsapp',
-      to: normalizedPhone,
-      type: 'text',
-      text: {
-        body: cleanMessage
-      }
-    }
-    
-    const graphVersion = process.env.META_GRAPH_VERSION || 'v21.0'
-    const response = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${tokenToUse}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    })
-
-    if (!response.ok) {
-      const errorData = await response.json()
-      console.error('WhatsApp API Error:', errorData)
-      return
-    }
-
-    await response.json()
-    return true
-
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error)
-    return false
-  }
-}

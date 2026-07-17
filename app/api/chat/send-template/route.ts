@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
 import { getNumberQuality, isSendAllowed } from "@/lib/meta/quality"
+import { getWhatsAppProvider } from "@/lib/whatsapp/provider"
 
 /**
  * Envía una plantilla de WhatsApp aprobada para REABRIR la ventana de 24 hs
@@ -62,7 +63,8 @@ export async function POST(request: NextRequest) {
 
     const accessToken = getWhatsAppToken(integration)
     const phoneNumberId = integration?.config?.phone_number_id
-    if (!accessToken || !phoneNumberId) {
+    const isEvolution = integration?.config?.provider === "evolution"
+    if ((!accessToken && !isEvolution) || !phoneNumberId) {
       return NextResponse.json({ error: "WhatsApp no está configurado correctamente" }, { status: 400 })
     }
 
@@ -87,29 +89,55 @@ export async function POST(request: NextRequest) {
         ? [{ type: "body", parameters: variables.map((text) => ({ type: "text", text })) }]
         : []
 
-    const graphVersion = getGraphVersion()
-    const res = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to,
-        type: "template",
-        template: {
-          name: templateName,
-          language: { code: language },
-          ...(components.length > 0 ? { components } : {}),
-        },
-      }),
-    })
+    let sentMessageId: string | null = null
 
-    const result = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      console.error("Error sending WhatsApp template:", result)
-      return NextResponse.json(
-        { error: result.error?.error_user_msg || result.error?.message || "Meta rechazó el envío de la plantilla" },
-        { status: 400 }
-      )
+    if (isEvolution) {
+      // Evolution (no oficial): NO existen plantillas ni ventana de 24 hs.
+      // Se degrada a texto plano con el contenido ya renderizado.
+      if (!renderedText) {
+        return NextResponse.json(
+          { error: "Falta rendered_text: con Evolution la plantilla se envía como texto plano" },
+          { status: 400 }
+        )
+      }
+      const provider = getWhatsAppProvider(integration)
+      if (!provider) {
+        return NextResponse.json({ error: "Proveedor Evolution no configurado en el servidor" }, { status: 500 })
+      }
+      const sendResult = await provider.sendText(to, renderedText)
+      if (!sendResult.success) {
+        return NextResponse.json(
+          { error: sendResult.error || "Evolution rechazó el envío" },
+          { status: 400 }
+        )
+      }
+      sentMessageId = sendResult.messageId || null
+    } else {
+      const graphVersion = getGraphVersion()
+      const res = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: language },
+            ...(components.length > 0 ? { components } : {}),
+          },
+        }),
+      })
+
+      const result = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        console.error("Error sending WhatsApp template:", result)
+        return NextResponse.json(
+          { error: result.error?.error_user_msg || result.error?.message || "Meta rechazó el envío de la plantilla" },
+          { status: 400 }
+        )
+      }
+      sentMessageId = result.messages?.[0]?.id || null
     }
 
     // Guardar el mensaje en la conversación (texto renderizado para que se lea natural)
@@ -119,7 +147,7 @@ export async function POST(request: NextRequest) {
       sender_type: "bot",
       message_type: "text",
       metadata: {
-        whatsapp_message_id: result.messages?.[0]?.id || null,
+        whatsapp_message_id: sentMessageId,
         template_name: templateName,
         sent_by: "agent",
         reengagement: true,

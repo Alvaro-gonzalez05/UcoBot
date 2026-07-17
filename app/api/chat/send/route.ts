@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getGraphHost, getGraphVersion } from '@/lib/meta/credentials'
+import { getWhatsAppProvider } from '@/lib/whatsapp/provider'
 
 export async function POST(request: NextRequest) {
   try {
@@ -77,7 +78,9 @@ export async function POST(request: NextRequest) {
       ? (integration.config?.access_token || process.env.WHATSAPP_SYSTEM_TOKEN)
       : integration.config?.access_token
 
-    if (!accessToken) {
+    // WhatsApp valida credenciales dentro del provider (soporta cloud y evolution);
+    // Instagram/Messenger siguen necesitando su Page Access Token acá.
+    if (!accessToken && platform !== 'whatsapp') {
       return NextResponse.json(
         { error: `Invalid configuration: missing access token for ${platform}` },
         { status: 500 }
@@ -113,11 +116,12 @@ export async function POST(request: NextRequest) {
     // 2. Prepare Platform Send Promise
     let sendPromise;
     if (platform === 'whatsapp') {
-        const phoneNumberId = integration.config?.phone_number_id
-        if (!phoneNumberId) {
+        // Capa de proveedores: cloud (Meta) o evolution según la integración
+        const provider = getWhatsAppProvider(integration)
+        if (!provider) {
              return NextResponse.json({ error: 'Invalid WhatsApp configuration' }, { status: 500 })
         }
-        sendPromise = sendWhatsAppMessage(accessToken, phoneNumberId, to, message, replyToId)
+        sendPromise = provider.sendText(to, message, { replyToId })
     } else if (platform === 'instagram') {
         sendPromise = sendInstagramMessage(accessToken, to, message)
     } else if (platform === 'messenger') {
@@ -198,55 +202,6 @@ export async function POST(request: NextRequest) {
       { error: 'Internal server error' },
       { status: 500 }
     )
-  }
-}
-
-async function sendWhatsAppMessage(
-  accessToken: string,
-  phoneNumberId: string,
-  recipientPhone: string,
-  message: string,
-  replyToId?: string
-) {
-  try {
-    // Normalize phone number for Argentina (remove extra 9)
-    let normalizedPhone = recipientPhone
-    if (recipientPhone.startsWith('549')) {
-      normalizedPhone = '54' + recipientPhone.substring(3)
-    }
-
-    const requestBody: any = {
-      messaging_product: 'whatsapp',
-      to: normalizedPhone,
-      type: 'text',
-      text: { body: message }
-    }
-
-    if (replyToId) {
-      requestBody.context = { message_id: replyToId }
-    }
-
-    const graphVersion = process.env.META_GRAPH_VERSION || 'v21.0'
-    const response = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    })
-
-    const data = await response.json()
-
-    if (!response.ok) {
-      console.error('WhatsApp API Error:', data)
-      return { success: false, error: data.error?.message || 'Unknown error' }
-    }
-
-    return { success: true, messageId: data.messages?.[0]?.id }
-  } catch (error) {
-    console.error('Error sending WhatsApp message:', error)
-    return { success: false, error: 'Network error' }
   }
 }
 
