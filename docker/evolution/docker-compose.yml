@@ -32,7 +32,10 @@ services:
       DATABASE_PROVIDER: postgresql
       DATABASE_CONNECTION_URI: postgresql://evolution:${POSTGRES_PASSWORD}@postgres:5432/evolution?schema=public
       DATABASE_SAVE_DATA_INSTANCE: "true"
-      DATABASE_SAVE_DATA_NEW_MESSAGE: "false"   # los mensajes viven en Supabase, no acá
+      # Debe ser true: getBase64FromMediaMessage busca el mensaje en la base de
+      # Evolution para descargar/desencriptar la media. Si está en false, la media
+      # entrante (audios/imágenes) no se puede recuperar y llega como [image]/[audio].
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
       DATABASE_SAVE_MESSAGE_UPDATE: "false"
       DATABASE_SAVE_DATA_CONTACTS: "false"
       DATABASE_SAVE_DATA_CHATS: "false"

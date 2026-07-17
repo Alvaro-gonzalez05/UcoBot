@@ -360,8 +360,9 @@ async function handlePhoneEchoes(instance: string, echoes: any[]) {
       await admin
         .from('conversations')
         .update({
+          // Solo pausa la IA. NO marcamos needs_attention: el dueño ya está
+          // atendiendo desde su celular, no necesita que se lo señalen como pendiente.
           status: 'paused',
-          needs_attention: true,
           paused_until:
             reactivateHours > 0 ? new Date(Date.now() + reactivateHours * 3600 * 1000).toISOString() : null,
           last_message_at: new Date().toISOString(),
