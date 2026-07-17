@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, type CSSProperties } from "react"
 import { bestProductPromotion, totalCapAdjustment, promotionLabel, type Promotion } from "@/lib/promotions"
+import { isVisible, resolveJump, type FieldConditional, type StepJump } from "@/lib/forms/conditions"
 import { toast } from "sonner"
 
 // ---- Color helpers ----
@@ -26,7 +27,8 @@ interface FormField {
   options?: Array<string | { label: string; value: string }>
   product_category?: string
   product_ids?: string[]
-  conditional?: { fieldLabel: string; values: string[] }
+  conditional?: FieldConditional
+  jumps?: StepJump[]
   link_url?: string
   link_label?: string
 }
@@ -45,7 +47,7 @@ function normalizeOptions(options: FormField["options"]): { label: string; value
   return options.map(o => (typeof o === "string" ? { label: o, value: o } : o))
 }
 
-interface FormStep { id: string; title: string; fields: FormField[] }
+interface FormStep { id: string; title: string; fields: FormField[]; conditional?: FieldConditional }
 
 interface CotizadorConfig {
   enabled: boolean
@@ -129,6 +131,9 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
   const inputOverride: CSSProperties = inputBase
 
   const [step, setStep] = useState(0)
+  // Historial de pasos visitados, para que "Atrás" respete los saltos de flujo
+  // (jumps) y los pasos ocultos, en vez de asumir step-1.
+  const [stepHistory, setStepHistory] = useState<number[]>([])
   const [animKey, setAnimKey] = useState(0)
   const [animDir, setAnimDir] = useState<"fwd" | "bwd">("fwd")
   const [values, setValues] = useState<Record<string, string>>({})
@@ -154,8 +159,25 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
 
   const activeStep = steps[step]
 
+  // Campos visibles del paso actual (evalúa condiciones Y/O). Se define acá arriba
+  // porque validateStep y el render lo usan.
+  const visibleFields = (activeStep?.fields ?? []).filter(field => isVisible(field.conditional, values))
+
+  // Un paso es visible si no tiene condición o si ésta se cumple con las respuestas.
+  const isStepVisible = (s: FormStep) => isVisible(s.conditional, values)
+
+  // Índice del próximo paso VISIBLE después de `from`, o -1 si no hay más.
+  const nextVisibleStepIndex = (from: number) => {
+    for (let i = from + 1; i < steps.length; i++) {
+      if (isStepVisible(steps[i])) return i
+    }
+    return -1
+  }
+
   const validateStep = () => {
-    const requiredFields = (activeStep?.fields ?? []).filter(f => f.required)
+    // Solo validamos los campos VISIBLES: un obligatorio oculto por condición no
+    // debe bloquear el avance.
+    const requiredFields = visibleFields.filter(f => f.required)
     for (const f of requiredFields) {
       if (f.type === "product_selector") {
         if (!selectedProducts.length) { toast.error(`"${f.label}" es obligatorio`, { description: "Seleccioná al menos un producto para continuar." }); return false }
@@ -170,10 +192,30 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
 
   const handleNext = () => {
     if (!validateStep()) return
-    setAnimDir("fwd"); setAnimKey(k => k + 1); setStep(s => Math.min(s + 1, steps.length - 1))
+    // 1) Salto de flujo explícito (jump) según las respuestas del paso actual.
+    let target = -1
+    const jumpId = resolveJump(activeStep?.fields ?? [], values)
+    if (jumpId) {
+      const idx = steps.findIndex(s => s.id === jumpId)
+      if (idx !== -1) target = idx
+    }
+    // 2) Si no hubo salto, el próximo paso visible.
+    if (target === -1) target = nextVisibleStepIndex(step)
+    if (target === -1) return // no hay próximo (es el último visible → botón Enviar)
+
+    setStepHistory(h => [...h, step])
+    setAnimDir("fwd"); setAnimKey(k => k + 1); setStep(target)
   }
 
-  const handleBack = () => { setAnimDir("bwd"); setAnimKey(k => k + 1); setStep(s => Math.max(s - 1, 0)) }
+  const handleBack = () => {
+    setAnimDir("bwd"); setAnimKey(k => k + 1)
+    setStepHistory(h => {
+      if (h.length === 0) return h
+      const prev = h[h.length - 1]
+      setStep(prev)
+      return h.slice(0, -1)
+    })
+  }
 
   const handleSubmit = async () => {
     if (!validateStep()) return
@@ -218,17 +260,16 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
     )
   }
 
-  const isLast = step === steps.length - 1
+  // Es el último si no hay ningún paso visible más adelante (y no hay salto pendiente).
+  const isLast = nextVisibleStepIndex(step) === -1 && !resolveJump(activeStep?.fields ?? [], values)
+
+  // Progreso: solo pasos visibles con las respuestas actuales.
+  const visibleSteps = steps.filter(isStepVisible)
+  const currentVisibleIdx = visibleSteps.findIndex(s => s.id === activeStep?.id)
   const stepAnim = animDir === "fwd"
     ? "stepEnterRight 0.3s cubic-bezier(0.22,1,0.36,1)"
     : "stepEnterLeft 0.3s cubic-bezier(0.22,1,0.36,1)"
 
-  const visibleFields = (activeStep?.fields ?? []).filter(field => {
-    const cond = field.conditional
-    if (!cond?.fieldLabel || !cond.values?.length) return true
-    const depValue = values[cond.fieldLabel] ?? ""
-    return cond.values.includes(depValue)
-  })
   const showCotizador = hasCotizador
 
   // Mini cotizador bar shown on mobile when products are selected
@@ -288,9 +329,9 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
 
             {steps.length > 1 && (
               <div className="flex flex-wrap items-center gap-1 mt-3 pt-3" style={{ borderTop: isDark ? "1px solid rgba(255,255,255,0.06)" : "1px solid rgba(0,0,0,0.06)" }}>
-                {steps.map((s, i) => {
-                  const isActive = i === step
-                  const isDone = i < step
+                {visibleSteps.map((s, i) => {
+                  const isActive = i === currentVisibleIdx
+                  const isDone = i < currentVisibleIdx
                   return (
                     <div key={s.id} className="flex items-center gap-1">
                       <div
@@ -309,13 +350,13 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
                           ? <span className="material-symbols-outlined" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1" }}>check</span>
                           : i + 1}
                       </div>
-                      {i < steps.length - 1 && (
+                      {i < visibleSteps.length - 1 && (
                         <div className="h-0.5 w-4 rounded-full" style={{ background: isDone ? themeGradient : (isDark ? "rgba(255,255,255,0.1)" : "#e5e7eb"), transition: "background 0.4s ease" }} />
                       )}
                     </div>
                   )
                 })}
-                <span className="text-xs ml-1" style={{ color: labelColor }}>{step + 1} de {steps.length}</span>
+                <span className="text-xs ml-1" style={{ color: labelColor }}>{currentVisibleIdx + 1} de {visibleSteps.length}</span>
               </div>
             )}
           </header>
@@ -379,7 +420,7 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
               </div>
 
               <div className="flex items-center justify-between pt-1">
-                {step > 0 ? (
+                {stepHistory.length > 0 ? (
                   <button onClick={handleBack} className="flex items-center gap-1.5 px-4 py-2.5 rounded-full text-sm font-medium transition-all" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.06)" : "#f3f4f6", color: bodyColor, border: isDark ? "1px solid rgba(255,255,255,0.1)" : "1px solid rgba(0,0,0,0.1)", cursor: "pointer" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 17 }}>arrow_back</span>
                     Atrás

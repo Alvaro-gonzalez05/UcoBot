@@ -24,6 +24,7 @@ import {
 } from "lucide-react"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
+import { normalizeConditional, type FieldConditional, type ConditionGroup, type Condition, type StepJump } from "@/lib/forms/conditions"
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface FormField {
@@ -37,7 +38,8 @@ interface FormField {
   step?: number
   product_category?: string
   product_ids?: string[]
-  conditional?: { fieldLabel: string; values: string[] }
+  conditional?: FieldConditional
+  jumps?: StepJump[]
   link_url?: string
   link_label?: string
 }
@@ -46,6 +48,7 @@ interface FormStep {
   id: string
   title: string
   fields: FormField[]
+  conditional?: FieldConditional
 }
 
 interface CotizadorConfig {
@@ -149,6 +152,146 @@ function darkenHex(hex: string, factor: number): string {
   const g = Math.floor(parseInt(hex.slice(3, 5), 16) * factor)
   const b = Math.floor(parseInt(hex.slice(5, 7), 16) * factor)
   return `rgb(${r},${g},${b})`
+}
+
+// Editor de condiciones múltiples (Y/O). Reutilizable para campos y pasos.
+// Emite siempre la forma nueva { logic, conditions }.
+function ConditionGroupEditor({ value, sourceFields, onChange }: {
+  value?: FieldConditional
+  sourceFields: { label: string; options?: string[] }[]
+  onChange: (v: FieldConditional) => void
+}) {
+  const group: ConditionGroup = normalizeConditional(value) ?? { logic: "or", conditions: [] }
+  const conditions = group.conditions
+  const emit = (next: ConditionGroup) => onChange(next)
+  const setCondition = (i: number, c: Condition) =>
+    emit({ logic: group.logic, conditions: conditions.map((x, idx) => (idx === i ? c : x)) })
+  const addCondition = () => emit({ logic: group.logic, conditions: [...conditions, { fieldLabel: "", values: [] }] })
+  const removeCondition = (i: number) => emit({ logic: group.logic, conditions: conditions.filter((_, idx) => idx !== i) })
+
+  return (
+    <div className="space-y-2">
+      {conditions.length > 1 && (
+        <div className="flex items-center gap-1 text-[10px]">
+          <span className="text-muted-foreground">Cumplir</span>
+          <button
+            onClick={() => emit({ logic: "and", conditions })}
+            className={`px-2 py-0.5 rounded-full font-semibold ${group.logic === "and" ? "bg-orange-400/20 text-orange-400" : "text-muted-foreground hover:text-foreground"}`}
+          >TODAS (Y)</button>
+          <button
+            onClick={() => emit({ logic: "or", conditions })}
+            className={`px-2 py-0.5 rounded-full font-semibold ${group.logic === "or" ? "bg-orange-400/20 text-orange-400" : "text-muted-foreground hover:text-foreground"}`}
+          >ALGUNA (O)</button>
+        </div>
+      )}
+
+      {conditions.map((c, i) => {
+        const depField = sourceFields.find(f => f.label === c.fieldLabel)
+        const depOptions = (depField?.options || []).filter(o => (o || "").trim() !== "")
+        return (
+          <div key={i} className="rounded-lg border border-border/60 p-2 space-y-1.5">
+            <div className="flex gap-1 items-center">
+              <Select
+                value={c.fieldLabel || "__none__"}
+                onValueChange={v => setCondition(i, { fieldLabel: v === "__none__" ? "" : v, values: [] })}
+              >
+                <SelectTrigger className="h-7 text-xs rounded-lg flex-1"><SelectValue placeholder="Campo..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__" className="text-xs">Campo...</SelectItem>
+                  {sourceFields.filter(f => f.label.trim() !== "").map(f => (
+                    <SelectItem key={f.label} value={f.label} className="text-xs">{f.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <button onClick={() => removeCondition(i)} className="text-muted-foreground hover:text-destructive flex-shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {c.fieldLabel && (
+              <div className="space-y-1">
+                {c.values.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {c.values.map(v => (
+                      <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-orange-400/15 text-orange-400 border border-orange-400/25">
+                        {v}
+                        <button onClick={() => setCondition(i, { ...c, values: c.values.filter(x => x !== v) })} className="hover:text-orange-200">
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {depOptions.length > 0 ? (
+                  <div className="flex flex-col gap-1">
+                    {depOptions.filter(o => !c.values.includes(o)).map(o => (
+                      <button key={o} onClick={() => setCondition(i, { ...c, values: [...c.values, o] })}
+                        className="flex items-center gap-2 text-xs text-left px-2 py-1 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground">
+                        <Plus className="w-3 h-3 flex-shrink-0" />{o}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <Input placeholder="Escribir valor y Enter..." className="h-7 text-xs rounded-lg"
+                    onKeyDown={e => {
+                      if (e.key === "Enter") {
+                        const val = (e.target as HTMLInputElement).value.trim()
+                        if (val && !c.values.includes(val)) {
+                          setCondition(i, { ...c, values: [...c.values, val] });
+                          (e.target as HTMLInputElement).value = ""
+                        }
+                      }
+                    }} />
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      <button onClick={addCondition} className="flex items-center gap-1 text-[11px] font-medium text-orange-400 hover:text-orange-300">
+        <Plus className="w-3 h-3" /> Agregar condición
+      </button>
+    </div>
+  )
+}
+
+// Editor de saltos de flujo: por cada opción del campo, a qué paso ir.
+function JumpsEditor({ field, steps, currentStepId, onChange }: {
+  field: FormField
+  steps: { id: string; title: string }[]
+  currentStepId: string
+  onChange: (jumps: StepJump[]) => void
+}) {
+  const options = (field.options || []).map(o => (typeof o === "string" ? o : (o as any).value)).filter((o: string) => (o || "").trim() !== "")
+  const jumps = field.jumps || []
+  const otherSteps = steps.filter(s => s.id !== currentStepId)
+  const targetFor = (opt: string) => jumps.find(j => j.whenValue === opt)?.targetStepId || ""
+  const setJump = (opt: string, targetStepId: string) => {
+    const rest = jumps.filter(j => j.whenValue !== opt)
+    onChange(targetStepId ? [...rest, { whenValue: opt, targetStepId }] : rest)
+  }
+  if (options.length === 0) {
+    return <p className="text-[11px] text-muted-foreground">Agregá opciones al campo para poder saltar según la respuesta.</p>
+  }
+  return (
+    <div className="space-y-1.5">
+      {options.map((opt: string) => (
+        <div key={opt} className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground flex-1 truncate">Si responde “{opt}”</span>
+          <Select value={targetFor(opt) || "__stay__"} onValueChange={v => setJump(opt, v === "__stay__" ? "" : v)}>
+            <SelectTrigger className="h-7 text-xs rounded-lg w-40 flex-shrink-0"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__stay__" className="text-xs">Seguir normal</SelectItem>
+              {otherSteps.map(s => (
+                <SelectItem key={s.id} value={s.id} className="text-xs">Ir a: {s.title || "Paso"}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export function FormulariosManagement({ initialForms, initialSubmissions, userId }: FormulariosManagementProps) {
@@ -310,6 +453,9 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
 
   const updateStepTitle = (idx: number, title: string) =>
     setEditSteps(prev => prev.map((s, i) => i === idx ? { ...s, title } : s))
+
+  const updateStep = (idx: number, updates: Partial<FormStep>) =>
+    setEditSteps(prev => prev.map((s, i) => i === idx ? { ...s, ...updates } : s))
 
   // Field management (step-aware)
   const addFieldToStep = (stepIdx: number) =>
@@ -545,6 +691,16 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                         <Plus className="w-4 h-4" />
                         Campo
                       </button>
+                      <button
+                        title={step.conditional !== undefined ? "Quitar condición del paso" : "Mostrar este paso solo si..."}
+                        onClick={() => updateStep(stepIdx, step.conditional !== undefined
+                          ? { conditional: undefined }
+                          : { conditional: { logic: "or", conditions: [{ fieldLabel: "", values: [] }] } }
+                        )}
+                        className={`transition-colors flex-shrink-0 ${step.conditional !== undefined ? "text-orange-400 hover:text-orange-300" : "text-muted-foreground hover:text-orange-400"}`}
+                      >
+                        <GitBranch className="w-4 h-4" />
+                      </button>
                       {editSteps.length > 1 && (
                         <button
                           onClick={() => removeStep(stepIdx)}
@@ -555,6 +711,20 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                       )}
                     </div>
                   </div>
+
+                  {step.conditional !== undefined && (
+                    <div className="mb-3 rounded-xl border border-orange-400/25 bg-orange-400/5 p-3 space-y-2">
+                      <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide flex items-center gap-1.5">
+                        <GitBranch className="w-3 h-3" />
+                        Mostrar este paso completo solo si...
+                      </p>
+                      <ConditionGroupEditor
+                        value={step.conditional}
+                        sourceFields={editSteps.filter((_, i) => i !== stepIdx).flatMap(s => s.fields).map(f => ({ label: f.label, options: (f.options || []).map(o => typeof o === "string" ? o : (o as any).value) }))}
+                        onChange={v => updateStep(stepIdx, { conditional: v })}
+                      />
+                    </div>
+                  )}
 
                   {step.fields.length === 0 ? (
                     <div className="bg-muted/40 rounded-2xl py-8 flex flex-col items-center justify-center text-center">
@@ -623,15 +793,27 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                                 </SelectContent>
                               </Select>
                               <button
-                                title={field.conditional !== undefined ? "Desactivar condicional" : "Agregar condicional"}
+                                title={field.conditional !== undefined ? "Desactivar condicional" : "Mostrar campo solo si..."}
                                 onClick={() => updateFieldInStep(stepIdx, fieldIdx, field.conditional !== undefined
                                   ? { conditional: undefined }
-                                  : { conditional: { fieldLabel: "", values: [] } }
+                                  : { conditional: { logic: "or", conditions: [{ fieldLabel: "", values: [] }] } }
                                 )}
                                 className={`transition-colors flex-shrink-0 ${field.conditional !== undefined ? "text-orange-400 hover:text-orange-300" : "text-muted-foreground hover:text-orange-400"}`}
                               >
                                 <GitBranch className="w-4 h-4" />
                               </button>
+                              {(field.type === "radio" || field.type === "select") && (
+                                <button
+                                  title={field.jumps !== undefined ? "Quitar saltos" : "Saltar a otro paso según la respuesta"}
+                                  onClick={() => updateFieldInStep(stepIdx, fieldIdx, field.jumps !== undefined
+                                    ? { jumps: undefined }
+                                    : { jumps: [] }
+                                  )}
+                                  className={`transition-colors flex-shrink-0 ${field.jumps !== undefined ? "text-purple-400 hover:text-purple-300" : "text-muted-foreground hover:text-purple-400"}`}
+                                >
+                                  <Zap className="w-4 h-4" />
+                                </button>
+                              )}
                               <button
                                 title={field.link_url !== undefined ? "Desactivar link" : "Agregar link de referencia"}
                                 onClick={() => updateFieldInStep(stepIdx, fieldIdx, field.link_url !== undefined
@@ -824,88 +1006,34 @@ export function FormulariosManagement({ initialForms, initialSubmissions, userId
                                 <span className="text-xs text-muted-foreground">Respuesta obligatoria</span>
                               </div>
 
-                              {field.conditional !== undefined && (() => {
-                                const otherFields = step.fields.filter((_, i) => i !== fieldIdx)
-                                const depField = otherFields.find(f => f.label === field.conditional!.fieldLabel)
-                                const depOptions = depField
-                                  ? (depField.options || []).map(o => typeof o === "string" ? o : o.value)
-                                  : []
-                                return (
-                                  <div className="space-y-2 pt-1 border-t border-border/50">
-                                    <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide flex items-center gap-1.5">
-                                      <GitBranch className="w-3 h-3" />
-                                      Mostrar este campo solo si...
-                                    </p>
-                                    {/* Field selector */}
-                                    <Select
-                                      value={field.conditional!.fieldLabel || "__none__"}
-                                      onValueChange={v => updateFieldInStep(stepIdx, fieldIdx, { conditional: { fieldLabel: v === "__none__" ? "" : v, values: [] } })}
-                                    >
-                                      <SelectTrigger className="h-8 text-xs rounded-xl">
-                                        <SelectValue placeholder="Seleccionar campo..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="__none__" className="text-xs">Seleccionar campo...</SelectItem>
-                                        {otherFields.map(f => (
-                                          <SelectItem key={f.label} value={f.label} className="text-xs">{f.label}</SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
+                              {field.conditional !== undefined && (
+                                <div className="space-y-2 pt-1 border-t border-border/50">
+                                  <p className="text-[10px] font-semibold text-orange-400 uppercase tracking-wide flex items-center gap-1.5">
+                                    <GitBranch className="w-3 h-3" />
+                                    Mostrar este campo solo si...
+                                  </p>
+                                  <ConditionGroupEditor
+                                    value={field.conditional}
+                                    sourceFields={editSteps.flatMap(s => s.fields).filter(f => f.label !== field.label).map(f => ({ label: f.label, options: (f.options || []).map(o => typeof o === "string" ? o : (o as any).value) }))}
+                                    onChange={v => updateFieldInStep(stepIdx, fieldIdx, { conditional: v })}
+                                  />
+                                </div>
+                              )}
 
-                                    {/* Values */}
-                                    {field.conditional!.fieldLabel && (
-                                      <div className="space-y-2">
-                                        <p className="text-[10px] text-muted-foreground">Valores que lo activan:</p>
-                                        {/* Selected values as pills */}
-                                        {field.conditional!.values.length > 0 && (
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {field.conditional!.values.map(v => (
-                                              <span key={v} className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-orange-400/15 text-orange-400 border border-orange-400/25">
-                                                {v}
-                                                <button onClick={() => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, values: field.conditional!.values.filter(x => x !== v) } })} className="hover:text-orange-200">
-                                                  <X className="w-2.5 h-2.5" />
-                                                </button>
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                        {/* If parent field has known options, show checkboxes */}
-                                        {depOptions.length > 0 ? (
-                                          <div className="flex flex-col gap-1">
-                                            {depOptions.filter(o => !field.conditional!.values.includes(o)).map(o => (
-                                              <button
-                                                key={o}
-                                                onClick={() => updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, values: [...field.conditional!.values, o] } })}
-                                                className="flex items-center gap-2 text-xs text-left px-2 py-1.5 rounded-lg hover:bg-muted/60 transition-colors text-muted-foreground hover:text-foreground"
-                                              >
-                                                <Plus className="w-3 h-3 flex-shrink-0" />
-                                                {o}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          /* Free-form input for text fields */
-                                          <div className="flex gap-2">
-                                            <Input
-                                              placeholder="Escribir valor y Enter..."
-                                              className="h-8 text-xs rounded-xl flex-1"
-                                              onKeyDown={e => {
-                                                if (e.key === "Enter") {
-                                                  const val = (e.target as HTMLInputElement).value.trim()
-                                                  if (val && !field.conditional!.values.includes(val)) {
-                                                    updateFieldInStep(stepIdx, fieldIdx, { conditional: { ...field.conditional!, values: [...field.conditional!.values, val] } });
-                                                    (e.target as HTMLInputElement).value = ""
-                                                  }
-                                                }
-                                              }}
-                                            />
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )
-                              })()}
+                              {field.jumps !== undefined && (
+                                <div className="space-y-2 pt-1 border-t border-border/50">
+                                  <p className="text-[10px] font-semibold text-purple-400 uppercase tracking-wide flex items-center gap-1.5">
+                                    <GitBranch className="w-3 h-3" />
+                                    Saltar a otro paso según la respuesta
+                                  </p>
+                                  <JumpsEditor
+                                    field={field}
+                                    steps={editSteps}
+                                    currentStepId={step.id}
+                                    onChange={jumps => updateFieldInStep(stepIdx, fieldIdx, { jumps })}
+                                  />
+                                </div>
+                              )}
 
                               {field.link_url !== undefined && (
                                 <div className="space-y-2 pt-1 border-t border-border/50">
