@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo, Fragment } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from "react"
 import dynamic from "next/dynamic"
 import { createClient } from "@/lib/supabase/client"
 
@@ -492,6 +492,12 @@ function AudioPlayer({
 export function ChatView({ userId }: ChatViewProps) {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
+  // Ref que sigue a selectedConversation, para leerlo dentro de callbacks estables
+  // (el sync periódico) sin recrearlos en cada cambio de conversación.
+  const selectedConversationRef = useRef<Conversation | null>(null)
+  useEffect(() => {
+    selectedConversationRef.current = selectedConversation
+  }, [selectedConversation])
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
@@ -662,6 +668,68 @@ export function ChatView({ userId }: ChatViewProps) {
   useEffect(() => {
     fetchConversations(0)
   }, [userId])
+
+  // Auto-sanado del realtime. postgres_changes NO reenvía los eventos que pasan
+  // durante un micro-corte del WebSocket, así que la lista puede quedar
+  // desactualizada (un chat nuevo no sube, o un mensaje pausado no aparece) hasta
+  // que uno refresca a mano. Esto refresca los primeros PAGE_SIZE chats y los
+  // FUSIONA con la lista (sin colapsar la paginación ya cargada).
+  const syncConversations = useCallback(async () => {
+    if (!userId) return
+    try {
+      const { data, error } = await supabase
+        .from("conversations")
+        .select(`*, messages:messages(content, created_at, sender_type, is_read)`)
+        .eq("user_id", userId)
+        .order("last_message_at", { ascending: false })
+        .range(0, PAGE_SIZE - 1)
+      if (error || !data) return
+
+      const processed = data.map((conv: any) => {
+        const sorted = conv.messages?.sort(
+          (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+        return {
+          ...conv,
+          last_message: sorted?.[0]?.content || "Sin mensajes",
+          unread_count:
+            conv.messages?.filter((m: any) => m.sender_type === "client" && m.is_read === false).length || 0,
+        }
+      })
+
+      setConversations((prev) => {
+        const byId = new Map(prev.map((c) => [c.id, c]))
+        for (const conv of processed) {
+          const existing = byId.get(conv.id)
+          // Si el chat está abierto, no le pisamos el unread (ya lo limpiamos al abrirlo)
+          const keepUnread = existing && selectedConversationRef.current?.id === conv.id
+          byId.set(conv.id, { ...existing, ...conv, ...(keepUnread ? { unread_count: existing!.unread_count } : {}) })
+        }
+        return Array.from(byId.values()).sort(
+          (a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime()
+        )
+      })
+    } catch {
+      /* silencioso: es una red de seguridad, no crítico */
+    }
+  }, [userId, supabase])
+
+  // Dispara el sync al volver a la pestaña y como red de seguridad periódica.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncConversations()
+    }
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") syncConversations()
+    }, 20000)
+    window.addEventListener("focus", syncConversations)
+    document.addEventListener("visibilitychange", onVisible)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("focus", syncConversations)
+      document.removeEventListener("visibilitychange", onVisible)
+    }
+  }, [syncConversations])
 
   // Traemos las etiquetas de lead que configuró el dueño en el bot (allowed_tags).
   // Sirven para asignarlas manualmente y para filtrar la lista de conversaciones.

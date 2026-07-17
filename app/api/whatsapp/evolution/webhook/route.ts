@@ -339,6 +339,14 @@ async function handlePhoneEchoes(instance: string, echoes: any[]) {
       }
       if (!conversationId) continue
 
+      // Media saliente (imagen/audio/etc. que mandé desde el celular): la
+      // descargamos y subimos al bucket para que se VEA en /chat, igual que la
+      // entrante. Si no, quedaría como [imagen]/[audio].
+      let storedUrl: string | null = null
+      if (['image', 'audio', 'video', 'document'].includes(type)) {
+        storedUrl = await fetchAndStoreEvolutionMedia(instance, item, integration.user_id, type)
+      }
+
       // Guardar como saliente (para que se vea en /chat)
       const internalType = ['image', 'audio', 'document', 'video', 'location'].includes(type) ? type : 'text'
       await admin.from('messages').insert({
@@ -351,6 +359,7 @@ async function handlePhoneEchoes(instance: string, echoes: any[]) {
           sent_by: 'phone', // lo mandó el dueño desde su celular
           is_handover: true,
           original_type: type,
+          ...(storedUrl ? { stored_url: storedUrl } : {}),
         },
       })
 
