@@ -791,9 +791,11 @@ export function ChatView({ userId }: ChatViewProps) {
               setConversations(prev => [processedConv, ...prev])
             }
           } else if (payload.eventType === 'UPDATE') {
-            // payload.new es la fila cruda de `conversations`: NO trae el campo virtual
-            // `last_message`. Traemos el último mensaje real para que la previsualización
-            // no quede con el texto viejo.
+            // payload.new es la fila cruda de `conversations`: NO trae los campos
+            // virtuales `last_message` ni `unread_count`. Los recalculamos, porque
+            // un mensaje entrante en una conversación NO seleccionada no pasa por
+            // la suscripción de mensajes (que es sólo de la abierta). Sin esto, el
+            // no-leído no sube y el chat pausado no se pone azul hasta refrescar.
             const { data: lastMsgRows } = await supabase
               .from("messages")
               .select("content, created_at")
@@ -802,10 +804,24 @@ export function ChatView({ userId }: ChatViewProps) {
               .limit(1)
             const lastContent = lastMsgRows?.[0]?.content
 
+            // No-leídos: mensajes de cliente sin leer. Si el chat está abierto,
+            // lo dejamos en 0 (abrirlo ya los marca como leídos).
+            const isOpen = selectedConversationRef.current?.id === payload.new.id
+            let unreadCount = 0
+            if (!isOpen) {
+              const { count } = await supabase
+                .from("messages")
+                .select("id", { count: "exact", head: true })
+                .eq("conversation_id", payload.new.id)
+                .eq("sender_type", "client")
+                .eq("is_read", false)
+              unreadCount = count || 0
+            }
+
             setConversations(prev => {
               const updatedList = prev.map(c =>
                 c.id === payload.new.id
-                  ? { ...c, ...payload.new, last_message: lastContent ?? c.last_message }
+                  ? { ...c, ...payload.new, last_message: lastContent ?? c.last_message, unread_count: unreadCount }
                   : c
               )
 
