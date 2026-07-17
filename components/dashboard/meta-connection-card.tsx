@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CheckCircle2, Loader2, Link2, AlertCircle, RefreshCw, Instagram, Settings2, Copy, QrCode } from "lucide-react"
+import { CheckCircle2, Loader2, Link2, AlertCircle, RefreshCw, Instagram, Settings2, Copy, QrCode, Unlink } from "lucide-react"
 import { FaWhatsapp, FaFacebookMessenger } from "react-icons/fa"
 import { toast } from "sonner"
 
@@ -387,6 +387,7 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
   const [connecting, setConnecting] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [evolutionOpen, setEvolutionOpen] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
 
   const fetchStatus = async () => {
     try {
@@ -577,6 +578,24 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
     window.location.href = url
   }
 
+  const handleDisconnect = async () => {
+    if (!confirm("¿Desconectar WhatsApp? Vas a dejar de recibir y enviar mensajes hasta que lo reconectes. El historial de conversaciones se conserva.")) {
+      return
+    }
+    setDisconnecting(true)
+    try {
+      const res = await fetch("/api/integrations/whatsapp/disconnect", { method: "POST" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "No se pudo desconectar")
+      toast.success("WhatsApp desconectado")
+      await fetchStatus()
+    } catch (err: any) {
+      toast.error(err?.message || "Error al desconectar")
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
   const handleConnect = () => {
     if (platform === "whatsapp") return connectWhatsApp()
     if (platform === "messenger") return connectMessenger()
@@ -656,6 +675,18 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
               >
                 <Settings2 className="w-3.5 h-3.5" />
                 Ver configuración manual
+              </Button>
+            )}
+            {platform === "whatsapp" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+              >
+                {disconnecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlink className="w-3.5 h-3.5" />}
+                Desconectar WhatsApp
               </Button>
             )}
           </div>

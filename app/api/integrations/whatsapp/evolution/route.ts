@@ -48,6 +48,24 @@ export async function POST(request: NextRequest) {
     })
     const created = await createRes.json().catch(() => ({}))
 
+    // Webhook POR INSTANCIA con SOLO los eventos que UcoBot procesa.
+    // Sin esto, Evolution manda el history-sync completo (MESSAGES_SET, CHATS_UPSERT,
+    // etc.) en payloads de varios MB y Vercel los rechaza con 413.
+    const appOrigin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
+    await fetch(`${evo.baseUrl}/webhook/set/${encodeURIComponent(instance)}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        webhook: {
+          enabled: true,
+          url: `${appOrigin}/api/whatsapp/evolution/webhook`,
+          webhookByEvents: false,
+          webhookBase64: false,
+          events: ['QRCODE_UPDATED', 'MESSAGES_UPSERT', 'CONNECTION_UPDATE'],
+        },
+      }),
+    }).catch((e) => console.error('[Evolution connect] webhook/set failed:', e))
+
     // 2) Pedir QR (connect devuelve base64 aun para instancias preexistentes)
     let qr: string | null = created?.qrcode?.base64 || null
     if (!qr) {
