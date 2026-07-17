@@ -435,7 +435,11 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         (messageContent as any).audio ||
         (messageContent as any).document ||
         (messageContent as any).sticker
-      if (mediaObj?.id) {
+      if (mediaObj?.stored_url) {
+        // Evolution: la media ya la descargó y subió el webhook de Evolution.
+        storedUrl = mediaObj.stored_url
+      } else if (mediaObj?.id) {
+        // Cloud API: descargar de Meta con el token (comportamiento histórico).
         const token = getWhatsAppToken(integration)
         if (token) {
           storedUrl = await storeWhatsAppMedia({
@@ -534,8 +538,10 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         
         // Extract media ID if present (for images or audio)
         const mediaId = messageType === 'image' ? message.image?.id : (messageType === 'audio' ? message.audio?.id : undefined);
-        
-        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName, origin, mediaId)
+        // Evolution: media ya guardada en el bucket; pasamos la URL para que la IA la baje.
+        const mediaUrl = (messageContent as any)?.[messageType]?.stored_url || undefined
+
+        await generateAndSendAIResponse(integration, conversationId, senderPhone, textContent, bot.id, senderName, origin, mediaId, mediaUrl)
       }
 
     } catch (error) {
@@ -552,7 +558,8 @@ async function generateAndSendAIResponse(
   botId: string,
   senderName?: string,
   origin?: string,
-  mediaId?: string
+  mediaId?: string,
+  mediaUrl?: string
 ) {
   try {
     // Generate AI response using webhook-specific chat API
@@ -586,7 +593,8 @@ async function generateAndSendAIResponse(
         senderPhone,
         senderName,
         platform: 'whatsapp',
-        mediaId // Pass mediaId to the chat webhook
+        mediaId, // Cloud API: id de Meta para descargar la media
+        mediaUrl // Evolution: URL en el bucket ya subida
       })
     })
 

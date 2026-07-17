@@ -167,9 +167,9 @@ async function recordAiUsage(res: Response, model: string, userId: string, purpo
 
 export async function POST(request: NextRequest) {
   try {
-    const { botId, message, conversationId, senderPhone, senderName, senderInstagramId, platform, mediaId } = await request.json()
+    const { botId, message, conversationId, senderPhone, senderName, senderInstagramId, platform, mediaId, mediaUrl } = await request.json()
 
-    if (!botId || (!message && !mediaId) || !conversationId) {
+    if (!botId || (!message && !mediaId && !mediaUrl) || !conversationId) {
       return NextResponse.json(
         { error: "Missing required fields: botId, message/mediaId, conversationId" },
         { status: 400 }
@@ -284,6 +284,25 @@ export async function POST(request: NextRequest) {
         }
       } catch (mediaError) {
         console.error('Error processing media:', mediaError);
+      }
+    }
+
+    // Evolution: la media ya está en el bucket (URL pública). La bajamos y la
+    // convertimos a inlineData igual que Cloud API, para que la IA la vea/transcriba.
+    if (!mediaPart && mediaUrl) {
+      try {
+        const mediaRes = await fetch(mediaUrl)
+        if (mediaRes.ok) {
+          const arrayBuffer = await mediaRes.arrayBuffer()
+          const base64 = Buffer.from(arrayBuffer).toString('base64')
+          const mimeType = mediaRes.headers.get('content-type') || 'application/octet-stream'
+          if (mimeType.startsWith('image/') || mimeType.startsWith('audio/')) {
+            mediaPart = { inlineData: { mimeType, data: base64 } }
+            console.log(`📸/🎤 Media de Evolution (${mimeType}) procesada para la IA`)
+          }
+        }
+      } catch (e) {
+        console.error('Error processing Evolution media URL:', e)
       }
     }
     
