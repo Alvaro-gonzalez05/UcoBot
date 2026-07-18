@@ -84,20 +84,49 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     conversationsGrowth: 0,
     botRevenue: 0,
     botRevenueGrowth: 0,
+    posRevenue: 0,
+    totalRevenue: 0,
+    totalRevenueGrowth: 0,
+    salesCount: 0,
+    avgTicket: 0,
+    reservationsMonth: 0,
     conversionRate: 0,
     salesFromBot: 0,
     outOfHoursMessages: 0,
     dayMessages: 0,
   })
   const [chartData, setChartData] = useState<{ name: string; value: number }[]>([])
-  const [revenueChart, setRevenueChart] = useState<{ name: string; value: number }[]>([])
+  const [revenueChart, setRevenueChart] = useState<{ name: string; pos: number; bot: number }[]>([])
+  // Ranking de sucursales (solo si el negocio tiene sucursales habilitadas)
+  const [branchStats, setBranchStats] = useState<{ id: string; name: string; revenue: number; sales: number; leads: number }[]>([])
   const [pendingLeads, setPendingLeads] = useState(0)
   const [peakDay, setPeakDay] = useState<string | null>(null)
   const [activeBotsList, setActiveBotsList] = useState<{ id: string; name: string; platform: string }[]>([])
   const [automationsList, setAutomationsList] = useState<{ id: string; name: string; is_active: boolean; trigger_type: string }[]>([])
   const [topProducts, setTopProducts] = useState<TopProduct[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  // Cuentas del negocio para el switcher: casa central (dueño) + sucursales.
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<string>("all") // 'all' | userId
   const supabase = createClient()
+
+  // Ids de cuenta según la selección: 'all' = todas; si no, la elegida.
+  const accountIds = selectedAccount === "all"
+    ? (accounts.length ? accounts.map((a) => a.id) : [user.id])
+    : [selectedAccount]
+
+  // Cargar las sucursales del negocio (si hay). Solo el dueño llega acá.
+  useEffect(() => {
+    fetch("/api/team/branches")
+      .then((r) => r.json())
+      .then((j) => {
+        const branches = (j.branches || []).map((b: any) => ({ id: b.userId, name: b.branchName }))
+        if (branches.length > 0) {
+          setAccounts([{ id: user.id, name: "Casa central" }, ...branches])
+        }
+      })
+      .catch(() => {})
+  }, [user.id])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -140,22 +169,26 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         msgsWeekRowsRes,
         ordersMonthRes,
         ordersLastMonthRes,
+        reservationsMonthRes,
+        clientsMonthRowsRes,
       ] = await Promise.allSettled([
-        supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id),
-        supabase.from('clients').select('*', { count: 'exact', head: true }).eq('user_id', user.id).lt('created_at', startOfCurrentMonth),
-        supabase.from('bots').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('is_active', true),
-        supabase.from('conversations').select('id, last_message_at').eq('user_id', user.id),
-        supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfCurrentMonth),
-        supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
-        supabase.from('conversations').select('*', { count: 'exact', head: true }).eq('user_id', user.id).eq('needs_attention', true),
-        supabase.from('bots').select('id, name, platform').eq('user_id', user.id).eq('is_active', true).limit(3),
-        supabase.from('automations').select('id, name, is_active, trigger_type').eq('user_id', user.id).order('created_at', { ascending: false }).limit(5),
-        supabase.from('messages').select('id, conversations!inner(user_id)', { count: 'exact', head: true }).eq('conversations.user_id', user.id).gte('created_at', startOfCurrentMonth),
-        supabase.from('messages').select('id, conversations!inner(user_id)', { count: 'exact', head: true }).eq('conversations.user_id', user.id).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
-        supabase.from('messages').select('created_at, conversations!inner(user_id)').eq('conversations.user_id', user.id).gte('created_at', startOfCurrentMonth).limit(10000),
-        supabase.from('messages').select('created_at, conversations!inner(user_id)').eq('conversations.user_id', user.id).gte('created_at', sevenDaysAgo).limit(10000),
-        supabase.from('orders').select('total_amount, source, conversation_id, items, created_at').eq('user_id', user.id).neq('status', 'cancelled').gte('created_at', startOfCurrentMonth),
-        supabase.from('orders').select('total_amount, source').eq('user_id', user.id).neq('status', 'cancelled').gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
+        supabase.from('clients').select('*', { count: 'exact', head: true }).in('user_id', accountIds),
+        supabase.from('clients').select('*', { count: 'exact', head: true }).in('user_id', accountIds).lt('created_at', startOfCurrentMonth),
+        supabase.from('bots').select('*', { count: 'exact', head: true }).in('user_id', accountIds).eq('is_active', true),
+        supabase.from('conversations').select('id, last_message_at').in('user_id', accountIds),
+        supabase.from('conversations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).gte('created_at', startOfCurrentMonth),
+        supabase.from('conversations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
+        supabase.from('conversations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).eq('needs_attention', true),
+        supabase.from('bots').select('id, name, platform').in('user_id', accountIds).eq('is_active', true).limit(3),
+        supabase.from('automations').select('id, name, is_active, trigger_type').in('user_id', accountIds).order('created_at', { ascending: false }).limit(5),
+        supabase.from('messages').select('id, conversations!inner(user_id)', { count: 'exact', head: true }).in('conversations.user_id', accountIds).gte('created_at', startOfCurrentMonth),
+        supabase.from('messages').select('id, conversations!inner(user_id)', { count: 'exact', head: true }).in('conversations.user_id', accountIds).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
+        supabase.from('messages').select('created_at, conversations!inner(user_id)').in('conversations.user_id', accountIds).gte('created_at', startOfCurrentMonth).limit(10000),
+        supabase.from('messages').select('created_at, conversations!inner(user_id)').in('conversations.user_id', accountIds).gte('created_at', sevenDaysAgo).limit(10000),
+        supabase.from('orders').select('total_amount, source, conversation_id, items, created_at, user_id').in('user_id', accountIds).neq('status', 'cancelled').gte('created_at', startOfCurrentMonth),
+        supabase.from('orders').select('total_amount, source').in('user_id', accountIds).neq('status', 'cancelled').gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
+        supabase.from('reservations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).gte('created_at', startOfCurrentMonth),
+        supabase.from('clients').select('user_id').in('user_id', accountIds).gte('created_at', startOfCurrentMonth).limit(10000),
       ])
 
       const totalClients = totalClientsRes.status === 'fulfilled' ? (totalClientsRes.value.count || 0) : 0
@@ -173,6 +206,8 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       const weekMsgRows = msgsWeekRowsRes.status === 'fulfilled' ? (msgsWeekRowsRes.value.data || []) : []
       const ordersMonth = ordersMonthRes.status === 'fulfilled' ? (ordersMonthRes.value.data || []) : []
       const ordersLastMonth = ordersLastMonthRes.status === 'fulfilled' ? (ordersLastMonthRes.value.data || []) : []
+      const reservationsMonth = reservationsMonthRes.status === 'fulfilled' ? (reservationsMonthRes.value.count || 0) : 0
+      const clientsMonthRows = clientsMonthRowsRes.status === 'fulfilled' ? (clientsMonthRowsRes.value.data || []) : []
 
       const activeConversations = userConversations.filter((c: any) => c.last_message_at && c.last_message_at >= oneDayAgo).length
       const clientsGrowth = lastMonthClients > 0 ? (totalClients - lastMonthClients) / lastMonthClients * 100 : 0
@@ -188,24 +223,45 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       })
       const peak = weeklyChart.reduce((a, b) => b.value > a.value ? b : a, weeklyChart[0])
 
-      // Ingresos por bot + serie diaria de los últimos 14 días (bot + pos)
-      const botRevenue = ordersMonth
-        .filter((o: any) => o.source === 'bot')
-        .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
-      const botRevenueLast = ordersLastMonth
-        .filter((o: any) => o.source === 'bot')
-        .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
+      // Ingresos del negocio (todos los canales) + desglose POS/Bot + serie diaria
+      const sumAmt = (arr: any[]) => arr.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0)
+      const botRevenue = sumAmt(ordersMonth.filter((o: any) => o.source === 'bot'))
+      const posRevenue = sumAmt(ordersMonth.filter((o: any) => o.source === 'pos'))
+      const totalRevenue = sumAmt(ordersMonth)
+      const totalRevenueLast = sumAmt(ordersLastMonth)
+      const totalRevenueGrowth = totalRevenueLast > 0 ? (totalRevenue - totalRevenueLast) / totalRevenueLast * 100 : 0
+      const botRevenueLast = sumAmt(ordersLastMonth.filter((o: any) => o.source === 'bot'))
       const botRevenueGrowth = botRevenueLast > 0 ? (botRevenue - botRevenueLast) / botRevenueLast * 100 : 0
+      const salesCount = ordersMonth.length
+      const avgTicket = salesCount > 0 ? totalRevenue / salesCount : 0
 
+      // Serie diaria apilada por canal (POS vs Bot), últimos 14 días
       const dailyRevenue = Array.from({ length: 14 }, (_, i) => {
         const date = new Date(now)
         date.setDate(date.getDate() - (13 - i))
         const dateStr = date.toISOString().split('T')[0]
-        const value = ordersMonth
-          .filter((o: any) => o.created_at.startsWith(dateStr))
-          .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0)
-        return { name: String(date.getDate()), value }
+        const dayOrders = ordersMonth.filter((o: any) => o.created_at.startsWith(dateStr))
+        return {
+          name: String(date.getDate()),
+          pos: sumAmt(dayOrders.filter((o: any) => o.source === 'pos')),
+          bot: sumAmt(dayOrders.filter((o: any) => o.source === 'bot')),
+        }
       })
+
+      // Ranking por sucursal (solo tiene sentido si hay sucursales habilitadas).
+      // Se arma con lo que ya trajimos: órdenes (con user_id) + clientes del mes.
+      const branchRanking = accounts.length > 1
+        ? accounts.map((acc) => {
+            const accOrders = ordersMonth.filter((o: any) => o.user_id === acc.id)
+            return {
+              id: acc.id,
+              name: acc.name,
+              revenue: sumAmt(accOrders),
+              sales: accOrders.length,
+              leads: clientsMonthRows.filter((c: any) => c.user_id === acc.id).length,
+            }
+          }).sort((a, b) => b.revenue - a.revenue)
+        : []
 
       // Conversión: conversaciones del mes que generaron al menos un pedido
       const salesFromBot = new Set(
@@ -244,11 +300,14 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       setStats({
         totalClients, clientsGrowth, activeBots, monthlyMessages, messagesGrowth,
         activeConversations, totalConversations: userConversations.length, conversationsGrowth,
-        botRevenue, botRevenueGrowth, conversionRate, salesFromBot, outOfHoursMessages,
+        botRevenue, botRevenueGrowth, posRevenue, totalRevenue, totalRevenueGrowth, salesCount, avgTicket,
+        reservationsMonth,
+        conversionRate, salesFromBot, outOfHoursMessages,
         dayMessages: monthMsgRows.length - outOfHoursMessages,
       })
       setChartData(weeklyChart)
       setRevenueChart(dailyRevenue)
+      setBranchStats(branchRanking)
       setPeakDay(peak?.value > 0 ? peak.name : null)
       setPendingLeads(pendingCount)
       setActiveBotsList(botsList)
@@ -267,7 +326,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     // Red de seguridad: nunca dejar el spinner colgado más de 12 segundos
     const safety = setTimeout(() => setIsLoading(false), 12000)
     return () => clearTimeout(safety)
-  }, [user.id])
+    // Recarga al cambiar de sucursal o cuando llega la lista de cuentas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id, selectedAccount, accounts.length])
 
   // Buscador de métricas: cada tile declara sus palabras clave
   const matches = (keywords: string) => {
@@ -318,37 +379,104 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         </div>
       </header>
 
+      {/* Switcher de sucursales: solo si el negocio tiene sucursales */}
+      {accounts.length > 1 && (
+        <div className="flex items-center gap-2 mb-5 px-4 overflow-x-auto">
+          <span className="material-symbols-outlined text-base text-[#64748B] dark:text-[#94A3B8] flex-shrink-0">store</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setSelectedAccount("all")}
+              className={cn(
+                "text-xs font-semibold px-3 py-1.5 rounded-full border whitespace-nowrap transition-colors",
+                selectedAccount === "all"
+                  ? "bg-[#D1F366] text-[#1C1C28] border-[#D1F366]"
+                  : "border-border text-muted-foreground hover:bg-muted"
+              )}
+            >
+              Todas
+            </button>
+            {accounts.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => setSelectedAccount(a.id)}
+                className={cn(
+                  "text-xs font-semibold px-3 py-1.5 rounded-full border whitespace-nowrap transition-colors",
+                  selectedAccount === a.id
+                    ? "bg-[#D1F366] text-[#1C1C28] border-[#D1F366]"
+                    : "border-border text-muted-foreground hover:bg-muted"
+                )}
+              >
+                {a.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ============== BENTO GRID ============== */}
       <div className="px-4 pb-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 auto-rows-[minmax(0,auto)]">
 
-          {/* ── Tile destacado: Ingresos del Bot con gráfico diario ── */}
-          {matches("ingresos del bot ventas dinero facturacion plata revenue") && (
+          {/* ── Tile destacado: Ingresos del negocio (POS + Bot) con gráfico diario ── */}
+          {matches("ingresos del negocio ventas dinero facturacion plata revenue punto de venta pos bot ticket promedio") && (
           <div className="sm:col-span-2 lg:col-span-2 lg:row-span-2 executive-card flex flex-col bg-gradient-to-br from-[#D1F366]/[0.07] via-transparent to-transparent">
             <div className="flex items-start justify-between">
               <div className="w-12 h-12 bg-[#D1F366]/15 rounded-2xl flex items-center justify-center text-[#D1F366]">
-                <span className="material-symbols-outlined text-2xl">smart_toy</span>
+                <span className="material-symbols-outlined text-2xl">storefront</span>
               </div>
-              {stats.botRevenueGrowth !== 0 && (
+              {stats.totalRevenueGrowth !== 0 && (
                 <span className={cn(
                   "text-[11px] font-bold px-2 py-1 rounded-lg",
-                  stats.botRevenueGrowth >= 0 ? "text-emerald-500 bg-emerald-500/10" : "text-red-500 bg-red-500/10"
+                  stats.totalRevenueGrowth >= 0 ? "text-emerald-500 bg-emerald-500/10" : "text-red-500 bg-red-500/10"
                 )}>
-                  {stats.botRevenueGrowth >= 0 ? "+" : ""}{stats.botRevenueGrowth.toFixed(1)}% vs mes ant.
+                  {stats.totalRevenueGrowth >= 0 ? "+" : ""}{stats.totalRevenueGrowth.toFixed(1)}% vs mes ant.
                 </span>
               )}
             </div>
-            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider mt-4">Ingresos del Bot</h3>
-            <p className="text-4xl font-black mt-1">{currencyFmt.format(stats.botRevenue)}</p>
-            <p className="text-[11px] text-[#64748B] mt-1 mb-4">
-              {stats.botRevenue > 0
-                ? "Ventas concretadas por tu asistente este mes, sin intervención humana."
-                : "Cuando tu bot tome pedidos, acá vas a ver la plata que te genera."}
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider mt-4">Ingresos del negocio</h3>
+            <p className="text-4xl font-black mt-1">{currencyFmt.format(stats.totalRevenue)}</p>
+            <p className="text-[11px] text-[#64748B] mt-1">
+              {stats.salesCount > 0
+                ? `${stats.salesCount} ventas este mes · ticket promedio ${currencyFmt.format(stats.avgTicket)}`
+                : "Todavía no registraste ventas este mes."}
             </p>
+
+            {/* Desglose por canal */}
+            <div className="grid grid-cols-2 gap-2 mt-3 mb-4">
+              <div className="rounded-xl bg-black/[0.03] dark:bg-white/[0.04] px-3 py-2">
+                <div className="flex items-center gap-1.5 text-[#64748B] dark:text-[#94A3B8]">
+                  <span className="material-symbols-outlined text-sm">point_of_sale</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">Punto de venta</span>
+                </div>
+                <p className="text-lg font-black mt-0.5">{currencyFmt.format(stats.posRevenue)}</p>
+              </div>
+              <div className="rounded-xl bg-black/[0.03] dark:bg-white/[0.04] px-3 py-2">
+                <div className="flex items-center gap-1.5 text-[#64748B] dark:text-[#94A3B8]">
+                  <span className="material-symbols-outlined text-sm">smart_toy</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider">Bot</span>
+                </div>
+                <p className="text-lg font-black mt-0.5">{currencyFmt.format(stats.botRevenue)}</p>
+              </div>
+            </div>
+
             <div className="flex-1 min-h-[150px] -mx-2">
               <RevenueBarChart data={revenueChart} />
             </div>
-            <p className="text-[10px] text-[#64748B] text-center mt-2">Ventas por día · últimos 14 días (todos los canales)</p>
+            <p className="text-[10px] text-[#64748B] text-center mt-2">Ventas por día · últimos 14 días (POS + Bot apilados)</p>
+          </div>
+          )}
+
+          {/* ── Reservas del mes ── */}
+          {matches("reservas turnos citas agenda") && (
+          <div className="executive-card flex flex-col py-6">
+            <div className="w-11 h-11 bg-rose-100 dark:bg-rose-900/20 rounded-2xl flex items-center justify-center text-rose-400 mb-4">
+              <span className="material-symbols-outlined text-xl">event_available</span>
+            </div>
+            <h3 className="text-[#64748B] dark:text-[#94A3B8] text-xs font-semibold uppercase tracking-wider">Reservas del mes</h3>
+            <p className="text-3xl font-black mt-1">{stats.reservationsMonth.toLocaleString()}</p>
+            <p className="text-[11px] text-[#64748B] mt-1">
+              {stats.reservationsMonth > 0 ? "Turnos y reservas registrados este mes." : "Cuando entren reservas, las vas a ver acá."}
+            </p>
           </div>
           )}
 
@@ -629,6 +757,64 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                 </tbody>
               </table>
             </div>
+          </section>
+          )}
+
+          {/* ── Rendimiento por sucursal (solo si hay sucursales) ── */}
+          {branchStats.length > 0 && matches("sucursales rendimiento comparativa mejor sucursal locales") && (
+          <section className="sm:col-span-2 lg:col-span-4 executive-card overflow-hidden">
+            <div className="flex justify-between items-center mb-1">
+              <h3 className="text-lg font-bold">Rendimiento por sucursal</h3>
+              <span className="material-symbols-outlined text-[#D1F366]">store</span>
+            </div>
+            <p className="text-[11px] text-[#64748B] mb-4">Ingresos, ventas y leads nuevos de este mes, por sucursal.</p>
+
+            {(() => {
+              const maxRev = Math.max(...branchStats.map((b) => b.revenue), 1)
+              const best = branchStats[0]
+              return (
+                <>
+                  {best && best.revenue > 0 && (
+                    <div className="flex items-center gap-3 mb-4 p-3 rounded-2xl bg-[#D1F366]/[0.08] border border-[#D1F366]/20">
+                      <span className="material-symbols-outlined text-[#4a7c00] dark:text-[#D1F366]">emoji_events</span>
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-[#64748B] font-semibold">Mejor sucursal del mes</p>
+                        <p className="font-bold">{best.name} · {currencyFmt.format(best.revenue)}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                      <thead className="border-b border-gray-100 dark:border-white/5">
+                        <tr className="text-[10px] text-[#64748B] font-bold uppercase tracking-widest">
+                          <th className="pb-3">Sucursal</th>
+                          <th className="pb-3 text-right">Ingresos</th>
+                          <th className="pb-3 text-right">Ventas</th>
+                          <th className="pb-3 text-right">Leads nuevos</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-sm">
+                        {branchStats.map((b, idx) => (
+                          <tr key={b.id} className={idx < branchStats.length - 1 ? "border-b border-gray-50 dark:border-white/5" : ""}>
+                            <td className="py-3">
+                              <div className="min-w-[120px]">
+                                <span className="font-semibold">{b.name}</span>
+                                <div className="mt-1 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.06] overflow-hidden">
+                                  <div className="h-full rounded-full bg-[#D1F366]" style={{ width: `${Math.round((b.revenue / maxRev) * 100)}%` }} />
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 text-right font-black whitespace-nowrap">{currencyFmt.format(b.revenue)}</td>
+                            <td className="py-3 text-right text-[#64748B]">{b.sales}</td>
+                            <td className="py-3 text-right text-[#64748B]">{b.leads}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )
+            })()}
           </section>
           )}
 

@@ -65,7 +65,7 @@ export const SETTINGS_SECTIONS: {
   { id: "perfil", label: "Perfil", description: "Tu nombre, foto y datos", icon: User },
   { id: "negocio", label: "Mi negocio", description: "La info que usa la IA", icon: Store },
   { id: "panel", label: "Panel lateral", description: "Qué secciones se ven", icon: LayoutDashboard },
-  { id: "equipo", label: "Equipo", description: "Cuentas de tus empleados", icon: Users, ownerOnly: true },
+  { id: "equipo", label: "Equipo", description: "Sucursales y empleados", icon: Users, ownerOnly: true },
   { id: "integraciones", label: "Integraciones", description: "Cobros con Mercado Pago", icon: CreditCard, ownerOnly: true },
   { id: "seguridad", label: "Seguridad", description: "Contraseña y cuenta", icon: Shield },
   { id: "notificaciones", label: "Notificaciones", description: "Alertas y emails", icon: Bell },

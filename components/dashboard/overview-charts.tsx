@@ -22,20 +22,21 @@ const chartTooltipStyle = {
   boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
 } as const
 
-export function RevenueBarChart({ data }: { data: { name: string; value: number }[] }) {
+// Ventas por día, apiladas por canal (Punto de venta + Bot).
+export function RevenueBarChart({ data }: { data: { name: string; pos: number; bot: number }[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <BarChart data={data} margin={{ top: 5, right: 8, left: 8, bottom: 0 }}>
         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 600, fill: "#94A3B8" }} interval={1} />
         <Tooltip
-          formatter={(value: number) => [currencyFmt.format(value), "Ventas"]}
+          formatter={(value: number, name: string) => [currencyFmt.format(value), name === "pos" ? "Punto de venta" : "Bot"]}
           labelFormatter={(label: string) => `Día ${label}`}
           cursor={{ fill: "rgba(148,163,184,0.08)" }}
           contentStyle={chartTooltipStyle}
-          itemStyle={{ color: "#D1F366" }}
           labelStyle={{ color: "#94A3B8", fontSize: "10px" }}
         />
-        <Bar dataKey="value" fill="#D1F366" radius={[5, 5, 0, 0]} />
+        <Bar dataKey="pos" stackId="rev" fill="#60A5FA" radius={[0, 0, 0, 0]} />
+        <Bar dataKey="bot" stackId="rev" fill="#D1F366" radius={[5, 5, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )

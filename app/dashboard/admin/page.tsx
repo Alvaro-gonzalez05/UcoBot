@@ -9,7 +9,6 @@ import {
   TrendingUp,
   ArrowRight,
   Zap,
-  Building2,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -231,23 +230,6 @@ export default async function AdminDashboard() {
           <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
         </Link>
 
-        <Link
-          href="/dashboard/admin/companies"
-          className="group bg-card rounded-3xl p-6 shadow-sm border border-border hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-orange-50 dark:bg-orange-900/30 text-orange-500 rounded-2xl flex items-center justify-center">
-              <Building2 className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="font-bold">Empresas</p>
-              <p className="text-xs text-muted-foreground">
-                Sucursales y admins
-              </p>
-            </div>
-          </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-        </Link>
       </div>
 
       {/* AI usage chart (general) */}
