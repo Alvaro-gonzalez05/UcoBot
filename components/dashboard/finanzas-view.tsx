@@ -144,6 +144,7 @@ const paymentMethods = [
   { id: "transfer", label: "Transferencia" },
   { id: "card", label: "Tarjeta" },
   { id: "mercadopago", label: "Mercado Pago" },
+  { id: "nave", label: "Nave" },
   { id: "other", label: "Otro" },
 ]
 

@@ -7,7 +7,8 @@ import { cn, normalizeSearchText } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote, ChevronLeft } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Smartphone, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote, ChevronLeft } from "lucide-react"
+import { PAYMENT_METHOD_LABELS } from "@/lib/payment-methods"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from "framer-motion"
@@ -20,6 +21,8 @@ import { PosSettingsDialog, type PosSettings } from "@/components/dashboard/pos-
 import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
 import { printTicket, type TicketData, type TicketWidth } from "@/lib/print-ticket"
 import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
+import { CashSessionDialog, type CashSession } from "@/components/dashboard/cash-session-dialog"
+import { Wallet } from "lucide-react"
 
 interface Product {
   id: string
@@ -110,10 +113,11 @@ interface PuntoDeVentaViewProps {
 const PRODUCTS_PAGE_SIZE = 18
 
 const paymentOptions = [
-  { id: "cash", label: "Efectivo", icon: Banknote },
-  { id: "card", label: "Tarjeta", icon: CreditCard },
-  { id: "transfer", label: "Transferencia", icon: Landmark },
-  { id: "qr", label: "QR", icon: QrCode },
+  { id: "cash", label: PAYMENT_METHOD_LABELS.cash, icon: Banknote },
+  { id: "card", label: PAYMENT_METHOD_LABELS.card, icon: CreditCard },
+  { id: "transfer", label: PAYMENT_METHOD_LABELS.transfer, icon: Landmark },
+  { id: "qr", label: PAYMENT_METHOD_LABELS.qr, icon: QrCode },
+  { id: "nave", label: PAYMENT_METHOD_LABELS.nave, icon: Smartphone },
 ]
 
 /** Configs viejas usaban "link" (Link de pago); ahora es "qr". */
@@ -165,6 +169,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     ticket_width: 80,
   })
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Caja del turno: las ventas se estampan con la sesión abierta (null = sin caja).
+  // El POS no opera hasta que haya una caja abierta (gate de apertura).
+  const [cashSession, setCashSession] = useState<CashSession | null>(null)
+  const [cashSessionChecked, setCashSessionChecked] = useState(false)
+  const [cashDialogOpen, setCashDialogOpen] = useState(false)
+  // Sesión recién abierta: se muestra la animación "¡Caja abierta!" antes de entrar al POS
+  const [justOpenedSession, setJustOpenedSession] = useState<CashSession | null>(null)
   // Propina: "auto" sigue el % sugerido de la config (se aplica sola), "off" sin propina,
   // "custom" un monto que cargó el cajero. El monto real se deriva más abajo.
   // Arranca en "off": la propina NO se suma sola. El cajero la agrega (botón % o
@@ -237,6 +248,18 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           })
           // No se auto-selecciona método: el usuario decide si cobra (y con qué) o pasa el pedido
         }
+      })
+
+    // Caja abierta del turno (si hay): las ventas se asocian a ella
+    supabase
+      .from("cash_sessions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "open")
+      .maybeSingle()
+      .then(({ data }) => {
+        setCashSession((data as CashSession) || null)
+        setCashSessionChecked(true)
       })
   }, [userId])
 
@@ -422,6 +445,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   // Agrega una línea al carrito (con o sin opciones). El precio ya incluye los extras.
   const addLine = (product: Product, options: SelectedOption[], extra: number) => {
+    // Mientras hay una venta confirmándose/confirmada, el carrito ya se guardó:
+    // agregar acá mezclaría productos en ese pedido. Bloqueado hasta tocar "Listo".
+    if (saleSuccess || isSubmitting) {
+      toast.info("Terminá la venta actual primero", {
+        description: "Tocá \"Listo\" para cerrar la venta y empezar un pedido nuevo.",
+      })
+      return
+    }
     flashAdd(product)
     const promo = bestProductPromotion(
       { id: product.id, price: product.price, category: product.category },
@@ -456,6 +487,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   // Al tocar un producto: si tiene opciones, abre el modal; si no, se agrega directo
   const addProductToCart = (product: Product) => {
+    // Venta en confirmación: no se puede empezar a cargar otro pedido todavía
+    if (saleSuccess || isSubmitting) {
+      toast.info("Terminá la venta actual primero", {
+        description: "Tocá \"Listo\" para cerrar la venta y empezar un pedido nuevo.",
+      })
+      return
+    }
     const groups = optionsByProduct[product.id]
     if (groups && groups.length > 0) {
       setPickerProduct(product)
@@ -564,12 +602,22 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             (walkin ? `${walkin.name}${walkin.table ? ` · Mesa ${walkin.table}` : ""}` : "venta-local"),
           customer_notes: noteParts.join(". "),
           source: "pos",
+          cash_session_id: cashSession?.id ?? null,
         })
         .select("id")
         .single()
 
       if (error) {
         throw error
+      }
+
+      // Descuento de stock (insumos por receta + stock directo). No bloquea la venta si falla.
+      if (createdOrder?.id) {
+        supabase
+          .rpc("apply_order_stock", { p_order_id: createdOrder.id, p_direction: -1 })
+          .then(({ error: stockError }) => {
+            if (stockError) console.error("Error applying order stock:", stockError)
+          })
       }
 
       // Procesar fidelización (no bloquea la venta si falla)
@@ -875,6 +923,99 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     }, 1400)
   }
 
+  // Gate de caja: hasta que no haya una caja abierta, el POS no muestra productos
+  // ni permite vender. Pantalla de apertura de turno en su lugar.
+  if (!cashSessionChecked) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+
+  if (!cashSession) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-background p-4 pb-24 lg:pb-4">
+        <motion.div
+          initial={{ opacity: 0, y: 16, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="w-full max-w-md overflow-hidden rounded-[2rem] bg-white dark:bg-muted p-8 text-center shadow-[0_24px_48px_-16px_rgba(17,24,39,0.4)] dark:shadow-[0_24px_48px_-16px_rgba(0,0,0,0.9)]"
+        >
+          <AnimatePresence mode="wait">
+            {justOpenedSession ? (
+              // Animación de apertura: círculo verde + mensaje, y después entra el POS
+              <motion.div
+                key="opened"
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.05 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                <motion.div
+                  initial={{ scale: 0.4, rotate: -20 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 15 }}
+                  className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500"
+                >
+                  <CheckCircle2 className="h-10 w-10 text-white" />
+                </motion.div>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-foreground">¡Caja abierta!</h2>
+                <p className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground">
+                  Turno a nombre de <span className="font-semibold">{justOpenedSession.opened_by}</span>. ¡Buenas ventas!
+                </p>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="closed"
+                initial={false}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-[#1f2030]">
+                  <Wallet className="h-9 w-9 text-[#d8ff55]" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-foreground">La caja está cerrada</h2>
+                <p className="mx-auto mt-2 max-w-xs text-sm text-muted-foreground">
+                  Para empezar a vender abrí la caja del turno: quedan registradas todas las ventas a nombre del responsable.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setCashDialogOpen(true)}
+                  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#1f2030] px-8 py-4 text-base font-bold text-[#d8ff55] shadow-[0_10px_24px_-8px_rgba(17,24,39,0.6)] transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Wallet className="h-5 w-5" />
+                  Abrir caja
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+
+        <CashSessionDialog
+          open={cashDialogOpen}
+          onOpenChange={setCashDialogOpen}
+          userId={userId}
+          businessName={businessName}
+          ticketWidth={(posSettings.ticket_width as TicketWidth) || 80}
+          activeSession={cashSession}
+          onSessionChange={(session) => {
+            if (session) {
+              // Mostrar la animación de apertura y recién después entrar al POS
+              setJustOpenedSession(session)
+              window.setTimeout(() => {
+                setCashSession(session)
+                setJustOpenedSession(null)
+              }, 1400)
+            } else {
+              setCashSession(null)
+            }
+          }}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="h-full w-full bg-background p-3 pb-24 sm:p-4 sm:pb-24 lg:p-4 lg:pb-4 xl:p-6 overflow-hidden">
       <div className="mx-auto flex h-full max-w-[1500px] gap-4 rounded-[2rem] bg-transparent">
@@ -935,7 +1076,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                 </div>
               ) : (
                 <>
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(170px,1fr))]">
+              <div
+                className={cn(
+                  "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] 2xl:grid-cols-[repeat(auto-fill,minmax(170px,1fr))]",
+                  // Venta confirmándose: la grilla queda atenuada hasta tocar "Listo"
+                  (saleSuccess || isSubmitting) && "pointer-events-none opacity-40 transition-opacity"
+                )}
+              >
                 {products.map((product) => {
                   const promo = bestProductPromotion(
                     { id: product.id, price: product.price, category: product.category },
@@ -1209,6 +1356,20 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   </PopoverContent>
                 </Popover>
 
+                <button
+                  type="button"
+                  onClick={() => setCashDialogOpen(true)}
+                  title={cashSession ? `Caja abierta · ${cashSession.opened_by}` : "Caja cerrada · tocá para abrir"}
+                  className="relative flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/70"
+                >
+                  <Wallet className="h-4 w-4" />
+                  <span
+                    className={cn(
+                      "absolute right-0.5 top-0.5 h-2 w-2 rounded-full",
+                      cashSession ? "bg-emerald-500" : "bg-red-500"
+                    )}
+                  />
+                </button>
                 <button
                   type="button"
                   onClick={() => setSettingsOpen(true)}
@@ -1747,6 +1908,16 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           )}
         </DialogContent>
       </Dialog>
+
+      <CashSessionDialog
+        open={cashDialogOpen}
+        onOpenChange={setCashDialogOpen}
+        userId={userId}
+        businessName={businessName}
+        ticketWidth={(posSettings.ticket_width as TicketWidth) || 80}
+        activeSession={cashSession}
+        onSessionChange={setCashSession}
+      />
 
       <PosSettingsDialog
         open={settingsOpen}

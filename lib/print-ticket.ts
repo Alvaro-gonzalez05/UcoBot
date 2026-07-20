@@ -111,8 +111,74 @@ export function buildTicketInner(t: TicketData): string {
     <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`
 }
 
-/** Documento standalone del ticket para una ventana de impresión. */
-function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = false): string {
+/** Datos del ticket de cierre de caja (arqueo del turno). */
+export interface CashCloseTicketData {
+  businessName: string
+  sessionId: string
+  openedBy: string
+  closedBy?: string
+  openedAt: string | Date
+  closedAt?: string | Date
+  openingAmount: number
+  /** Totales vendidos por método de pago (ya con label legible) */
+  totalsByMethod: { label: string; amount: number }[]
+  tipsTotal?: number
+  salesCount: number
+  cancelledCount?: number
+  /** Efectivo esperado en caja (apertura + ventas en efectivo) */
+  expectedCash: number
+  /** Efectivo contado en el arqueo */
+  countedCash?: number
+  /** contado - esperado */
+  difference?: number
+  notes?: string
+}
+
+/** Contenido interno del ticket de cierre de caja (mismos estilos que el de venta). */
+export function buildCashCloseTicketInner(d: CashCloseTicketData): string {
+  // Formato corto 24h ("20/07/26 15:18") para que la fecha entre en una sola línea
+  const fmtDate = (v: string | Date) => {
+    const date = new Date(v)
+    const day = date.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "2-digit" })
+    const time = date.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })
+    return `${day} ${time}`
+  }
+  const nowrap = (s: string) => `<span style="white-space:nowrap">${s}</span>`
+
+  const methodRows = d.totalsByMethod
+    .map((m) => `<div class="row"><span>${esc(m.label)}</span><span>${money(m.amount)}</span></div>`)
+    .join("")
+
+  const salesTotal = d.totalsByMethod.reduce((acc, m) => acc + m.amount, 0)
+
+  return `
+    <div class="center biz">${esc(d.businessName)}</div>
+    <div class="center bold" style="margin-top:2px;">CIERRE DE CAJA</div>
+    <div class="center muted">Caja #${esc(d.sessionId.slice(0, 8).toUpperCase())}</div>
+    <div class="sep"></div>
+    <div class="row"><span>Responsable</span><span>${esc(d.closedBy || d.openedBy)}</span></div>
+    <div class="row"><span>Apertura</span>${nowrap(fmtDate(d.openedAt))}</div>
+    <div class="row"><span>Cierre</span>${nowrap(fmtDate(d.closedAt ?? new Date()))}</div>
+    ${d.closedBy && d.closedBy !== d.openedBy ? `<div class="row"><span>Abrió</span><span>${esc(d.openedBy)}</span></div>` : ""}
+    <div class="row"><span>Monto inicial</span><span>${money(d.openingAmount)}</span></div>
+    <div class="sep"></div>
+    <div class="center bold" style="margin:2px 0 4px;">MOVIMIENTOS DE CAJA</div>
+    <div class="row"><span>Ventas</span><span>${d.salesCount}</span></div>
+    ${methodRows}
+    ${d.tipsTotal && d.tipsTotal > 0 ? `<div class="row"><span>Propinas</span><span>${money(d.tipsTotal)}</span></div>` : ""}
+    ${d.cancelledCount ? `<div class="row"><span>Cancelados</span><span>${d.cancelledCount}</span></div>` : ""}
+    <div class="sep"></div>
+    <div class="row total"><span>Total generado</span><span>${money(salesTotal)}</span></div>
+    <div class="row"><span>Efectivo esperado</span><span>${money(d.expectedCash)}</span></div>
+    ${typeof d.countedCash === "number" ? `<div class="row"><span>Efectivo contado</span><span>${money(d.countedCash)}</span></div>` : ""}
+    ${typeof d.difference === "number" ? `<div class="row"><span>Diferencia</span><span>${d.difference >= 0 ? "+" : ""}${money(d.difference)}</span></div>` : ""}
+    ${d.notes ? `<div class="notes">Nota: ${esc(d.notes)}</div>` : ""}
+    <div class="center muted footer">Documento interno de control</div>
+    <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`
+}
+
+/** Envoltura HTML común de todos los tickets térmicos (venta, cierre de caja). */
+function buildDocumentShell(inner: string, widthMm: TicketWidth, autoPrint = false): string {
   const bodyW = widthMm === 58 ? 54 : 72
   const baseFont = widthMm === 58 ? 15 : 17
   const bigFont = widthMm === 58 ? 19 : 23
@@ -206,7 +272,7 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
   }` : ""}
 </style>
 </head>
-<body>${buildTicketInner(t)}${autoPrint ? `
+<body>${inner}${autoPrint ? `
 <div class="actions">
   <button type="button" class="btn-close" onclick="window.close()">✓ Listo, volver</button>
   <button type="button" class="btn-print" onclick="window.print()">Reimprimir</button>
@@ -234,9 +300,18 @@ function buildTicketDocument(t: TicketData, widthMm: TicketWidth, autoPrint = fa
 }
 
 export function printTicket(t: TicketData, widthMm: TicketWidth = 80, options?: PrintTicketOptions) {
+  printThermalDocument(buildTicketInner(t), widthMm, options)
+}
+
+/** Imprime el ticket de cierre de caja con la misma mecánica que el de venta. */
+export function printCashCloseTicket(d: CashCloseTicketData, widthMm: TicketWidth = 80, options?: PrintTicketOptions) {
+  printThermalDocument(buildCashCloseTicketInner(d), widthMm, options)
+}
+
+function printThermalDocument(inner: string, widthMm: TicketWidth, options?: PrintTicketOptions) {
   if (typeof window === "undefined" || typeof document === "undefined") return
 
-  const html = buildTicketDocument(t, widthMm, true)
+  const html = buildDocumentShell(inner, widthMm, true)
   let popupUrl: string | null = null
 
   try {
@@ -311,7 +386,7 @@ export function printTicket(t: TicketData, widthMm: TicketWidth = 80, options?: 
   }
 
   doc.open()
-  doc.write(buildTicketDocument(t, widthMm))
+  doc.write(buildDocumentShell(inner, widthMm))
   doc.close()
   setTimeout(() => {
     try {

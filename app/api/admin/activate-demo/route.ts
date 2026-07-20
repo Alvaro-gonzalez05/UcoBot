@@ -75,6 +75,7 @@ export async function POST(request: Request) {
       "forms": "formularios",
       "automations": "automatizaciones",
       "promotions": "promociones",
+      "inventory": "stock",
     }
 
     const normalizedSidebarConfig = Array.isArray(demo.sidebar_config) && demo.sidebar_config.length > 0

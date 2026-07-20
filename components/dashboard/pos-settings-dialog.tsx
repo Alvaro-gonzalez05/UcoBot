@@ -13,9 +13,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Banknote, CreditCard, Landmark, QrCode, Loader2 } from "lucide-react"
+import { Banknote, CreditCard, Landmark, QrCode, Smartphone, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
+import { PAYMENT_METHOD_LABELS } from "@/lib/payment-methods"
 
 export interface PosSettings {
   payment_methods: string[]
@@ -25,10 +26,11 @@ export interface PosSettings {
 }
 
 const PAYMENT_METHODS = [
-  { id: "cash", label: "Efectivo", icon: Banknote },
-  { id: "card", label: "Tarjeta", icon: CreditCard },
-  { id: "transfer", label: "Transferencia", icon: Landmark },
-  { id: "qr", label: "QR", icon: QrCode },
+  { id: "cash", label: PAYMENT_METHOD_LABELS.cash, icon: Banknote },
+  { id: "card", label: PAYMENT_METHOD_LABELS.card, icon: CreditCard },
+  { id: "transfer", label: PAYMENT_METHOD_LABELS.transfer, icon: Landmark },
+  { id: "qr", label: PAYMENT_METHOD_LABELS.qr, icon: QrCode },
+  { id: "nave", label: PAYMENT_METHOD_LABELS.nave, icon: Smartphone },
 ]
 
 export function PosSettingsDialog({

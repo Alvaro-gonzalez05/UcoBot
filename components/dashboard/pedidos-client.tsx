@@ -488,6 +488,8 @@ export function PedidosClient({
     const snapshot = orders
     setOrders((prev) => prev.filter((o) => o.id !== orderId))
     try {
+      // Reponer stock antes de borrar (no-op si nunca se descontó o ya se repuso)
+      await supabase.rpc("apply_order_stock", { p_order_id: orderId, p_direction: 1 })
       const { error } = await supabase.from("orders").delete().eq("id", orderId)
       if (error) throw error
       // Sin toast: la animación ya confirma la eliminación
@@ -912,9 +914,21 @@ export function PedidosClient({
 
   // Cobra desde el modal: guarda los items editados, los pagos y cierra la venta en un solo paso.
   // Cobrar confirma la edición: los "−" desaparecen y los "+" se consolidan.
+  // La venta pertenece a la caja abierta AL MOMENTO DEL COBRO (no a la de creación)
+  const getOpenCashSessionId = async (): Promise<string | null> => {
+    const { data } = await supabase
+      .from("cash_sessions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("status", "open")
+      .maybeSingle()
+    return data?.id ?? null
+  }
+
   const finalizeFromModal = async (payments: PaymentRecord[]) => {
     if (!selectedOrder) return
     try {
+      const cashSessionId = await getOpenCashSessionId()
       const items = consolidateItems(editItems).map((i) => ({
         product_id: i.product_id,
         name: i.name,
@@ -939,6 +953,7 @@ export function PedidosClient({
           delivery_address: editAddress,
           customer_notes: editNotes,
           payments,
+          cash_session_id: cashSessionId,
         })
         .eq("id", selectedOrder.id)
         .select()
@@ -1146,7 +1161,25 @@ export function PedidosClient({
       removed: keepNew ? (i.removed || undefined) : undefined,
     }))
     const total = items.reduce((s, i) => (i.removed ? s : s + i.price * i.quantity), 0)
+    // Firma de stock: solo productos reales con su cantidad. Si no cambia (ej: editar
+    // la nota), el auto-save NO toca el stock — evita pares reponer/descontar de ruido.
+    const stockSig = (arr: any[]) =>
+      JSON.stringify(
+        (arr || [])
+          .filter((i: any) => !i?.removed && i?.product_id)
+          .map((i: any) => [i.product_id, Number(i.quantity) || 1])
+          .sort()
+      )
+    const needsStockCycle =
+      stockSig(items) !== stockSig(selectedOrder.items as any[]) ||
+      editStatus === "cancelled" ||
+      selectedOrder.status === "cancelled"
     try {
+      // Stock: reponer con los items viejos, guardar, y volver a descontar con los
+      // nuevos (salvo cancelación, que queda repuesta). El RPC es idempotente.
+      if (needsStockCycle) {
+        await supabase.rpc("apply_order_stock", { p_order_id: selectedOrder.id, p_direction: 1 })
+      }
       const { data, error } = await supabase
         .from("orders")
         .update({
@@ -1160,6 +1193,9 @@ export function PedidosClient({
         .select()
         .single()
       if (error) throw error
+      if (needsStockCycle && editStatus !== "cancelled") {
+        await supabase.rpc("apply_order_stock", { p_order_id: selectedOrder.id, p_direction: -1 })
+      }
       setSelectedOrder((prev) => (prev ? { ...prev, ...data } : prev))
       setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
       if (!keepNew) setEditItems(source.map((i) => ({ ...i, is_new: false })))

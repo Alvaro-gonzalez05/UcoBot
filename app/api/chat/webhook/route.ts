@@ -1034,6 +1034,7 @@ ${rewardsList ? `- Premios canjeables:\n${rewardsList}` : '- Todavía no hay pre
 
     const featurePrompts = (bot.feature_config && bot.feature_config.prompts) || {}
     const orderRules = (featurePrompts.take_orders || '').trim()
+    const editOrderRules = (featurePrompts.edit_orders || '').trim()
     const reservationRules = (featurePrompts.take_reservations || '').trim()
     const loyaltyRules = (featurePrompts.loyalty_points || '').trim()
     const handoverRules = (featurePrompts.handover || '').trim()
@@ -1074,10 +1075,55 @@ ${rewardsList ? `- Premios canjeables:\n${rewardsList}` : '- Todavía no hay pre
 - Estado de datos: ${hasExtractedName && hasExtractedPhone ? 'COMPLETOS' : hasExtractedName ? 'FALTA TELÉFONO' : 'FALTA NOMBRE Y TELÉFONO'}`
     })()
 
+    // Pedidos recientes del cliente que todavía se pueden modificar/cancelar (feature edit_orders).
+    // Se inyectan al prompt con id corto y se usan después para validar los marcadores.
+    let recentEditableOrders: any[] = []
+    if (features.includes('edit_orders') && features.includes('take_orders')) {
+      try {
+        const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString()
+        let ordersQuery = supabase
+          .from('orders')
+          .select('id, items, total_amount, status, created_at, client_id, conversation_id')
+          .eq('user_id', bot.user_id)
+          .in('status', ['pending', 'confirmed'])
+          .gte('created_at', twelveHoursAgo)
+          .order('created_at', { ascending: false })
+          .limit(5)
+        // Solo pedidos de ESTE cliente: por conversación o por client_id
+        if (conversation.client_id) {
+          ordersQuery = ordersQuery.or(`conversation_id.eq.${conversation.id},client_id.eq.${conversation.client_id}`)
+        } else {
+          ordersQuery = ordersQuery.eq('conversation_id', conversation.id)
+        }
+        const { data: recentOrders } = await ordersQuery
+        recentEditableOrders = recentOrders || []
+      } catch (e) {
+        console.error('Error loading recent editable orders:', e)
+      }
+    }
+
+    const editOrdersBlock = recentEditableOrders.length > 0
+      ? `═══ PEDIDOS EXISTENTES DE ESTE CLIENTE (se pueden modificar o cancelar) ═══
+${recentEditableOrders
+          .map((o: any) => {
+            const itemsTxt = (Array.isArray(o.items) ? o.items : [])
+              .filter((i: any) => !i?.removed)
+              .map((i: any) => `${i.quantity || 1}x ${i.name}`)
+              .join(', ')
+            const estado = o.status === 'pending' ? 'pendiente' : 'confirmado'
+            return `- [ID:${String(o.id).slice(0, 6)}] ${itemsTxt} — $${o.total_amount} — ${estado}`
+          })
+          .join('\n')}
+Si el cliente pide CANCELAR uno de estos pedidos y lo confirma, agregá AL FINAL de tu respuesta, en una línea aparte, el marcador EXACTO "PEDIDO CANCELADO [ID:xxxxxx]" usando el id de la lista (es interno, el cliente NO lo ve).
+Si pide MODIFICARLO (cambiar cantidades, agregar o quitar productos), repasá con el cliente cómo queda el pedido COMPLETO (todos los productos finales con cantidades) y, cuando lo confirme, agregá AL FINAL el marcador EXACTO "PEDIDO MODIFICADO [ID:xxxxxx]".
+Reglas: usá SOLO ids de esta lista. Si el pedido que menciona no está en la lista, ya está en preparación o entregado: explicale que ya está en cocina y ofrecé derivar con un humano. Ante la duda, NO pongas el marcador.${editOrderRules ? `\nInstrucciones del negocio para editar/cancelar pedidos (seguilas al pie de la letra):\n${editOrderRules}` : ''}`
+      : ''
+
     // Lista de capacidades activas (solo las features habilitadas)
     const capabilitiesList = (() => {
       const caps: string[] = []
       if (features.includes('take_orders')) caps.push('✅ Tomar PEDIDOS del catálogo')
+      if (features.includes('edit_orders') && features.includes('take_orders')) caps.push('✅ Modificar o cancelar pedidos recientes del cliente')
       if (features.includes('take_reservations')) caps.push('✅ Tomar RESERVAS')
       if (features.includes('loyalty_points')) caps.push('✅ Gestionar FIDELIDAD (puntos/sellos)')
       if (features.includes('register_clients')) caps.push('✅ Registrar datos de clientes')
@@ -1225,7 +1271,7 @@ ${clientInfoBlock}
 
 ═══ QUÉ PODÉS HACER ═══
 ${capabilitiesList}
-${ordersBlock ? '\n' + ordersBlock + '\n' : ''}${reservationsBlock ? '\n' + reservationsBlock + '\n' : ''}${loyaltyBlock ? '\n' + loyaltyBlock + '\n' : ''}${registerBlock ? '\n' + registerBlock + '\n' : ''}${formsInfo ? '\n═══ FORMULARIOS ═══\n' + formsInfo + '\n' : ''}${promotionsInfo ? '\n═══ PROMOCIONES ACTIVAS (descuentos vigentes) ═══\n' + promotionsInfo + '\n' : ''}${mpBlock ? '\n' + mpBlock + '\n' : ''}
+${ordersBlock ? '\n' + ordersBlock + '\n' : ''}${editOrdersBlock ? '\n' + editOrdersBlock + '\n' : ''}${reservationsBlock ? '\n' + reservationsBlock + '\n' : ''}${loyaltyBlock ? '\n' + loyaltyBlock + '\n' : ''}${registerBlock ? '\n' + registerBlock + '\n' : ''}${formsInfo ? '\n═══ FORMULARIOS ═══\n' + formsInfo + '\n' : ''}${promotionsInfo ? '\n═══ PROMOCIONES ACTIVAS (descuentos vigentes) ═══\n' + promotionsInfo + '\n' : ''}${mpBlock ? '\n' + mpBlock + '\n' : ''}
 ═══ DERIVACIÓN A HUMANO (regla de seguridad, SIEMPRE activa) ═══
 - Derivá SOLO en estos casos: (a) el cliente pide EXPLÍCITAMENTE hablar con una persona/humano/asesor, (b) hay una queja grave, o (c) no podés resolver su pedido con la info que tenés. En esos casos tu respuesta DEBE comenzar con la etiqueta "[HANDOVER]" seguida de un mensaje amable avisando que un asesor humano va a responder en breve.
 - NO derives solo porque el cliente muestre interés, pregunte precios, planes o disponibilidad, o quiera avanzar con una compra/contratación: eso lo atendés VOS, dando la info y guiando el siguiente paso. El interés NO es motivo de derivación. Derivá recién si el cliente lo pide o si ya hiciste tu parte y hace falta una persona para cerrar.
@@ -1334,10 +1380,37 @@ PRIORIDADES ANTE CONFLICTO:
         // El pedido/reserva se registra SOLO si el bot escribió de verdad su marcador interno
         // ("PEDIDO CONFIRMADO" / "RESERVA CONFIRMADA"), que únicamente agrega cuando el cliente
         // confirmó en serio. Así evitamos pedidos/reservas falsos durante la simple charla.
+        // Cancelar / modificar pedidos existentes (feature edit_orders). El bot solo puede
+        // referirse a los pedidos que le inyectamos en el prompt (recentEditableOrders):
+        // el handler valida en servidor que el id pertenezca a ESTE cliente y esté editable.
+        const canEditOrders = featuresCheck.includes('edit_orders')
+        const cancelMatch = canEditOrders ? aiResponse.match(/PEDIDO\s+CANCELADO\s*\[ID:\s*([a-f0-9-]{4,12})\]/i) : null
+        const modifyMatch = canEditOrders ? aiResponse.match(/PEDIDO\s+MODIFICADO\s*\[ID:\s*([a-f0-9-]{4,12})\]/i) : null
+
         const hasOrderMarker = /PEDIDO\s+CONFIRMAD[OA]/i.test(aiResponse)
         const hasReservationMarker = /RESERVA\s+CONFIRMAD[OA]/i.test(aiResponse)
-        const shouldProcessOrder = takeOrders && hasOrderMarker
+        // Si además del CONFIRMADO hay un CANCELADO/MODIFICADO, es una edición: no crear pedido nuevo
+        const shouldProcessOrder = takeOrders && hasOrderMarker && !cancelMatch && !modifyMatch
         const shouldProcessReservation = takeReservations && hasReservationMarker
+
+        if (cancelMatch) {
+          await cancelOrderFromAI(supabase, bot, conversation, recentEditableOrders, cancelMatch[1], senderName, senderPhone)
+        } else if (modifyMatch) {
+          await updateOrderFromAI(
+            supabase,
+            bot,
+            conversation,
+            recentEditableOrders,
+            modifyMatch[1],
+            finalUserMessage,
+            aiResponse,
+            geminiApiKey,
+            conversationHistory,
+            productsInfo,
+            senderName,
+            senderPhone
+          )
+        }
 
         if (shouldProcessOrder || shouldProcessReservation) {
           await processOrdersAndReservations(
@@ -1386,6 +1459,7 @@ PRIORIDADES ANTE CONFLICTO:
         // reserva) para que el cliente reciba el mensaje de confirmación que definió el dueño.
         aiResponse = toMessagingFormatting(aiResponse)
           .replace(/(PEDIDO|RESERVA)\s+CONFIRMAD[OA]/gi, '')
+          .replace(/PEDIDO\s+(CANCELADO|MODIFICADO)\s*\[ID:[^\]]*\]/gi, '')
           .replace(/[ \t]{2,}/g, ' ')
           .replace(/ +([.,!?])/g, '$1')
           .replace(/\n{3,}/g, '\n\n')
@@ -1533,6 +1607,196 @@ Responde SOLO con el JSON.
   }
 }
 
+// Resuelve el id corto del marcador contra la lista de pedidos que se le mostró al bot.
+// Es la validación de seguridad central: el bot NO puede tocar pedidos fuera de esa lista
+// (que ya viene filtrada por cliente/conversación y por estado editable).
+function resolveEditableOrder(recentEditableOrders: any[], shortId: string) {
+  const normalized = (shortId || '').toLowerCase()
+  return recentEditableOrders.find((o: any) => String(o.id).toLowerCase().startsWith(normalized)) || null
+}
+
+async function cancelOrderFromAI(
+  supabase: any,
+  bot: any,
+  conversation: any,
+  recentEditableOrders: any[],
+  shortId: string,
+  senderName?: string,
+  senderPhone?: string
+) {
+  try {
+    const order = resolveEditableOrder(recentEditableOrders, shortId)
+    if (!order) {
+      console.log(`⚠️ Cancel marker with unknown/invalid order id "${shortId}" — ignored`)
+      return
+    }
+
+    // Revalidar en DB: el estado pudo cambiar desde que se armó el prompt
+    const { data: updated, error } = await supabase
+      .from('orders')
+      .update({ status: 'cancelled' })
+      .eq('id', order.id)
+      .eq('user_id', bot.user_id)
+      .in('status', ['pending', 'confirmed'])
+      .select('id')
+      .single()
+
+    if (error || !updated) {
+      console.log('⚠️ Order no longer cancellable:', order.id, error?.message)
+      return
+    }
+
+    // Reponer stock (no-op si nunca se descontó)
+    const { error: stockError } = await supabase.rpc('apply_order_stock', {
+      p_order_id: order.id,
+      p_direction: 1,
+    })
+    if (stockError) console.error('Error restocking cancelled order:', stockError)
+
+    console.log('✅ Order cancelled by AI:', order.id)
+    await createNotification({
+      userId: bot.user_id,
+      title: 'Pedido cancelado por el cliente',
+      message: `${senderName || senderPhone || 'Un cliente'} canceló su pedido #${String(order.id).slice(0, 8).toUpperCase()} por WhatsApp`,
+      type: 'warning',
+      link: `/dashboard/pedidos`,
+    })
+  } catch (err) {
+    console.error('Error cancelling order from AI:', err)
+  }
+}
+
+async function updateOrderFromAI(
+  supabase: any,
+  bot: any,
+  conversation: any,
+  recentEditableOrders: any[],
+  shortId: string,
+  userMessage: string,
+  aiResponse: string,
+  geminiApiKey: string,
+  conversationHistory: any[] = [],
+  productsInfo: string = '',
+  senderName?: string,
+  senderPhone?: string
+) {
+  try {
+    if (!geminiApiKey) return
+
+    const order = resolveEditableOrder(recentEditableOrders, shortId)
+    if (!order) {
+      console.log(`⚠️ Modify marker with unknown/invalid order id "${shortId}" — ignored`)
+      return
+    }
+
+    // Extraer el detalle FINAL del pedido modificado (2ª llamada, igual que en pedidos nuevos)
+    const historyText = conversationHistory
+      .slice(-10)
+      .map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Bot'}: ${m.content}`)
+      .join('\n')
+
+    const extractionPrompt = `
+El Bot acaba de confirmar la MODIFICACIÓN de un pedido existente. Extraé cómo queda el pedido FINAL COMPLETO.
+
+PEDIDO ORIGINAL:
+${JSON.stringify((order.items || []).map((i: any) => ({ name: i.name, quantity: i.quantity, price: i.price })))}
+
+CONTEXTO (historial reciente):
+${historyText}
+
+ÚLTIMA INTERACCIÓN:
+Cliente: "${userMessage}"
+Bot: "${aiResponse}"
+
+CATÁLOGO DE PRODUCTOS (para precios y nombres exactos):
+${productsInfo || 'No hay catálogo disponible.'}
+
+Respondé SOLO con este JSON (el pedido final completo tras la modificación; si un precio no aparece en el chat, buscalo en el catálogo, y si tampoco está usá el del pedido original o 0):
+{ "items": [{ "name": "...", "quantity": 1, "price": 0 }], "total": 0 }
+`
+    const response = await callGeminiWithFallback(geminiApiKey, {
+      contents: [{ parts: [{ text: extractionPrompt }] }],
+      generationConfig: { temperature: 0.1 }
+    }, { userId: bot.user_id, purpose: 'detection' })
+
+    if (!response || !response.ok) return
+    const data = await response.json()
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!text) return
+
+    let result: any
+    try {
+      result = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim())
+    } catch (e) {
+      console.error('Error parsing modified order JSON', e)
+      return
+    }
+    if (!Array.isArray(result.items) || result.items.length === 0) return
+
+    // Enriquecer con product_id (para stock) igual que en pedidos nuevos
+    let newItems = result.items
+    try {
+      const { data: catalog } = await supabase
+        .from('products')
+        .select('id, name')
+        .eq('user_id', bot.user_id)
+      if (catalog && catalog.length > 0) {
+        newItems = result.items.map((item: any) => {
+          if (item.product_id) return item
+          const itemName = (item.name || '').toLowerCase().trim()
+          const product = catalog.find((p: any) => (p.name || '').toLowerCase().trim() === itemName)
+          return product ? { ...item, product_id: product.id } : item
+        })
+      }
+    } catch (enrichErr) {
+      console.error('Error enriching modified order items:', enrichErr)
+    }
+
+    const newTotal = Number(result.total) ||
+      newItems.reduce((s: number, i: any) => s + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0)
+
+    // Stock: reponer con los items viejos → guardar los nuevos → volver a descontar
+    await supabase.rpc('apply_order_stock', { p_order_id: order.id, p_direction: 1 })
+
+    const { data: updated, error } = await supabase
+      .from('orders')
+      .update({
+        items: newItems,
+        total_amount: newTotal,
+        customer_notes: 'Pedido vía WhatsApp (modificado por el cliente)',
+      })
+      .eq('id', order.id)
+      .eq('user_id', bot.user_id)
+      .in('status', ['pending', 'confirmed'])
+      .select('id')
+      .single()
+
+    if (error || !updated) {
+      // No se pudo actualizar (ej: pasó a preparación): volver a descontar el stock original
+      await supabase.rpc('apply_order_stock', { p_order_id: order.id, p_direction: -1 })
+      console.log('⚠️ Order no longer editable:', order.id, error?.message)
+      return
+    }
+
+    const { error: stockError } = await supabase.rpc('apply_order_stock', {
+      p_order_id: order.id,
+      p_direction: -1,
+    })
+    if (stockError) console.error('Error applying stock to modified order:', stockError)
+
+    console.log('✅ Order modified by AI:', order.id)
+    await createNotification({
+      userId: bot.user_id,
+      title: 'Pedido modificado por el cliente',
+      message: `${senderName || senderPhone || 'Un cliente'} modificó su pedido #${String(order.id).slice(0, 8).toUpperCase()} por WhatsApp (nuevo total: $${newTotal})`,
+      type: 'warning',
+      link: `/dashboard/pedidos`,
+    })
+  } catch (err) {
+    console.error('Error updating order from AI:', err)
+  }
+}
+
 async function saveOrderFromAI(
   supabase: any,
   bot: any,
@@ -1600,13 +1864,33 @@ async function saveOrderFromAI(
       }
     }
 
-    const { error } = await supabase
+    // Enriquecer items con product_id (match por nombre): lo necesita el descuento
+    // de stock (recetas / stock directo) y facilita ediciones posteriores.
+    let enrichedItems = orderData.items;
+    try {
+      const { data: catalog } = await supabase
+        .from('products')
+        .select('id, name')
+        .eq('user_id', bot.user_id);
+      if (catalog && catalog.length > 0) {
+        enrichedItems = orderData.items.map((item: any) => {
+          if (item.product_id) return item;
+          const itemName = (item.name || '').toLowerCase().trim();
+          const product = catalog.find((p: any) => (p.name || '').toLowerCase().trim() === itemName);
+          return product ? { ...item, product_id: product.id } : item;
+        });
+      }
+    } catch (enrichErr) {
+      console.error('Error enriching order items with product ids:', enrichErr);
+    }
+
+    const { data: createdOrder, error } = await supabase
       .from("orders")
       .insert({
         user_id: bot.user_id,
         client_id: clientId,
         conversation_id: conversation.id,
-        items: orderData.items,
+        items: enrichedItems,
         total_amount: orderData.total,
         customer_notes: `Pedido vía WhatsApp`,
         delivery_address: orderData.deliveryAddress,
@@ -1615,9 +1899,19 @@ async function saveOrderFromAI(
         order_type: orderData.orderType || 'pickup',
         tags: tags,
         source: 'bot'
-      });
+      })
+      .select('id')
+      .single();
 
     if (!error) {
+      // Descuento de stock del pedido (no bloquea si falla)
+      if (createdOrder?.id) {
+        const { error: stockError } = await supabase.rpc('apply_order_stock', {
+          p_order_id: createdOrder.id,
+          p_direction: -1,
+        });
+        if (stockError) console.error('Error applying order stock (bot):', stockError);
+      }
       console.log('✅ Order saved successfully from AI');
       await createNotification({
         userId: bot.user_id,

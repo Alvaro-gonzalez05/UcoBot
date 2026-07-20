@@ -25,6 +25,7 @@ const MORE_ITEMS = [
   { name: "Punto de venta", href: "/dashboard/punto-de-venta", icon: "point_of_sale" },
   { name: "Finanzas", href: "/dashboard/finanzas", icon: "account_balance_wallet" },
   { name: "Pedidos", href: "/dashboard/pedidos", icon: "shopping_cart" },
+  { name: "Stock", href: "/dashboard/stock", icon: "inventory_2" },
   { name: "Reservas", href: "/dashboard/reservas", icon: "calendar_month" },
   { name: "Chatbots", href: "/dashboard/bots", icon: "forum" },
   { name: "Formularios", href: "/dashboard/formularios", icon: "description" },

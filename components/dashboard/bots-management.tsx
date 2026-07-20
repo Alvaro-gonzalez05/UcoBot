@@ -88,6 +88,7 @@ const platformLabels = {
 
 const availableFeatures = [
   { id: "take_orders", label: "Tomar pedidos", description: "El bot puede registrar pedidos del catálogo de productos." },
+  { id: "edit_orders", label: "Editar y cancelar pedidos", description: "El cliente puede modificar o cancelar sus pedidos recientes (pendientes o confirmados) desde el chat." },
   { id: "take_reservations", label: "Tomar reservas", description: "El bot gestiona reservas de mesas o turnos." },
   { id: "register_clients", label: "Registro de clientes", description: "Identifica y registra clientes nuevos automáticamente." },
   { id: "loyalty_points", label: "Puntos de fidelización", description: "Los clientes pueden consultar su saldo de puntos de fidelidad." },
@@ -99,6 +100,10 @@ const featurePromptConfig: Record<string, { label: string; placeholder: string }
   take_orders: {
     label: "Instrucciones para tomar pedidos (opcional)",
     placeholder: "Ej: Siempre preguntá si es retiro o envío. El envío cuesta $500 dentro del centro. No tomes pedidos después de las 23h.",
+  },
+  edit_orders: {
+    label: "Instrucciones para editar/cancelar pedidos (opcional)",
+    placeholder: "Ej: No permitas cancelar pedidos con envío ya despachado. Si el pedido está en preparación, derivá a un humano.",
   },
   take_reservations: {
     label: "Instrucciones para reservas (opcional)",

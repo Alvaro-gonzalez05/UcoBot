@@ -22,6 +22,8 @@ interface NavigationItem {
   requiresFeature?: string
   requiresAdmin?: boolean
   visible?: boolean
+  /** Oculta la sección salvo que sidebar_config la habilite explícitamente (secciones nuevas opt-in) */
+  defaultHidden?: boolean
 }
 
 const baseNavigation: NavigationItem[] = [
@@ -32,6 +34,7 @@ const baseNavigation: NavigationItem[] = [
   { name: "Punto de venta", href: "/dashboard/punto-de-venta", icon: "point_of_sale" },
   { name: "Finanzas", href: "/dashboard/finanzas", icon: "account_balance_wallet" },
   { name: "Pedidos", href: "/dashboard/pedidos", icon: "shopping_cart" },
+  { name: "Stock", href: "/dashboard/stock", icon: "inventory_2", defaultHidden: true },
   { name: "Reservas", href: "/dashboard/reservas", icon: "calendar_month" },
   { name: "Formularios", href: "/dashboard/formularios", icon: "description" },
   { name: "Promociones", href: "/dashboard/promociones", icon: "local_offer" },
@@ -125,7 +128,7 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
         return {
           ...item,
           name: cfg?.label ?? item.name,
-          visible: featureVisible && (cfg ? cfg.visible !== false : true),
+          visible: featureVisible && (cfg ? cfg.visible !== false : !item.defaultHidden),
         }
       }
 

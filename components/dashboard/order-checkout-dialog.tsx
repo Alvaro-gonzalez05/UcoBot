@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
-import { Banknote, CreditCard, Landmark, QrCode, CheckCircle2, Loader2, ShoppingBag, Users, ChevronLeft, Check, Minus } from "lucide-react"
+import { Banknote, CreditCard, Landmark, QrCode, Smartphone, CheckCircle2, Loader2, ShoppingBag, Users, ChevronLeft, Check, Minus } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import QRCode from "react-qr-code"
 import { toast } from "sonner"
+import { PAYMENT_METHOD_LABELS } from "@/lib/payment-methods"
 
 interface CheckoutOrder {
   id: string
@@ -41,10 +42,11 @@ const formatMiles = (raw: string) => {
 const parseMiles = (s: string) => Number(s.replace(/\./g, "")) || 0
 
 const PAYMENT_OPTIONS = [
-  { id: "cash", label: "Efectivo", icon: Banknote },
-  { id: "card", label: "Tarjeta", icon: CreditCard },
-  { id: "transfer", label: "Transferencia", icon: Landmark },
-  { id: "qr", label: "QR", icon: QrCode },
+  { id: "cash", label: PAYMENT_METHOD_LABELS.cash, icon: Banknote },
+  { id: "card", label: PAYMENT_METHOD_LABELS.card, icon: CreditCard },
+  { id: "transfer", label: PAYMENT_METHOD_LABELS.transfer, icon: Landmark },
+  { id: "qr", label: PAYMENT_METHOD_LABELS.qr, icon: QrCode },
+  { id: "nave", label: PAYMENT_METHOD_LABELS.nave, icon: Smartphone },
 ]
 
 // En pago dividido el QR queda afuera (requiere esperar acreditación por cada parte)

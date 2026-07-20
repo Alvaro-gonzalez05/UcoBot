@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Loader2, X, Upload, Image as ImageIcon } from "lucide-react"
 import { toast } from "sonner"
+import { ProductRecipeEditor } from "./product-recipe-editor"
 
 interface Product {
   id: string
@@ -287,6 +288,8 @@ export function ProductEditForm({
               </div>
             )}
           </div>
+
+          <ProductRecipeEditor productId={product.id} />
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
