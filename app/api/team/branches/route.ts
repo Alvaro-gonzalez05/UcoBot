@@ -28,7 +28,18 @@ async function requireOwner() {
   if (profile?.parent_user_id) {
     return { error: NextResponse.json({ error: "Solo el dueño puede gestionar sucursales" }, { status: 403 }) }
   }
-  return { ownerId: user.id, businessName: profile?.business_name || "Mi negocio" }
+
+  // Las sucursales son cuentas propias (parent_user_id null), así que pasan el
+  // chequeo de arriba. Pero NO deben gestionar/ver otras sucursales: si el
+  // usuario es miembro con rol 'branch', es una sucursal, no el admin.
+  const { data: membership } = await supabase
+    .from("company_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle()
+  const isBranch = membership?.role === "branch"
+
+  return { ownerId: user.id, businessName: profile?.business_name || "Mi negocio", isBranch }
 }
 
 function slugify(s: string): string {
@@ -78,6 +89,8 @@ async function ensureCompany(admin: ReturnType<typeof createAdminClient>, ownerI
 export async function GET() {
   const r = await requireOwner()
   if (r.error) return r.error
+  // Una sucursal no ve otras sucursales: lista vacía + flag para mostrar el aviso.
+  if (r.isBranch) return NextResponse.json({ businessName: r.businessName, branches: [], isBranch: true })
   const admin = createAdminClient()
 
   const { data: membership } = await admin
@@ -120,6 +133,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const r = await requireOwner()
   if (r.error) return r.error
+  if (r.isBranch) return NextResponse.json({ error: "Una sucursal no puede crear sucursales" }, { status: 403 })
   try {
     const { branchName } = await request.json()
     const name = String(branchName || "").trim()
@@ -181,6 +195,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const r = await requireOwner()
   if (r.error) return r.error
+  if (r.isBranch) return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   try {
     const { userId } = await request.json()
     if (!userId) return NextResponse.json({ error: "Falta userId" }, { status: 400 })
@@ -209,6 +224,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const r = await requireOwner()
   if (r.error) return r.error
+  if (r.isBranch) return NextResponse.json({ error: "No autorizado" }, { status: 403 })
   try {
     const { userId } = await request.json()
     if (!userId) return NextResponse.json({ error: "Falta userId" }, { status: 400 })

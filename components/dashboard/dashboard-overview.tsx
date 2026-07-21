@@ -97,8 +97,8 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
   })
   const [chartData, setChartData] = useState<{ name: string; value: number }[]>([])
   const [revenueChart, setRevenueChart] = useState<{ name: string; pos: number; bot: number }[]>([])
-  // Ranking de sucursales (solo si el negocio tiene sucursales habilitadas)
-  const [branchStats, setBranchStats] = useState<{ id: string; name: string; revenue: number; sales: number; leads: number }[]>([])
+  // Comparativa de sucursales (solo si el negocio tiene sucursales habilitadas)
+  const [branchStats, setBranchStats] = useState<{ id: string; name: string; revenue: number; sales: number; leads: number; convos: number; messages: number; reservations: number }[]>([])
   const [pendingLeads, setPendingLeads] = useState(0)
   const [peakDay, setPeakDay] = useState<string | null>(null)
   const [activeBotsList, setActiveBotsList] = useState<{ id: string; name: string; platform: string }[]>([])
@@ -175,7 +175,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         supabase.from('clients').select('*', { count: 'exact', head: true }).in('user_id', accountIds),
         supabase.from('clients').select('*', { count: 'exact', head: true }).in('user_id', accountIds).lt('created_at', startOfCurrentMonth),
         supabase.from('bots').select('*', { count: 'exact', head: true }).in('user_id', accountIds).eq('is_active', true),
-        supabase.from('conversations').select('id, last_message_at').in('user_id', accountIds),
+        supabase.from('conversations').select('id, last_message_at, user_id, created_at').in('user_id', accountIds),
         supabase.from('conversations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).gte('created_at', startOfCurrentMonth),
         supabase.from('conversations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
         supabase.from('conversations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).eq('needs_attention', true),
@@ -187,7 +187,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         supabase.from('messages').select('created_at, conversations!inner(user_id)').in('conversations.user_id', accountIds).gte('created_at', sevenDaysAgo).limit(10000),
         supabase.from('orders').select('total_amount, source, conversation_id, items, created_at, user_id').in('user_id', accountIds).neq('status', 'cancelled').gte('created_at', startOfCurrentMonth),
         supabase.from('orders').select('total_amount, source').in('user_id', accountIds).neq('status', 'cancelled').gte('created_at', startOfLastMonth).lt('created_at', startOfCurrentMonth),
-        supabase.from('reservations').select('*', { count: 'exact', head: true }).in('user_id', accountIds).gte('created_at', startOfCurrentMonth),
+        supabase.from('reservations').select('user_id').in('user_id', accountIds).gte('created_at', startOfCurrentMonth).limit(10000),
         supabase.from('clients').select('user_id').in('user_id', accountIds).gte('created_at', startOfCurrentMonth).limit(10000),
       ])
 
@@ -206,7 +206,8 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
       const weekMsgRows = msgsWeekRowsRes.status === 'fulfilled' ? (msgsWeekRowsRes.value.data || []) : []
       const ordersMonth = ordersMonthRes.status === 'fulfilled' ? (ordersMonthRes.value.data || []) : []
       const ordersLastMonth = ordersLastMonthRes.status === 'fulfilled' ? (ordersLastMonthRes.value.data || []) : []
-      const reservationsMonth = reservationsMonthRes.status === 'fulfilled' ? (reservationsMonthRes.value.count || 0) : 0
+      const reservationRows = reservationsMonthRes.status === 'fulfilled' ? (reservationsMonthRes.value.data || []) : []
+      const reservationsMonth = reservationRows.length
       const clientsMonthRows = clientsMonthRowsRes.status === 'fulfilled' ? (clientsMonthRowsRes.value.data || []) : []
 
       const activeConversations = userConversations.filter((c: any) => c.last_message_at && c.last_message_at >= oneDayAgo).length
@@ -248,8 +249,11 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
         }
       })
 
-      // Ranking por sucursal (solo tiene sentido si hay sucursales habilitadas).
-      // Se arma con lo que ya trajimos: órdenes (con user_id) + clientes del mes.
+      // Comparativa por sucursal (solo si hay sucursales habilitadas). Se arma con
+      // lo que ya trajimos: órdenes, clientes, conversaciones, mensajes y reservas
+      // del mes — todos con user_id para poder agrupar por cuenta.
+      // El user_id de un mensaje viene del join anidado a conversations.
+      const msgUserId = (m: any) => Array.isArray(m.conversations) ? m.conversations[0]?.user_id : m.conversations?.user_id
       const branchRanking = accounts.length > 1
         ? accounts.map((acc) => {
             const accOrders = ordersMonth.filter((o: any) => o.user_id === acc.id)
@@ -259,6 +263,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
               revenue: sumAmt(accOrders),
               sales: accOrders.length,
               leads: clientsMonthRows.filter((c: any) => c.user_id === acc.id).length,
+              convos: userConversations.filter((c: any) => c.user_id === acc.id && c.created_at >= startOfCurrentMonth).length,
+              messages: monthMsgRows.filter((m: any) => msgUserId(m) === acc.id).length,
+              reservations: reservationRows.filter((rw: any) => rw.user_id === acc.id).length,
             }
           }).sort((a, b) => b.revenue - a.revenue)
         : []
@@ -760,14 +767,14 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
           </section>
           )}
 
-          {/* ── Rendimiento por sucursal (solo si hay sucursales) ── */}
-          {branchStats.length > 0 && matches("sucursales rendimiento comparativa mejor sucursal locales") && (
+          {/* ── Comparativa entre sucursales (solo en vista "Todas") ── */}
+          {branchStats.length > 0 && selectedAccount === "all" && matches("sucursales rendimiento comparativa mejor sucursal locales ingresos ventas leads conversaciones mensajes reservas") && (
           <section className="sm:col-span-2 lg:col-span-4 executive-card overflow-hidden">
             <div className="flex justify-between items-center mb-1">
-              <h3 className="text-lg font-bold">Rendimiento por sucursal</h3>
+              <h3 className="text-lg font-bold">Comparativa entre sucursales</h3>
               <span className="material-symbols-outlined text-[#D1F366]">store</span>
             </div>
-            <p className="text-[11px] text-[#64748B] mb-4">Ingresos, ventas y leads nuevos de este mes, por sucursal.</p>
+            <p className="text-[11px] text-[#64748B] mb-4">Todas las métricas de este mes, sucursal por sucursal. Elegí una arriba para ver solo la suya.</p>
 
             {(() => {
               const maxRev = Math.max(...branchStats.map((b) => b.revenue), 1)
@@ -790,14 +797,17 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                           <th className="pb-3">Sucursal</th>
                           <th className="pb-3 text-right">Ingresos</th>
                           <th className="pb-3 text-right">Ventas</th>
-                          <th className="pb-3 text-right">Leads nuevos</th>
+                          <th className="pb-3 text-right">Leads</th>
+                          <th className="pb-3 text-right">Conv.</th>
+                          <th className="pb-3 text-right">Mensajes</th>
+                          <th className="pb-3 text-right">Reservas</th>
                         </tr>
                       </thead>
                       <tbody className="text-sm">
                         {branchStats.map((b, idx) => (
                           <tr key={b.id} className={idx < branchStats.length - 1 ? "border-b border-gray-50 dark:border-white/5" : ""}>
                             <td className="py-3">
-                              <div className="min-w-[120px]">
+                              <div className="min-w-[110px]">
                                 <span className="font-semibold">{b.name}</span>
                                 <div className="mt-1 h-1.5 rounded-full bg-black/[0.05] dark:bg-white/[0.06] overflow-hidden">
                                   <div className="h-full rounded-full bg-[#D1F366]" style={{ width: `${Math.round((b.revenue / maxRev) * 100)}%` }} />
@@ -807,6 +817,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                             <td className="py-3 text-right font-black whitespace-nowrap">{currencyFmt.format(b.revenue)}</td>
                             <td className="py-3 text-right text-[#64748B]">{b.sales}</td>
                             <td className="py-3 text-right text-[#64748B]">{b.leads}</td>
+                            <td className="py-3 text-right text-[#64748B]">{b.convos}</td>
+                            <td className="py-3 text-right text-[#64748B]">{b.messages}</td>
+                            <td className="py-3 text-right text-[#64748B]">{b.reservations}</td>
                           </tr>
                         ))}
                       </tbody>

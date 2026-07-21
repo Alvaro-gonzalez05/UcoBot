@@ -8,6 +8,7 @@ import { UserActionsMenu } from "./user-actions-menu"
 
 interface UserListCardProps {
   user: any
+  relation?: { type: "sucursal" | "empleado"; parentName: string } | null
 }
 
 function getInitials(name: string) {
@@ -67,7 +68,7 @@ const PLAN_BADGE: Record<string, string> = {
   free: "bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400",
 }
 
-export function UserListCard({ user }: UserListCardProps) {
+export function UserListCard({ user, relation }: UserListCardProps) {
   const initials = getInitials(user.business_name || "U")
   const initColor = getInitialsColor(user.business_name || "U")
   const statusCfg =
@@ -95,6 +96,18 @@ export function UserListCard({ user }: UserListCardProps) {
             {user.role === "admin" && (
               <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold border bg-red-50 text-red-700 border-red-200 uppercase tracking-wide">
                 admin
+              </span>
+            )}
+            {relation && (
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border uppercase tracking-wide ${
+                  relation.type === "sucursal"
+                    ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-400"
+                    : "bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-900/20 dark:text-violet-400"
+                }`}
+                title={`Depende de ${relation.parentName}`}
+              >
+                {relation.type === "sucursal" ? "Sucursal" : "Empleado"} de {relation.parentName}
               </span>
             )}
           </div>

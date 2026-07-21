@@ -13,6 +13,32 @@ export default async function AdminUsersPage() {
     .select("*")
     .order("created_at", { ascending: false })
 
+  // Relaciones de dependencia: sucursales (company_members role 'branch') y
+  // empleados (parent_user_id). Sirve para que el dev vea qué cuentas cuelgan de
+  // otra (impacto de costos: hoy solo se avisa, no se factura aparte).
+  const nameById = new Map<string, string>(
+    (users || []).map((u) => [u.id, u.business_name || u.full_name || "Cuenta"])
+  )
+  const { data: members } = await supabase
+    .from("company_members")
+    .select("user_id, role, company_id")
+
+  const adminByCompany = new Map<string, string>()
+  for (const m of members || []) if (m.role === "company_admin") adminByCompany.set(m.company_id, m.user_id)
+  const branchParent = new Map<string, string>()
+  for (const m of members || []) if (m.role === "branch") {
+    const parent = adminByCompany.get(m.company_id)
+    if (parent) branchParent.set(m.user_id, parent)
+  }
+
+  const relationOf = (u: any): { type: "sucursal" | "empleado"; parentName: string } | null => {
+    if (branchParent.has(u.id)) return { type: "sucursal", parentName: nameById.get(branchParent.get(u.id)!) || "otra cuenta" }
+    if (u.parent_user_id) return { type: "empleado", parentName: nameById.get(u.parent_user_id) || "otra cuenta" }
+    return null
+  }
+
+  const dependentCount = (users || []).filter((u) => relationOf(u) !== null).length
+
   const totalUsers = users?.length || 0
   const activeUsers =
     users?.filter((u) => u.subscription_status === "active").length || 0
@@ -104,10 +130,21 @@ export default async function AdminUsersPage() {
         </div>
       </div>
 
+      {/* Aviso de cuentas dependientes (sucursales + empleados) */}
+      {dependentCount > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/15 px-4 py-3">
+          <span className="material-symbols-outlined text-amber-500 mt-0.5">info</span>
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            <b>{dependentCount}</b> de estas cuentas dependen de otra (sucursales y empleados). No pagan abono
+            aparte: se apoyan en el del dueño. Cada una consume recursos (WhatsApp, IA), tenelo en cuenta para costos.
+          </p>
+        </div>
+      )}
+
       {/* User list */}
       <div className="space-y-2">
         {users?.map((user) => (
-          <UserListCard key={user.id} user={user} />
+          <UserListCard key={user.id} user={user} relation={relationOf(user)} />
         ))}
 
         {(!users || users.length === 0) && (

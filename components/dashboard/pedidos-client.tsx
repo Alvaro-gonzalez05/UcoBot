@@ -2093,7 +2093,24 @@ export function PedidosClient({
           setPrintPhase(null)
         }
       }}>
-        <DialogContent className="max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10">
+        <DialogContent
+          className="max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col rounded-2xl p-4 sm:p-6 app-sheet max-sm:top-auto max-sm:bottom-0 max-sm:left-0 max-sm:translate-x-0 max-sm:translate-y-0 max-sm:max-w-full max-sm:rounded-t-3xl max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:max-h-[93dvh] max-sm:data-[state=open]:slide-in-from-bottom-10 max-sm:data-[state=closed]:slide-out-to-bottom-10"
+          onInteractOutside={(e) => {
+            // No cerrar el detalle si hay un layer encima (selector de opciones,
+            // dropdown de agregar, cobro) o si la interacción viene de otro
+            // diálogo/popover/toast portaleado. Antes, agregar un producto con
+            // opciones cerraba TODO el pedido.
+            if (pedidosPicker || showAddProduct || checkoutOrder) { e.preventDefault(); return }
+            const t = e.target as HTMLElement | null
+            if (t?.closest('[role="dialog"]') || t?.closest('[data-radix-popper-content-wrapper]') || t?.closest('[data-sonner-toast]')) {
+              e.preventDefault()
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            // Con un picker/dropdown abierto, Escape debe cerrar ESE, no el pedido.
+            if (pedidosPicker || showAddProduct || checkoutOrder) e.preventDefault()
+          }}
+        >
           <SheetGrabBar onDismiss={() => { setIsDetailOpen(false); setDetailMode("edit"); setPrintPhase(null) }} />
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

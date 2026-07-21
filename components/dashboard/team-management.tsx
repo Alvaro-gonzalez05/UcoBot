@@ -75,6 +75,7 @@ export function TeamManagement() {
   const [branchName, setBranchName] = useState("")
   const [creatingBranch, setCreatingBranch] = useState(false)
   const [loadingBranches, setLoadingBranches] = useState(true)
+  const [isBranch, setIsBranch] = useState(false)
   // Contraseñas mostradas recién (al crear/regenerar). No persisten.
   const [revealed, setRevealed] = useState<Record<string, string>>({})
   const [busyBranch, setBusyBranch] = useState<string | null>(null)
@@ -96,6 +97,7 @@ export function TeamManagement() {
       const j = await res.json()
       setBusinessName(j.businessName || "")
       setBranches(j.branches || [])
+      setIsBranch(Boolean(j.isBranch))
     } catch {
       /* noop */
     } finally {
@@ -250,6 +252,19 @@ export function TeamManagement() {
 
         {/* ─────────── SUCURSALES ─────────── */}
         <TabsContent value="sucursales" className="space-y-4 mt-4">
+          {isBranch ? (
+            <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-900/15 px-4 py-4">
+              <AlertCircle className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">Solo la casa central puede gestionar sucursales</p>
+                <p className="text-sm text-amber-800 dark:text-amber-400 mt-0.5">
+                  Estás en la cuenta de una sucursal. La creación y el listado de sucursales se manejan
+                  únicamente desde la cuenta de casa central. Desde acá sí podés gestionar los empleados de tu sucursal.
+                </p>
+              </div>
+            </div>
+          ) : (
+          <>
           <p className="text-sm text-muted-foreground">
             Cada sucursal es una cuenta propia, con su WhatsApp, su chatbot y sus datos.
             Creás una, te damos el usuario y la contraseña para entregarle al encargado.
@@ -352,6 +367,8 @@ export function TeamManagement() {
               <AlertCircle className="h-3.5 w-3.5 mt-0.5 flex-shrink-0 text-amber-500" />
               Copiá la contraseña ahora: por seguridad no se guarda y no se vuelve a mostrar. Si la perdés, usá “Contraseña” para generar una nueva.
             </p>
+          )}
+          </>
           )}
         </TabsContent>
 
