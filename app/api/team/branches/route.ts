@@ -32,7 +32,10 @@ async function requireOwner() {
   // Las sucursales son cuentas propias (parent_user_id null), así que pasan el
   // chequeo de arriba. Pero NO deben gestionar/ver otras sucursales: si el
   // usuario es miembro con rol 'branch', es una sucursal, no el admin.
-  const { data: membership } = await supabase
+  // Usamos el cliente ADMIN (sin RLS): la policy de company_members se
+  // auto-referencia y con el cliente autenticado la query recursa y falla.
+  const admin = createAdminClient()
+  const { data: membership } = await admin
     .from("company_members")
     .select("role")
     .eq("user_id", user.id)
