@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import {
   Users, Plus, Trash2, Loader2, UserCog, Store, Copy, Check,
   KeyRound, RefreshCw, Building2, AlertCircle,
@@ -80,6 +81,28 @@ export function TeamManagement() {
   const [revealed, setRevealed] = useState<Record<string, string>>({})
   const [busyBranch, setBusyBranch] = useState<string | null>(null)
 
+  // ── Función activable ──
+  const [teamEnabled, setTeamEnabled] = useState<boolean | null>(null)
+  const [togglingTeam, setTogglingTeam] = useState(false)
+
+  const toggleTeamFeature = async (enabled: boolean) => {
+    setTogglingTeam(true)
+    try {
+      const res = await fetch("/api/team/enabled", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      })
+      if (!res.ok) throw new Error()
+      setTeamEnabled(enabled)
+      toast.success(enabled ? "Equipos y sucursales activado" : "Equipos y sucursales desactivado")
+    } catch {
+      toast.error("No se pudo guardar")
+    } finally {
+      setTogglingTeam(false)
+    }
+  }
+
   const load = async () => {
     try {
       const res = await fetch("/api/team")
@@ -107,6 +130,10 @@ export function TeamManagement() {
   useEffect(() => {
     load()
     loadBranches()
+    fetch("/api/team/enabled")
+      .then((r) => r.json())
+      .then((j) => setTeamEnabled(Boolean(j.enabled)))
+      .catch(() => setTeamEnabled(false))
   }, [])
 
   const toggle = (id: string) =>
@@ -244,6 +271,34 @@ export function TeamManagement() {
         </div>
       </div>
 
+      {/* Interruptor de la función (solo la casa central; apagarla no borra nada) */}
+      {!isBranch && (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4">
+          <div className="min-w-0">
+            <p className="font-semibold">Equipos y sucursales</p>
+            <p className="text-sm text-muted-foreground">
+              Activala si tenés más de un local o empleados con su propio usuario.
+              Apagarla solo esconde la sección: no se borran las sucursales ni los empleados.
+            </p>
+          </div>
+          <Switch
+            checked={Boolean(teamEnabled)}
+            disabled={teamEnabled === null || togglingTeam}
+            onCheckedChange={toggleTeamFeature}
+            className="border border-border data-[state=checked]:bg-[#B3D93C] data-[state=unchecked]:bg-slate-300 dark:data-[state=unchecked]:bg-slate-600 [&>span]:bg-white [&>span]:shadow-md"
+          />
+        </div>
+      )}
+
+      {teamEnabled === false && !isBranch ? (
+        <div className="rounded-2xl border border-dashed border-border py-12 flex flex-col items-center text-center gap-2">
+          <Store className="h-9 w-9 text-muted-foreground/40" />
+          <p className="font-medium">La función está desactivada</p>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Activá "Equipos y sucursales" arriba para crear sucursales y cuentas de empleados.
+          </p>
+        </div>
+      ) : (
       <Tabs defaultValue="sucursales" className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-sm">
           <TabsTrigger value="sucursales" className="gap-1.5"><Store className="h-4 w-4" /> Sucursales</TabsTrigger>
@@ -455,6 +510,7 @@ export function TeamManagement() {
           </div>
         </TabsContent>
       </Tabs>
+      )}
     </div>
   )
 }

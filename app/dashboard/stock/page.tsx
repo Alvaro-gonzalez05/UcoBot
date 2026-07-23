@@ -2,8 +2,13 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { StockClient } from "@/components/dashboard/stock-client"
 import { getAccountContext } from "@/lib/account"
+import { BranchViewBanner } from "@/components/dashboard/branch-view-banner"
 
-export default async function StockPage() {
+export default async function StockPage({
+  searchParams,
+}: {
+  searchParams: { sucursal?: string }
+}) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.getUser()
@@ -11,7 +16,8 @@ export default async function StockPage() {
     redirect("/login")
   }
 
-  const account = await getAccountContext()
+  // ?sucursal=<id>: el dueño mira el stock de una sucursal (solo lectura)
+  const account = await getAccountContext(searchParams?.sucursal)
   const ownerId = account?.ownerId || data.user.id
 
   const [{ data: supplies }, { data: movements }, { data: trackedProducts }] = await Promise.all([
@@ -31,11 +37,15 @@ export default async function StockPage() {
   ])
 
   return (
+    <>
+      {account?.viewingBranch && <BranchViewBanner branchName={account.viewingBranch.name} />}
     <StockClient
       userId={ownerId}
+      branchId={account?.viewingBranch?.id ?? null}
       initialSupplies={supplies || []}
       initialMovements={movements || []}
       initialTrackedProducts={trackedProducts || []}
     />
+    </>
   )
 }

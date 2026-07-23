@@ -3,8 +3,13 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { PedidosClient } from "@/components/dashboard/pedidos-client"
 import { getAccountContext } from "@/lib/account"
+import { BranchViewBanner } from "@/components/dashboard/branch-view-banner"
 
-export default async function PedidosPage() {
+export default async function PedidosPage({
+  searchParams,
+}: {
+  searchParams: { sucursal?: string }
+}) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.getUser()
@@ -12,7 +17,8 @@ export default async function PedidosPage() {
     redirect("/login")
   }
 
-  const account = await getAccountContext()
+  // ?sucursal=<id>: el dueño mira los pedidos de una sucursal (solo lectura)
+  const account = await getAccountContext(searchParams?.sucursal)
   const ownerId = account?.ownerId || data.user.id
 
   // Primer lote para el infinite scroll (los siguientes se cargan del lado del cliente)
@@ -65,6 +71,7 @@ export default async function PedidosPage() {
   return (
     // Suspense: PedidosClient usa useSearchParams (deep link ?order=<id> desde Finanzas)
     <Suspense fallback={null}>
+      {account?.viewingBranch && <BranchViewBanner branchName={account.viewingBranch.name} />}
       <PedidosClient
         userId={ownerId}
         optionsByProduct={optionsByProduct}

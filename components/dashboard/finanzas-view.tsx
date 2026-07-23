@@ -42,13 +42,16 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts"
-import { Loader2, Plus, Pencil, Trash2, Bot, Store, PenLine, ArrowUp, ArrowDown, BarChart3, ShoppingCart } from "lucide-react"
+import { Loader2, Plus, Pencil, Trash2, Bot, Store, PenLine, ArrowUp, ArrowDown, BarChart3, ShoppingCart, Truck } from "lucide-react"
+import { PurchaseDialog, type LowItemForPrefill } from "@/components/dashboard/purchase-dialog"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 interface FinanzasViewProps {
   userId: string
+  /** id de sucursal cuando el admin la está gestionando (para leer el ticket) */
+  branchId?: string | null
 }
 
 interface FinancialTransaction {
@@ -193,7 +196,7 @@ const emptyForm = {
   payment_method: "cash",
 }
 
-export function FinanzasView({ userId }: FinanzasViewProps) {
+export function FinanzasView({ userId, branchId = null }: FinanzasViewProps) {
   // OJO: createClient() devuelve una instancia NUEVA en cada render. Como el
   // cliente está en las dependencias de los useCallback/useEffect, sin memoizar
   // se re-disparaban en loop infinito ("Maximum update depth exceeded").
@@ -215,6 +218,35 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
 
   // Form dialog
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Compra de stock (mismo flujo que en la sección Stock, enlaza gasto + stock)
+  const [purchaseOpen, setPurchaseOpen] = useState(false)
+  const [purchaseSupplies, setPurchaseSupplies] = useState<{ id: string; name: string; unit: string; cost: number | null }[]>([])
+  const [purchaseProducts, setPurchaseProducts] = useState<{ id: string; name: string }[]>([])
+  const [purchaseLow, setPurchaseLow] = useState<LowItemForPrefill[]>([])
+
+  // Trae insumos/productos al abrir el diálogo de compra (lazy: finanzas no los usa si no)
+  const openPurchase = async () => {
+    setPurchaseOpen(true)
+    try {
+      const [{ data: sup }, { data: prod }] = await Promise.all([
+        supabase.from("supplies").select("id, name, unit, cost, stock_quantity, low_stock_threshold").eq("user_id", userId).eq("is_active", true).order("name"),
+        supabase.from("products").select("id, name, stock_quantity, low_stock_threshold").eq("user_id", userId).eq("track_stock", true).order("name"),
+      ])
+      setPurchaseSupplies((sup || []).map((s) => ({ id: s.id, name: s.name, unit: s.unit, cost: s.cost })))
+      setPurchaseProducts((prod || []).map((p) => ({ id: p.id, name: p.name })))
+      const low: LowItemForPrefill[] = [
+        ...(sup || [])
+          .filter((s) => s.low_stock_threshold != null && Number(s.stock_quantity) <= Number(s.low_stock_threshold))
+          .map((s) => ({ id: s.id, type: "supply" as const, name: s.name, unit: s.unit, cost: s.cost, suggested: Number(Math.max(0, Number(s.low_stock_threshold) - Number(s.stock_quantity)).toFixed(3)) })),
+        ...(prod || [])
+          .filter((p) => p.low_stock_threshold != null && Number(p.stock_quantity ?? 0) <= Number(p.low_stock_threshold))
+          .map((p) => ({ id: p.id, type: "product" as const, name: p.name, unit: "un", cost: null, suggested: Math.max(0, Number(p.low_stock_threshold) - Number(p.stock_quantity ?? 0)) })),
+      ]
+      setPurchaseLow(low)
+    } catch {
+      /* si falla, el diálogo igual sirve para carga manual */
+    }
+  }
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState({ ...emptyForm })
   const [saving, setSaving] = useState(false)
@@ -238,6 +270,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
       const { data, error } = await supabase.rpc("finance_totals", {
         p_from: from.toISOString(),
         p_to: to.toISOString(),
+        p_account: userId,
       })
       if (error) throw error
       const row = (Array.isArray(data) ? data[0] : data) as any
@@ -265,6 +298,7 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
         p_to: to.toISOString(),
         p_limit: MOVS_PAGE,
         p_offset: offset,
+        p_account: userId,
       })
       if (error) throw error
       const rows = ((data as any[]) || []).map((r) => ({
@@ -716,6 +750,16 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
             </button>
             <button
               type="button"
+              onClick={openPurchase}
+              className="group flex flex-col items-center gap-2"
+            >
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1f2030] text-[#d8ff55] shadow-md transition-transform group-hover:scale-105 group-active:scale-90">
+                <Truck className="h-5 w-5" strokeWidth={2.5} />
+              </span>
+              <span className="text-xs font-semibold">Compra stock</span>
+            </button>
+            <button
+              type="button"
               onClick={() => setShowChart((v) => !v)}
               className="group flex flex-col items-center gap-2"
             >
@@ -897,6 +941,18 @@ export function FinanzasView({ userId }: FinanzasViewProps) {
 
         </>
       )}
+
+      {/* Compra de stock (sube stock + costo + este mismo gasto, enlazado) */}
+      <PurchaseDialog
+        open={purchaseOpen}
+        onOpenChange={setPurchaseOpen}
+        accountId={userId}
+        branchId={branchId}
+        supplies={purchaseSupplies}
+        products={purchaseProducts}
+        lowItems={purchaseLow}
+        onSaved={() => router.refresh()}
+      />
 
       {/* Dialog alta/edición */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

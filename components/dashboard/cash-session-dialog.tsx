@@ -182,10 +182,12 @@ export function CashSessionDialog({
         if (!authId) return
         const { data: profile } = await supabase
           .from("user_profiles")
-          .select("full_name, business_name")
+          .select("full_name")
           .eq("id", authId)
           .maybeSingle()
-        setOpenedBy((prev) => prev || profile?.full_name || profile?.business_name || "")
+        // Solo el nombre de la persona: el nombre del negocio queda enorme en el
+        // ticket ("Responsable: EL Sitio Restobar y Staff Catering") y no dice quién es.
+        setOpenedBy((prev) => prev || profile?.full_name || "")
       })
     } else {
       setTotals(null)

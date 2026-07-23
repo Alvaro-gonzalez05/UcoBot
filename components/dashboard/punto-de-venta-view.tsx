@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import { LoyaltyScannerDialog } from "@/components/loyalty/loyalty-scanner-dialog"
 import { broadcastLoyaltyUpdate } from "@/lib/loyalty-realtime"
-import { PosSettingsDialog, type PosSettings } from "@/components/dashboard/pos-settings-dialog"
+import { PosSettingsDialog, DEFAULT_POS_SETTINGS, POS_SETTINGS_COLUMNS, type PosSettings } from "@/components/dashboard/pos-settings-dialog"
 import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
 import { printTicket, type TicketData, type TicketWidth } from "@/lib/print-ticket"
 import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
@@ -162,12 +162,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [redeemStampGift, setRedeemStampGift] = useState(false)
 
   // Configuración del POS (medios de pago + propina) y cobro
-  const [posSettings, setPosSettings] = useState<PosSettings>({
-    payment_methods: ["cash", "card", "transfer", "qr"],
-    tip_enabled: false,
-    tip_percent: 10,
-    ticket_width: 80,
-  })
+  const [posSettings, setPosSettings] = useState<PosSettings>(DEFAULT_POS_SETTINGS)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Caja del turno: las ventas se estampan con la sesión abierta (null = sin caja).
   // El POS no opera hasta que haya una caja abierta (gate de apertura).
@@ -230,10 +225,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     // Cargar configuración del POS (medios de pago + propina)
     supabase
       .from("pos_settings")
-      .select("payment_methods, tip_enabled, tip_percent, ticket_width")
+      .select(POS_SETTINGS_COLUMNS)
       .eq("user_id", userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data }: any) => {
         if (data) {
           const pm = normalizePaymentMethods(
             Array.isArray(data.payment_methods) && data.payment_methods.length > 0
@@ -245,6 +240,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             tip_enabled: data.tip_enabled ?? false,
             tip_percent: Number(data.tip_percent) || 10,
             ticket_width: Number(data.ticket_width) || 80,
+            cash_auto_close_mode: data.cash_auto_close_mode || "off",
+            cash_auto_close_hours: Number(data.cash_auto_close_hours) || 12,
+            cash_auto_close_time: data.cash_auto_close_time || "23:59",
           })
           // No se auto-selecciona método: el usuario decide si cobra (y con qué) o pasa el pedido
         }
@@ -1037,6 +1035,27 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               placeholder="Buscar productos por nombre, descripcion o categoria..."
               className="h-auto border-0 bg-transparent p-0 text-sm text-slate-700 shadow-none placeholder:text-slate-400 focus-visible:ring-0"
             />
+
+            {/* Accesos rápidos: caja del turno y configuración del punto de venta */}
+            <div className="flex shrink-0 items-center gap-1.5 border-l border-border/60 pl-2">
+              <button
+                type="button"
+                onClick={() => setCashDialogOpen(true)}
+                title={`Caja abierta por ${cashSession.opened_by} · tocá para cerrarla`}
+                className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-muted dark:text-muted-foreground"
+              >
+                <Wallet className="h-[18px] w-[18px]" />
+                <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-muted" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+                title="Configuración del punto de venta"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-muted dark:text-muted-foreground"
+              >
+                <Settings className="h-[18px] w-[18px]" />
+              </button>
+            </div>
           </div>
 
           <div className="mb-2 -mx-4 flex flex-shrink-0 gap-2 overflow-x-auto px-4 py-3.5 hide-scrollbar-mobile">

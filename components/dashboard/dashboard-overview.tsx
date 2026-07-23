@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase/client"
 import { startOfMonth, subMonths } from "date-fns"
 import { MultiStepAutomationCreation } from "./multi-step-automation-creation"
 import { ClientCreationDialog } from "./client-creation-dialog"
+import { StoresTile } from "./stores-tile"
+import { LowStockAlert } from "./low-stock-alert"
 import dynamic from "next/dynamic"
 
 // Gráficos (recharts) cargados bajo demanda: no entran en el bundle inicial.
@@ -337,6 +339,28 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id, selectedAccount, accounts.length])
 
+  // Realtime: ventas, reservas y clientes nuevos actualizan las métricas al toque.
+  // Se agrupan los eventos con un debounce corto para no recargar de a una fila
+  // cuando entran varias a la vez (ej: una venta con su cliente nuevo).
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const reload = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => loadDashboardData(), 1200)
+    }
+    const channel = supabase
+      .channel("dashboard-overview-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, reload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservations" }, reload)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "clients" }, reload)
+      .subscribe()
+    return () => {
+      if (timer) clearTimeout(timer)
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user.id, selectedAccount, accounts.length])
+
   // Buscador de métricas: cada tile declara sus palabras clave
   const matches = (keywords: string) => {
     const q = search.trim().toLowerCase()
@@ -422,7 +446,10 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
 
       {/* ============== BENTO GRID ============== */}
       <div className="px-4 pb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 auto-rows-[minmax(0,auto)]">
+        {/* grid-flow-dense: los tiles chicos rellenan los huecos que dejan los
+            grandes (si no, quedaban celdas vacías al costado de los que ocupan
+            2 filas y antes de los que ocupan el ancho completo). */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 auto-rows-[minmax(0,auto)] grid-flow-row-dense">
 
           {/* ── Tile destacado: Ingresos del negocio (POS + Bot) con gráfico diario ── */}
           {matches("ingresos del negocio ventas dinero facturacion plata revenue punto de venta pos bot ticket promedio") && (
@@ -685,7 +712,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
 
           {/* ── Asistentes activos compacto ── */}
           {matches("asistentes activos bots operativos") && (
-          <div className="executive-card">
+          <div className="executive-card sm:col-span-2 lg:col-span-2">
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-[#64748B] dark:text-[#94A3B8] text-[11px] font-semibold uppercase tracking-wider">Asistentes</h3>
               <Link href="/dashboard/bots" className="text-[10px] font-bold text-gray-400 hover:text-[#D1F366] transition-colors uppercase">
@@ -713,9 +740,9 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
           </div>
           )}
 
-          {/* ── Automatizaciones (ancho completo) ── */}
+          {/* ── Automatizaciones (media fila: completa la fila con Asistentes) ── */}
           {matches("automatizaciones criticas flujos") && (
-          <section className="sm:col-span-2 lg:col-span-4 executive-card overflow-hidden">
+          <section className="sm:col-span-2 lg:col-span-2 executive-card overflow-hidden">
             <div className="flex justify-between items-center mb-5">
               <h3 className="text-lg font-bold">Automatizaciones Críticas</h3>
               <button className="w-8 h-8 rounded-full bg-[#1C1C28] text-[#D1F366] flex items-center justify-center hover:scale-110 transition-transform">
@@ -801,6 +828,7 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                           <th className="pb-3 text-right">Conv.</th>
                           <th className="pb-3 text-right">Mensajes</th>
                           <th className="pb-3 text-right">Reservas</th>
+                          <th className="pb-3 text-right">Ver</th>
                         </tr>
                       </thead>
                       <tbody className="text-sm">
@@ -820,6 +848,15 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
                             <td className="py-3 text-right text-[#64748B]">{b.convos}</td>
                             <td className="py-3 text-right text-[#64748B]">{b.messages}</td>
                             <td className="py-3 text-right text-[#64748B]">{b.reservations}</td>
+                            <td className="py-3 text-right">
+                              {/* La casa central son mis propios datos: van sin ?sucursal */}
+                              <Link
+                                href={b.id === user.id ? "/dashboard/finanzas" : `/dashboard/finanzas?sucursal=${b.id}`}
+                                className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold transition-colors hover:bg-muted whitespace-nowrap"
+                              >
+                                Entrar
+                              </Link>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -829,6 +866,20 @@ export function DashboardOverview({ user, profile }: DashboardOverviewProps) {
               )
             })()}
           </section>
+          )}
+
+          {/* ── Stock: por sucursal + nivel general (tiles del bento) ── */}
+          {matches("stock insumos faltantes reponer nivel sucursal inventario alertas") && (
+            <LowStockAlert selectedAccount={selectedAccount} />
+          )}
+
+          {/* ── Mis locales: detalle de cada sucursal embebido (finanzas, caja, pedidos, stock) ── */}
+          {matches("locales tiendas sucursales caja cierres finanzas pedidos stock detalle por local") && (
+            <StoresTile
+              ownerId={user.id}
+              selectedAccount={selectedAccount}
+              businessName={profile?.business_name || "Mi negocio"}
+            />
           )}
 
         </div>

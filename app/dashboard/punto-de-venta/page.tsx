@@ -2,8 +2,13 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { PuntoDeVentaView } from "@/components/dashboard/punto-de-venta-view"
 import { getAccountContext } from "@/lib/account"
+import { BranchViewBanner } from "@/components/dashboard/branch-view-banner"
 
-export default async function PuntoDeVentaPage() {
+export default async function PuntoDeVentaPage({
+  searchParams,
+}: {
+  searchParams: { sucursal?: string }
+}) {
   const supabase = await createClient()
 
   const { data, error } = await supabase.auth.getUser()
@@ -11,7 +16,8 @@ export default async function PuntoDeVentaPage() {
     redirect("/login")
   }
 
-  const account = await getAccountContext()
+  // ?sucursal=<id>: el dueño abre el punto de venta de una sucursal
+  const account = await getAccountContext(searchParams?.sucursal)
   const ownerId = account?.ownerId || data.user.id
 
   const [{ data: products }, { data: clients }, { data: promotions }, { data: profile }] = await Promise.all([
@@ -58,12 +64,33 @@ export default async function PuntoDeVentaPage() {
   const { data: categoryRows } = await supabase
     .from("products")
     .select("category")
-    .eq("user_id", data.user.id)
+    .eq("user_id", ownerId)
     .eq("is_available", true)
 
   const categories = Array.from(
     new Set((categoryRows || []).map((row) => row.category).filter(Boolean))
   ) as string[]
+
+  if (account?.viewingBranch) {
+    return (
+      <div className="-m-4 -mb-28 lg:m-0 flex h-[calc(100dvh-4rem)] flex-col lg:h-[calc(100vh-2rem)]">
+        <div className="shrink-0 px-4 pt-4 lg:px-0 lg:pt-0">
+          <BranchViewBanner branchName={account.viewingBranch.name} />
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <PuntoDeVentaView
+            userId={ownerId}
+            products={products || []}
+            categories={categories}
+            clients={clients || []}
+            promotions={promotions || []}
+            businessName={profile?.business_name || "Mi Negocio"}
+            optionsByProduct={optionsByProduct}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="-m-4 -mb-28 lg:m-0 h-[calc(100dvh-4rem)] lg:h-[calc(100vh-2rem)] overflow-hidden">

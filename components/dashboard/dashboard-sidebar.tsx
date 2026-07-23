@@ -21,6 +21,8 @@ interface NavigationItem {
   icon: string // Material Symbols Outlined icon name
   requiresFeature?: string
   requiresAdmin?: boolean
+  /** Solo visible para el administrador de una empresa con sucursales */
+  requiresCompanyAdmin?: boolean
   visible?: boolean
   /** Oculta la sección salvo que sidebar_config la habilite explícitamente (secciones nuevas opt-in) */
   defaultHidden?: boolean
@@ -95,7 +97,7 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
       if (!userId) setUserId(authUser.id)
 
       const { data: userProfile } = await supabase
-        .from("user_profiles").select("role, sidebar_config, parent_user_id, vertical").eq("id", authUser.id).single()
+        .from("user_profiles").select("role, sidebar_config, parent_user_id, vertical, team_enabled").eq("id", authUser.id).single()
       const isAdmin = userProfile?.role === 'admin'
 
       // Vertical TRANSPORTE: navegación propia y exclusiva (no usa features de bots).
@@ -111,6 +113,15 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
 
       // Si es empleado, las funciones se calculan sobre los bots del DUEÑO.
       const ownerId = userProfile?.parent_user_id || authUser.id
+
+      // "Mi negocio" solo se muestra si la cuenta administra una empresa con
+      // sucursales (company_admin) y la función de equipos está activada.
+      let isCompanyAdmin = false
+      if (userProfile?.team_enabled) {
+        const { data: membership } = await supabase
+          .from("company_members").select("role").eq("user_id", ownerId).maybeSingle()
+        isCompanyAdmin = membership?.role === 'company_admin'
+      }
 
       const { data: bots, error: botsError } = await supabase
         .from("bots").select("features").eq("user_id", ownerId)
@@ -134,7 +145,8 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
 
       if (!bots || bots.length === 0) {
         setNavigation(baseNavigation.map(item => {
-          const baseVisible = (!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin)
+          let baseVisible = (!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin)
+          if (item.requiresCompanyAdmin) baseVisible = isCompanyAdmin
           return applyConfig(item, baseVisible)
         }))
         setIsNavReady(true)
@@ -152,6 +164,7 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
         let featureVisible = true
         if (item.requiresFeature) featureVisible = allFeatures.has(item.requiresFeature)
         if (item.requiresAdmin) featureVisible = isAdmin
+        if (item.requiresCompanyAdmin) featureVisible = isCompanyAdmin
         return applyConfig(item, featureVisible)
       }))
       setIsNavReady(true)
