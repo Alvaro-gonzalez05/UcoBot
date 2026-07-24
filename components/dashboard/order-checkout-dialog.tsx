@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
 import { Banknote, CreditCard, Landmark, QrCode, Smartphone, CheckCircle2, Loader2, ShoppingBag, Users, ChevronLeft, Check, Minus } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
@@ -112,6 +114,8 @@ export function OrderCheckoutPanel({
   initialPayments,
   onFinalize,
   onPaymentsChange,
+  tipEnabled = false,
+  tipPercent = 10,
 }: {
   total: number
   items?: any[]
@@ -121,6 +125,9 @@ export function OrderCheckoutPanel({
   onFinalize: (payments: PaymentRecord[]) => Promise<void> | void
   /** Persistencia incremental de pagos parciales (para no perder plata ya cobrada) */
   onPaymentsChange?: (payments: PaymentRecord[]) => void
+  /** Config de propina del negocio (para el checkbox "agregar propina") */
+  tipEnabled?: boolean
+  tipPercent?: number
 }) {
   const splitItems = buildSplitItems(items)
 
@@ -135,6 +142,8 @@ export function OrderCheckoutPanel({
   // "¿Con cuánto paga?" para efectivo (calcula el vuelto; el excedente puede quedar de propina)
   const [cashPaid, setCashPaid] = useState("")
   const [splitCashPaid, setSplitCashPaid] = useState("")
+  // Checkbox "agregar propina": suma el % configurado del negocio al cobro
+  const [addTip, setAddTip] = useState(false)
   const [cashTipMode, setCashTipMode] = useState<"change" | "tip">("change")
   const [splitTipMode, setSplitTipMode] = useState<"change" | "tip">("change")
   // Animación de venta completada (fondo verde + check)
@@ -152,9 +161,13 @@ export function OrderCheckoutPanel({
   const selectedCount = Object.values(selected).reduce((s, n) => s + n, 0)
   const selectedTotal = splitItems.reduce((s, si) => s + (selected[si.idx] || 0) * si.price, 0)
 
+  // Propina configurada (checkbox). El total efectivo a cobrar = productos + propina.
+  const configuredTip = addTip && tipEnabled ? Math.round(total * (tipPercent / 100) * 100) / 100 : 0
+  const effectiveTotal = Math.round((total + configuredTip) * 100) / 100
+
   const cashPaidNum = parseMiles(cashPaid)
   const splitCashPaidNum = parseMiles(splitCashPaid)
-  const cashSurplus = Math.max(0, cashPaidNum - total)
+  const cashSurplus = Math.max(0, cashPaidNum - effectiveTotal)
   const splitSurplus = Math.max(0, splitCashPaidNum - selectedTotal)
   const tipsTotal = groups.reduce((s, g) => s + (g.tip || 0), 0)
 
@@ -621,32 +634,37 @@ export function OrderCheckoutPanel({
         </div>
       )}
 
-      {/* Medio de pago */}
+      {/* Medio de pago — select compacto */}
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Método de pago</p>
-        <div className="grid grid-cols-2 gap-2">
-          {PAYMENT_OPTIONS.map((option) => {
-            const Icon = option.icon
-            const active = paymentMethod === option.id
-            return (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => setPaymentMethod(option.id)}
-                className={cn(
-                  "flex items-center justify-center gap-2 rounded-xl border px-2 py-2.5 text-xs font-semibold transition-all",
-                  active
-                    ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-md"
-                    : "border-border bg-card text-muted-foreground hover:border-foreground/30"
-                )}
-              >
-                <Icon className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{option.label}</span>
-              </button>
-            )
-          })}
-        </div>
+        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+          <SelectTrigger className="h-11 rounded-xl text-sm font-semibold">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAYMENT_OPTIONS.map((option) => {
+              const Icon = option.icon
+              return (
+                <SelectItem key={option.id} value={option.id} className="text-sm">
+                  <span className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 flex-shrink-0" />
+                    {option.label}
+                  </span>
+                </SelectItem>
+              )
+            })}
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Propina configurada (checkbox) */}
+      {tipEnabled && (
+        <label className="flex items-center gap-2.5 rounded-xl border border-border bg-muted/30 px-3 py-2.5 cursor-pointer">
+          <Checkbox checked={addTip} onCheckedChange={(v) => setAddTip(Boolean(v))} />
+          <span className="flex-1 text-sm font-medium">Agregar propina ({tipPercent}%)</span>
+          {configuredTip > 0 && <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">+{formatCurrency(configuredTip)}</span>}
+        </label>
+      )}
 
       {/* Con cuánto paga → el excedente puede quedar de propina (todos los métodos) */}
       <div>
@@ -700,10 +718,24 @@ export function OrderCheckoutPanel({
             </div>
       </div>
 
-      {/* Total */}
-      <div className="flex items-center justify-between border-t border-border pt-3">
-        <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Total</span>
-        <span className="text-2xl font-black">{formatCurrency(total)}</span>
+      {/* Total (con propina si se agregó) */}
+      <div className="border-t border-border pt-3">
+        {configuredTip > 0 && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span>Productos</span>
+            <span>{formatCurrency(total)}</span>
+          </div>
+        )}
+        {configuredTip > 0 && (
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+            <span>Propina ({tipPercent}%)</span>
+            <span>+{formatCurrency(configuredTip)}</span>
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <span className="text-sm font-bold uppercase tracking-wider text-muted-foreground">Total</span>
+          <span className="text-2xl font-black">{formatCurrency(effectiveTotal)}</span>
+        </div>
       </div>
 
       {/* Acción */}
@@ -719,8 +751,10 @@ export function OrderCheckoutPanel({
         <Button
           onClick={() => {
             const opt = PAYMENT_OPTIONS.find((o) => o.id === paymentMethod)
-            const tip = cashTipMode === "tip" && cashSurplus > 0 ? Math.round(cashSurplus * 100) / 100 : undefined
-            finalizeWithSuccess([{ method: paymentMethod, label: opt?.label || paymentMethod, amount: Number(total.toFixed(2)), tip }])
+            // Propina = la configurada (checkbox) + el vuelto dejado como propina
+            const changeTip = cashTipMode === "tip" && cashSurplus > 0 ? Math.round(cashSurplus * 100) / 100 : 0
+            const totalTip = Math.round((configuredTip + changeTip) * 100) / 100
+            finalizeWithSuccess([{ method: paymentMethod, label: opt?.label || paymentMethod, amount: Number(total.toFixed(2)), tip: totalTip > 0 ? totalTip : undefined }])
           }}
           disabled={isSubmitting}
           className="h-12 w-full rounded-xl bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42]"
@@ -841,6 +875,8 @@ export function OrderCheckoutDialog({
               initialPayments={order.payments}
               onFinalize={finalizeSale}
               onPaymentsChange={savePartialPayments}
+              tipEnabled={tipEnabled}
+              tipPercent={tipPercent}
             />
           </div>
         )}

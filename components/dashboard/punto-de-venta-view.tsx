@@ -10,6 +10,7 @@ import { NumberInput } from "@/components/ui/number-input"
 import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Smartphone, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote, ChevronLeft } from "lucide-react"
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-methods"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -21,6 +22,7 @@ import { PosSettingsDialog, DEFAULT_POS_SETTINGS, POS_SETTINGS_COLUMNS, type Pos
 import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
 import { printTicket, type TicketData, type TicketWidth } from "@/lib/print-ticket"
 import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
+import type { PaymentRecord } from "./order-checkout-dialog"
 import { CashSessionDialog, type CashSession } from "@/components/dashboard/cash-session-dialog"
 import { Wallet } from "lucide-react"
 
@@ -148,6 +150,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [posPrintPhase, setPosPrintPhase] = useState<null | "printing" | "done">(null)
   // Producto para el que se está eligiendo opciones (modal centrado)
   const [pickerProduct, setPickerProduct] = useState<Product | null>(null)
+  // Si se está EDITANDO las opciones de una línea del carrito: su lineId + opciones actuales
+  const [editingLine, setEditingLine] = useState<{ lineId: string; options: SelectedOption[] } | null>(null)
   const [mpQr, setMpQr] = useState<string | null>(null)
   const [mpQrLoading, setMpQrLoading] = useState(false)
   const [mpQrOrderId, setMpQrOrderId] = useState<string | null>(null)
@@ -179,6 +183,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [customTip, setCustomTip] = useState(0)
   const [amountPaid, setAmountPaid] = useState("")
   const [orderNote, setOrderNote] = useState("")
+  // Pago en varios medios: lista de pagos parciales acumulados sobre esta venta
+  const [multiPay, setMultiPay] = useState(false)
+  const [posPayments, setPosPayments] = useState<PaymentRecord[]>([])
+  const [splitAmount, setSplitAmount] = useState("")
   const [clientPopoverOpen, setClientPopoverOpen] = useState(false)
   // Cliente "sin registrar": nombre + mesa, sin guardarlo en la base
   const [walkin, setWalkin] = useState<{ name: string; table: string } | null>(null)
@@ -348,6 +356,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const paidNum = parseFloat(amountPaid.replace(",", ".")) || 0
   const change = paidNum > 0 ? paidNum - total : 0
 
+  // Pago múltiple: total ya cubierto y lo que falta
+  const posPaidTotal = posPayments.reduce((s, p) => s + p.amount, 0)
+  const posRemaining = Math.max(0, Math.round((total - posPaidTotal) * 100) / 100)
+  const posFullyPaid = posPayments.length > 0 && posRemaining <= 0.01
+
   // Trae TODO el catálogo una sola vez: la búsqueda y las categorías filtran
   // en memoria (instantáneo, sin viajes al servidor por cada tecla).
   useEffect(() => {
@@ -483,6 +496,44 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     if (typeof window !== "undefined" && window.innerWidth >= 1024) setIsCartOpen(true)
   }
 
+  // Abre el picker para EDITAR las opciones de una línea ya agregada del carrito
+  const editLineOptions = (item: CartItem) => {
+    const product = products.find((p) => p.id === item.productId)
+    if (!product) return
+    setEditingLine({ lineId: item.lineId, options: item.options || [] })
+    setPickerProduct(product)
+  }
+
+  // Reemplaza las opciones de una línea existente y recalcula su precio unitario.
+  // Si la nueva combinación coincide con otra línea, se fusionan las cantidades.
+  const updateLineOptions = (product: Product, options: SelectedOption[], extra: number) => {
+    if (!editingLine) return
+    const promo = bestProductPromotion({ id: product.id, price: product.price, category: product.category }, promotions)
+    const basePrice = promo ? promo.price : product.price
+    const unitPrice = Number((basePrice + extra).toFixed(2))
+    const newSig = lineSignature(product.id, options)
+    setCartItems((prev) => {
+      const target = prev.find((i) => i.lineId === editingLine.lineId)
+      if (!target) return prev
+      const qty = target.quantity
+      const rest = prev.filter((i) => i.lineId !== editingLine.lineId)
+      const existing = rest.find((i) => i.lineId === newSig)
+      if (existing) {
+        // La nueva combinación ya existe: sumamos las cantidades
+        return rest.map((i) => (i.lineId === newSig ? { ...i, quantity: i.quantity + qty } : i))
+      }
+      const updated: CartItem = {
+        ...target,
+        lineId: newSig,
+        price: unitPrice,
+        originalPrice: promo ? Number((product.price + extra).toFixed(2)) : undefined,
+        options: options.length ? options : undefined,
+      }
+      // Mantener la posición original de la línea
+      return prev.map((i) => (i.lineId === editingLine.lineId ? updated : i))
+    })
+  }
+
   // Al tocar un producto: si tiene opciones, abre el modal; si no, se agrega directo
   const addProductToCart = (product: Product) => {
     // Venta en confirmación: no se puede empezar a cargar otro pedido todavía
@@ -534,6 +585,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     setIsSubmitting(true)
 
     try {
+      // Pago múltiple: si hay pagos parciales cargados, mandan ellos. La venta
+      // queda 'completed' si cubren el total, o 'pending' (parcial) si falta.
+      const usingMulti = posPayments.length > 0
+      const effStatus: "completed" | "pending" = usingMulti ? (posRemaining <= 0.01 ? "completed" : "pending") : status
+
       const paymentLabel = paymentMethod
         ? paymentOptions.find((option) => option.id === paymentMethod)?.label || paymentMethod
         : "Pago pendiente"
@@ -570,16 +626,18 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
       // La propina NO es un producto: es un cálculo sobre el total. En ventas cobradas
       // al toque se guarda en tip_amount; en pedidos que se PASAN (pendientes) no se
       // congela — se recalcula al cobrar en /pedidos según el % de la configuración.
-      const orderTip = status === "completed" ? tip : 0
-      const orderTotal = status === "completed" ? total : discountedSubtotal
+      const orderTip = effStatus === "completed" ? tip : 0
+      const orderTotal = effStatus === "completed" ? total : discountedSubtotal
 
       // Nota de cobro: medio de pago, canje, y vuelto si se ingresó
       const noteParts = [
-        `Venta generada desde Punto de venta. ${status === "completed" && paymentMethod ? `Metodo de pago: ${paymentLabel}` : "Pago pendiente"}`,
+        usingMulti
+          ? `Venta generada desde Punto de venta. Pago en varios medios: ${posPayments.map((p) => `${p.label || p.method} ${formatCurrency(p.amount)}`).join(" + ")}${posRemaining > 0.01 ? ` · Falta ${formatCurrency(posRemaining)}` : ""}`
+          : `Venta generada desde Punto de venta. ${status === "completed" && paymentMethod ? `Metodo de pago: ${paymentLabel}` : "Pago pendiente"}`,
       ]
       if (redeemedReward) noteParts.push(`Canje: ${redeemedReward.name}`)
       if (orderTip > 0) noteParts.push(`Propina/extra: ${formatCurrency(orderTip)}`)
-      if (paidNum > 0) noteParts.push(`Pagó con ${formatCurrency(paidNum)} · Vuelto: ${formatCurrency(Math.max(0, change))}`)
+      if (!usingMulti && paidNum > 0) noteParts.push(`Pagó con ${formatCurrency(paidNum)} · Vuelto: ${formatCurrency(Math.max(0, change))}`)
       // Nota escrita por el cajero (se muestra en /pedidos; el resto es boilerplate que se limpia)
       if (orderNote.trim()) noteParts.push(orderNote.trim())
 
@@ -588,11 +646,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         .insert({
           user_id: userId,
           client_id: selectedClient?.id || null,
-          status: status,
+          status: effStatus,
           items: orderItems,
           total_amount: Number(orderTotal.toFixed(2)),
           tip_amount: Number(orderTip.toFixed(2)),
-          payments: status === "completed" && paymentMethod ? [{ method: paymentMethod, amount: Number(orderTotal.toFixed(2)), label: paymentLabel }] : [],
+          payments: usingMulti
+            ? posPayments
+            : (status === "completed" && paymentMethod ? [{ method: paymentMethod, amount: Number(orderTotal.toFixed(2)), label: paymentLabel }] : []),
           // Para walk-in guardamos "Nombre · Mesa X" en delivery_phone (se muestra como cliente)
           delivery_phone:
             selectedClient?.phone ||
@@ -781,6 +841,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     setTipMode("off")
     setCustomTip(0)
     setAmountPaid("")
+    setMultiPay(false)
+    setPosPayments([])
+    setSplitAmount("")
     setOrderNote("")
     setSaleSuccess(null)
     setPosPrintPhase(null)
@@ -839,6 +902,44 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         return
       }
       setLastTicket(buildPosTicket("completed", orderId))
+    }, 1400)
+  }
+
+  // Pago múltiple: agrega un pago parcial (medio + monto) a la lista
+  const addPosPayment = () => {
+    if (!paymentMethod) {
+      toast.error("Elegí un método de pago para este pago")
+      return
+    }
+    const typed = parseFloat(splitAmount.replace(",", ".")) || 0
+    // Si no escribe monto, se asume que paga todo lo que falta con ese medio
+    const amount = Number((typed > 0 ? Math.min(typed, posRemaining) : posRemaining).toFixed(2))
+    if (amount <= 0) return
+    const label = paymentOptions.find((o) => o.id === paymentMethod)?.label || paymentMethod
+    setPosPayments((prev) => [...prev, { method: paymentMethod, amount, label }])
+    setSplitAmount("")
+  }
+
+  const removePosPayment = (idx: number) => {
+    setPosPayments((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  // Finaliza una venta con pago múltiple: completada si se cubrió el total,
+  // o pendiente (pago parcial) si falta plata — queda anotado en /pedidos.
+  const finalizeMultiPay = () => {
+    if (posPayments.length === 0) {
+      toast.error("Agregá al menos un pago")
+      return
+    }
+    const st: "completed" | "pending" = posFullyPaid ? "completed" : "pending"
+    setSaleSuccess(st)
+    window.setTimeout(async () => {
+      const orderId = await submitSale(st)
+      if (!orderId) {
+        setSaleSuccess(null)
+        return
+      }
+      setLastTicket(buildPosTicket(st, orderId))
     }, 1400)
   }
 
@@ -1438,9 +1539,20 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                           <div className="min-w-0 flex-1">
                             <h4 className="text-sm font-semibold leading-tight text-slate-800 dark:text-foreground line-clamp-3 break-words">{item.name}</h4>
                             {item.options && item.options.length > 0 && (
-                              <p className="mt-0.5 text-[11px] leading-tight text-slate-500 dark:text-muted-foreground">
-                                {item.options.map((o) => o.name + (o.delta > 0 ? ` (+${formatCurrency(o.delta)})` : "")).join(" · ")}
-                              </p>
+                              <div className="mt-0.5 flex items-start gap-1.5">
+                                <p className="flex-1 text-[11px] leading-tight text-slate-500 dark:text-muted-foreground">
+                                  {item.options.map((o) => o.name + (o.delta > 0 ? ` (+${formatCurrency(o.delta)})` : "")).join(" · ")}
+                                </p>
+                                {(optionsByProduct[item.productId]?.length ?? 0) > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => editLineOptions(item)}
+                                    className="shrink-0 text-[11px] font-semibold text-[#4a7c00] dark:text-[#d8ff55] hover:underline"
+                                  >
+                                    Editar
+                                  </button>
+                                )}
+                              </div>
                             )}
                             <p className="truncate text-xs text-slate-400 mt-1">{formatCurrency(item.price)} / ud</p>
                             <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -1697,30 +1809,88 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               ) : (
               <>
                 <div>
-                  <p className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {enabledPaymentOptions.map((option) => {
-                      const Icon = option.icon
-                      const isActive = paymentMethod === option.id
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          // Tocar de nuevo deselecciona (el pedido puede pasarse sin método de pago)
-                          onClick={() => setPaymentMethod((prev) => (prev === option.id ? null : option.id))}
-                          className={cn(
-                            "flex items-center justify-center gap-2 rounded-xl border px-2 py-2 text-xs font-semibold transition-all active:scale-95",
-                            isActive
-                              ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-md"
-                              : "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-500 dark:text-muted-foreground hover:border-slate-300 hover:text-slate-700 dark:hover:text-foreground"
-                          )}
-                        >
-                          <Icon className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">{option.label}</span>
-                        </button>
-                      )
-                    })}
+                  <div className="mb-2 flex items-center justify-between px-0.5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
+                    {cartItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { const nv = !multiPay; setMultiPay(nv); if (!nv) { setPosPayments([]); setSplitAmount("") } }}
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[11px] font-bold transition-colors",
+                          multiPay ? "bg-[#1f2030] text-[#d8ff55]" : "bg-slate-100 dark:bg-muted text-slate-500 dark:text-muted-foreground hover:bg-slate-200"
+                        )}
+                      >
+                        Varios medios
+                      </button>
+                    )}
                   </div>
+                  {/* Select compacto: ocupa una fila en vez de una grilla de botones */}
+                  <Select
+                    value={paymentMethod ?? "__none__"}
+                    onValueChange={(v) => setPaymentMethod(v === "__none__" ? null : v)}
+                  >
+                    <SelectTrigger className="h-11 rounded-xl border-slate-200 dark:border-border bg-white dark:bg-card text-sm font-semibold">
+                      <SelectValue placeholder="Elegí un método (o pasá sin cobrar)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__" className="text-sm text-muted-foreground">Sin cobrar todavía</SelectItem>
+                      {enabledPaymentOptions.map((option) => {
+                        const Icon = option.icon
+                        return (
+                          <SelectItem key={option.id} value={option.id} className="text-sm">
+                            <span className="flex items-center gap-2">
+                              <Icon className="h-4 w-4 flex-shrink-0" />
+                              {option.label}
+                            </span>
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Builder de pago en varios medios */}
+                  {multiPay && cartItems.length > 0 && (
+                    <div className="mt-2 rounded-xl border border-slate-200 dark:border-border bg-white dark:bg-card p-3 space-y-2">
+                      {posPayments.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between text-sm">
+                          <span className="text-slate-600 dark:text-foreground">{p.label || p.method}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{formatCurrency(p.amount)}</span>
+                            <button type="button" onClick={() => removePosPayment(i)} className="rounded-full p-0.5 hover:bg-slate-100 dark:hover:bg-muted">
+                              <X className="h-3.5 w-3.5 text-slate-400" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+                          <NumberInput
+                            value={splitAmount === "" ? null : Number(splitAmount)}
+                            onValueChange={(v) => setSplitAmount(v == null ? "" : String(v))}
+                            placeholder={posRemaining > 0 ? `Falta ${formatCurrency(posRemaining)}` : "Monto"}
+                            className="h-9 pl-5 text-sm"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={addPosPayment}
+                          disabled={!paymentMethod || posRemaining <= 0}
+                          className="h-9 rounded-lg bg-[#1f2030] px-3 text-xs font-bold text-[#d8ff55] hover:bg-[#2a2b3d]"
+                        >
+                          Agregar
+                        </Button>
+                      </div>
+                      {posPayments.length > 0 && (
+                        <div className="flex justify-between border-t border-slate-100 dark:border-border pt-1.5 text-xs">
+                          <span className="text-slate-500 dark:text-muted-foreground">Pagado {formatCurrency(posPaidTotal)}</span>
+                          <span className={cn("font-bold", posRemaining > 0.01 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
+                            {posRemaining > 0.01 ? `Falta ${formatCurrency(posRemaining)}` : "Cubierto ✓"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="w-full rounded-[1.5rem] border border-slate-100 dark:border-border bg-white dark:bg-card p-3 shadow-sm dark:shadow-none">
@@ -1828,7 +1998,22 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   )}
 
                   <div className="flex flex-col gap-2 mt-3">
-                    {paymentMethod === "qr" ? (
+                    {multiPay ? (
+                      <Button
+                        onClick={finalizeMultiPay}
+                        disabled={isSubmitting || cartItems.length === 0 || posPayments.length === 0}
+                        className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42] disabled:opacity-60"
+                      >
+                        {isSubmitting
+                          ? "Procesando..."
+                          : posPayments.length === 0
+                            ? "Agregá un pago"
+                            : posFullyPaid
+                              ? "Finalizar venta"
+                              : `Guardar · falta ${formatCurrency(posRemaining)}`}
+                        {posFullyPaid && !isSubmitting && <CheckCircle2 className="ml-2 h-4 w-4" />}
+                      </Button>
+                    ) : paymentMethod === "qr" ? (
                       <Button
                         onClick={generateMpQr}
                         disabled={mpQrLoading || cartItems.length === 0}
@@ -1957,10 +2142,15 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         open={!!pickerProduct}
         product={pickerProduct}
         groups={pickerProduct ? optionsByProduct[pickerProduct.id] || [] : []}
-        onCancel={() => setPickerProduct(null)}
+        initialSelected={editingLine?.options}
+        onCancel={() => { setPickerProduct(null); setEditingLine(null) }}
         onConfirm={(selected, extra) => {
-          if (pickerProduct) addLine(pickerProduct, selected, extra)
+          if (pickerProduct) {
+            if (editingLine) updateLineOptions(pickerProduct, selected, extra)
+            else addLine(pickerProduct, selected, extra)
+          }
           setPickerProduct(null)
+          setEditingLine(null)
         }}
       />
 

@@ -1,0 +1,11 @@
+-- Fix: el feed y los totales de Finanzas cuentan solo VENTAS COBRADAS
+-- (orders.status = 'completed'), no cualquier pedido no cancelado.
+-- Aplicada via MCP el 2026-07-23 - este archivo es solo registro.
+--
+-- BUG: antes filtraba `status <> 'cancelled'`, así que un pedido revertido a
+-- pendiente/preparando (o editado, que lo devuelve a pendiente) SEGUÍA figurando
+-- como movimiento/ingreso. Ahora, al no estar 'completed', desaparece de Finanzas
+-- hasta que se vuelva a cobrar.
+--
+-- Ver el cuerpo completo aplicado en la migración finance_movements_completed_only.
+-- (finance_movements y finance_totals con `o.status = 'completed'`).

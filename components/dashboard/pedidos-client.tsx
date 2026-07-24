@@ -162,6 +162,8 @@ export function PedidosClient({
   const [staged, setStaged] = useState<{ lineKey: string; id: string; name: string; price: number; image_url: string | null; qty: number; options?: SelectedOption[] }[]>([])
   // Producto para el que se están eligiendo opciones al agregar en /pedidos (modal centrado)
   const [pedidosPicker, setPedidosPicker] = useState<Product | null>(null)
+  // Índice del ítem del pedido cuyas opciones se están EDITANDO (null = se está agregando)
+  const [editingItemIdx, setEditingItemIdx] = useState<number | null>(null)
   const [addConfirmPhase, setAddConfirmPhase] = useState(false)
   // Modo del modal de detalle: edición, cobro o vista previa de impresión (se intercambian con animación)
   const [detailMode, setDetailMode] = useState<"edit" | "checkout" | "print">("edit")
@@ -771,6 +773,25 @@ export function PedidosClient({
     })
     setJustAddedRow({ id: p.id, nonce: Date.now() })
     window.setTimeout(() => setJustAddedRow((prev) => (prev?.id === p.id ? null : prev)), 650)
+  }
+
+  // Abre el picker para EDITAR las opciones de un ítem ya cargado en el pedido
+  const editItemOptionsAt = (idx: number) => {
+    const it = editItems[idx]
+    const product = products.find((p) => p.id === it.product_id)
+    if (!product) return
+    setEditingItemIdx(idx)
+    setPedidosPicker(product)
+  }
+
+  // Aplica las nuevas opciones al ítem en edición y recalcula su precio unitario.
+  const applyItemOptions = (product: Product, options: SelectedOption[], extra: number) => {
+    if (editingItemIdx == null) return
+    const unit = Number((Number(product.price) + extra).toFixed(2))
+    setEditItems((prev) =>
+      prev.map((it, i) => (i === editingItemIdx ? { ...it, price: unit, options: options.length ? options : undefined } : it))
+    )
+    setEditStatus("pending") // editar opciones vuelve el pedido a pendiente para re-confirmar
   }
 
   // Tocar un producto: si tiene opciones abre el modal; si no, lo suma directo
@@ -2632,7 +2653,18 @@ export function PedidosClient({
                             )}
                           </div>
                           {optionNames(item.options).length > 0 && (
-                            <p className={cn("text-[11px] leading-tight mt-0.5", item.delivered ? "text-emerald-50" : "text-muted-foreground")}>{optionNames(item.options).join(" · ")}</p>
+                            <div className="mt-0.5 flex items-start gap-1.5">
+                              <p className={cn("flex-1 text-[11px] leading-tight", item.delivered ? "text-emerald-50" : "text-muted-foreground")}>{optionNames(item.options).join(" · ")}</p>
+                              {!item.removed && (optionsByProduct[item.product_id || ""]?.length ?? 0) > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => editItemOptionsAt(index)}
+                                  className={cn("shrink-0 text-[11px] font-semibold hover:underline", item.delivered ? "text-emerald-50" : "text-[#4a7c00] dark:text-[#d8ff55]")}
+                                >
+                                  Editar
+                                </button>
+                              )}
+                            </div>
                           )}
                           <p className={cn("text-xs mt-0.5", item.delivered ? "text-emerald-50" : "text-muted-foreground")}>{formatCurrency(item.price)} / ud</p>
                           {item.removed ? (
@@ -2791,10 +2823,15 @@ export function PedidosClient({
         open={!!pedidosPicker}
         product={pedidosPicker}
         groups={pedidosPicker ? optionsByProduct[pedidosPicker.id] || [] : []}
-        onCancel={() => setPedidosPicker(null)}
+        initialSelected={editingItemIdx != null ? (editItems[editingItemIdx]?.options as SelectedOption[]) : undefined}
+        onCancel={() => { setPedidosPicker(null); setEditingItemIdx(null) }}
         onConfirm={(selected, extra) => {
-          if (pedidosPicker) stageLine(pedidosPicker, selected, extra)
+          if (pedidosPicker) {
+            if (editingItemIdx != null) applyItemOptions(pedidosPicker, selected, extra)
+            else stageLine(pedidosPicker, selected, extra)
+          }
           setPedidosPicker(null)
+          setEditingItemIdx(null)
         }}
       />
     </div>

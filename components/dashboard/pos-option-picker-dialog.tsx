@@ -35,25 +35,36 @@ export function PosOptionPickerDialog({
   open,
   product,
   groups,
+  initialSelected,
   onCancel,
   onConfirm,
 }: {
   open: boolean
   product: { id: string; name: string; price: number; image_url?: string | null } | null
   groups: PosOptionGroup[]
+  /** Opciones ya elegidas, para EDITAR (preselecciona en vez de arrancar de cero) */
+  initialSelected?: SelectedOption[]
   onCancel: () => void
   onConfirm: (selected: SelectedOption[], extra: number) => void
 }) {
   // Selección: por grupo, set de item ids elegidos
   const [selected, setSelected] = useState<Record<string, Set<string>>>({})
 
-  // Al abrir un producto nuevo, reset (con preselección de la 1ra opción en grupos obligatorios de una sola)
+  // Al abrir: si hay opciones previas (editar) las preselecciona; si no, arranca con
+  // la 1ra opción de los grupos obligatorios de una sola.
   useEffect(() => {
     if (!open || !product) return
+    const hasInitial = Array.isArray(initialSelected) && initialSelected.length > 0
     const init: Record<string, Set<string>> = {}
     for (const g of groups) {
       init[g.id] = new Set<string>()
-      if (g.required && !g.multi && g.items[0]) init[g.id].add(g.items[0].id)
+      if (hasInitial) {
+        for (const it of g.items) {
+          if (initialSelected!.some((o) => o.group === g.name && o.name === it.name)) init[g.id].add(it.id)
+        }
+      } else if (g.required && !g.multi && g.items[0]) {
+        init[g.id].add(g.items[0].id)
+      }
     }
     setSelected(init)
     // eslint-disable-next-line react-hooks/exhaustive-deps
