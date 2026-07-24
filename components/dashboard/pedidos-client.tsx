@@ -196,6 +196,11 @@ export function PedidosClient({
   // Auto-guardado del detalle: guarda solo tras cada cambio (sin botón "Guardar")
   const autoSaveTimer = useRef<number | null>(null)
   const autoSaveReady = useRef(false)
+  // Momento en que se cerró una capa encima del detalle (picker de opciones,
+  // panel de agregar, cobro). Sirve para NO cerrar el detalle por el click que
+  // acaba de cerrar esa capa (condición de carrera que cerraba el pedido entero).
+  const layerClosedAtRef = useRef(0)
+  const prevLayerOpenRef = useRef(false)
 
   useEffect(() => {
     // Setup Supabase Realtime for orders table
@@ -872,9 +877,13 @@ export function PedidosClient({
   const optionNames = (opts?: any[]): string[] =>
     (opts || []).map((o) => (typeof o === "string" ? o : o?.name)).filter(Boolean)
 
-  // Firma de un item para fusionar líneas: mismo producto + mismas opciones
-  const itemSig = (i: { product_id?: string | null; options?: any[] }) =>
-    `${i.product_id ?? ""}|${optionNames(i.options).slice().sort().join("|")}`
+  // Firma de un item para fusionar líneas: mismo producto + mismas opciones.
+  // OJO: los items "custom" (POS sin producto del catálogo, o del bot) tienen
+  // product_id null; si firmáramos solo por product_id, DISTINTOS productos con
+  // null se fusionarían y se perdería data. Por eso, si no hay product_id, se
+  // usa el nombre como identidad.
+  const itemSig = (i: { product_id?: string | null; name?: string; options?: any[] }) =>
+    `${i.product_id ?? `n:${(i.name || "").trim().toLowerCase()}`}|${optionNames(i.options).slice().sort().join("|")}`
 
   // Fusiona líneas confirmadas iguales que están en el MISMO estado de entrega.
   // Las "+" (is_new) y los marcadores "−" (removed) nunca se fusionan acá.
@@ -1126,17 +1135,32 @@ export function PedidosClient({
   }
 
   // Marca/desmarca un producto como entregado (control de cocina/mostrador). Persiste al toque.
-  // Al entregarlo deja de estar "nuevo" (se resuelve el puntito de editado).
+  // Si la línea tiene VARIAS unidades, entrega/quita UNA por toque: se parte en una fila
+  // "entregada" (qty que se entregó) y otra "pendiente", que después se fusionan solas si
+  // quedan en el mismo estado. Así se puede entregar 1 de 2 (o las 2, tocando de nuevo).
   const toggleItemDelivered = async (index: number) => {
     if (!selectedOrder) return
     const item = editItems[index]
     if (!item || item.removed) return
-    // Al entregar, la línea deja de ser "nueva" y, si quedó en el MISMO estado que otra
-    // línea igual (ej: la base ya entregada), recién ahí se fusionan (3+1 → 4).
-    const toggled = editItems.map((i, idx) =>
-      idx === index ? { ...i, delivered: !i.delivered, is_new: i.delivered ? i.is_new : false } : i
+
+    // Inmutable con flatMap: la línea tocada se transforma; el resto queda igual.
+    const nextItems = mergeSameState(
+      editItems.flatMap((i, idx) => {
+        if (idx !== index) return [i]
+        const qty = i.quantity || 1
+        if (qty <= 1) {
+          // Una sola unidad: se marca/desmarca la línea entera
+          return [{ ...i, delivered: !i.delivered, is_new: i.delivered ? i.is_new : false }]
+        }
+        // Varias unidades: mover UNA unidad al otro estado (entregada ↔ pendiente).
+        // La unidad que cambia va primero; la que queda conserva qty-1.
+        const targetDelivered = !i.delivered
+        return [
+          { ...i, quantity: 1, delivered: targetDelivered, is_new: targetDelivered ? false : i.is_new },
+          { ...i, quantity: qty - 1 },
+        ]
+      })
     )
-    const nextItems = mergeSameState(toggled)
     setEditItems(nextItems)
     const dbItems = nextItems.map((i) => ({
       product_id: i.product_id,
@@ -1182,15 +1206,17 @@ export function PedidosClient({
       removed: keepNew ? (i.removed || undefined) : undefined,
     }))
     const total = items.reduce((s, i) => (i.removed ? s : s + i.price * i.quantity), 0)
-    // Firma de stock: solo productos reales con su cantidad. Si no cambia (ej: editar
-    // la nota), el auto-save NO toca el stock — evita pares reponer/descontar de ruido.
-    const stockSig = (arr: any[]) =>
-      JSON.stringify(
-        (arr || [])
-          .filter((i: any) => !i?.removed && i?.product_id)
-          .map((i: any) => [i.product_id, Number(i.quantity) || 1])
-          .sort()
-      )
+    // Firma de stock: cantidad TOTAL por producto (no por línea). Así, partir una
+    // línea al entregar de a una (2 → 1+1) o consolidar NO cambia la firma, y el
+    // auto-save no dispara ciclos de reponer/descontar de ruido.
+    const stockSig = (arr: any[]) => {
+      const totby: Record<string, number> = {}
+      for (const i of arr || []) {
+        if (i?.removed || !i?.product_id) continue
+        totby[i.product_id] = (totby[i.product_id] || 0) + (Number(i.quantity) || 1)
+      }
+      return JSON.stringify(Object.entries(totby).sort())
+    }
     const needsStockCycle =
       stockSig(items) !== stockSig(selectedOrder.items as any[]) ||
       editStatus === "cancelled" ||
@@ -1226,6 +1252,13 @@ export function PedidosClient({
       if (!opts?.silent) toast.error("No se pudo guardar el pedido")
     }
   }
+
+  // Marca el instante en que se cierra cualquier capa encima del detalle.
+  useEffect(() => {
+    const anyLayerOpen = !!pedidosPicker || showAddProduct || !!checkoutOrder
+    if (prevLayerOpenRef.current && !anyLayerOpen) layerClosedAtRef.current = Date.now()
+    prevLayerOpenRef.current = anyLayerOpen
+  }, [pedidosPicker, showAddProduct, checkoutOrder])
 
   // Auto-guardado: cada cambio en items/nota/dirección/estado se guarda solo (debounce)
   useEffect(() => {
@@ -1842,15 +1875,15 @@ export function PedidosClient({
             /* En móvil: mismo grid compacto del punto de venta; en desktop: tarjetas grandes */
             <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 md:grid-cols-2 lg:grid-cols-3 md:gap-4">
               {productsTabFiltered.map((product) => (
-                <div key={product.id} className="bg-card rounded-[2rem] md:rounded-3xl border border-border shadow-sm overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md p-3 md:p-0">
+                <div key={product.id} className="bg-card rounded-[2rem] md:rounded-3xl border border-slate-200 dark:border-border shadow-sm overflow-hidden transition-all hover:-translate-y-0.5 hover:shadow-md p-3 md:p-0">
                   {/* Imagen: cuadrada estilo POS en móvil, banner en desktop */}
-                  <div className="relative mb-2 md:mb-0 overflow-hidden rounded-[1.5rem] md:rounded-none bg-muted">
+                  <div className="relative mb-2 md:mb-0 overflow-hidden rounded-[1.5rem] md:rounded-none bg-[#d6dbe3] dark:bg-muted">
                     {product.image_url ? (
                       <img src={product.image_url} alt={product.name} loading="lazy" decoding="async" className="w-full aspect-square md:aspect-auto md:h-40 object-cover" />
                     ) : (
-                      <div className="flex w-full aspect-square md:aspect-auto md:h-40 items-center justify-center bg-gradient-to-br from-muted to-muted/60">
-                        <span className="select-none text-4xl font-black text-muted-foreground/30 md:hidden">{product.name.charAt(0).toUpperCase()}</span>
-                        <Package className="hidden md:block h-10 w-10 text-muted-foreground" />
+                      <div className="flex w-full aspect-square md:aspect-auto md:h-40 items-center justify-center bg-gradient-to-br from-[#dbe0e7] to-[#c4ccd6] dark:from-muted dark:to-muted/60">
+                        <span className="select-none text-4xl font-black text-slate-400 dark:text-muted-foreground/30 md:hidden">{product.name.charAt(0).toUpperCase()}</span>
+                        <Package className="hidden md:block h-10 w-10 text-slate-400 dark:text-muted-foreground" />
                       </div>
                     )}
                     {/* Acciones sobre la imagen (solo móvil) */}
@@ -2122,6 +2155,8 @@ export function PedidosClient({
             // diálogo/popover/toast portaleado. Antes, agregar un producto con
             // opciones cerraba TODO el pedido.
             if (pedidosPicker || showAddProduct || checkoutOrder) { e.preventDefault(); return }
+            // El click que acaba de cerrar una capa (picker/panel) no debe cerrar el pedido
+            if (Date.now() - layerClosedAtRef.current < 600) { e.preventDefault(); return }
             const t = e.target as HTMLElement | null
             if (t?.closest('[role="dialog"]') || t?.closest('[data-radix-popper-content-wrapper]') || t?.closest('[data-sonner-toast]')) {
               e.preventDefault()
@@ -2508,11 +2543,11 @@ export function PedidosClient({
                                 </motion.span>
                               )}
                             </AnimatePresence>
-                            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-muted flex items-center justify-center">
+                            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg bg-[#d6dbe3] dark:bg-muted flex items-center justify-center">
                               {p.image_url ? (
                                 <img src={p.image_url} alt={p.name} className="h-full w-full object-cover" />
                               ) : (
-                                <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+                                <ShoppingBag className="h-4 w-4 text-slate-500 dark:text-muted-foreground" />
                               )}
                             </div>
                             <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
@@ -2689,7 +2724,7 @@ export function PedidosClient({
                                 item.delivered ? "bg-emerald-100 text-emerald-700 hover:bg-white" : "bg-background text-muted-foreground hover:bg-muted"
                               )}
                             >
-                              <Check className="h-3 w-3" /> {item.delivered ? "Entregado" : "Entregar"}
+                              <Check className="h-3 w-3" /> {item.delivered ? "Entregado" : item.quantity > 1 ? "Entregar 1" : "Entregar"}
                             </button>
                           </div>
                           )}

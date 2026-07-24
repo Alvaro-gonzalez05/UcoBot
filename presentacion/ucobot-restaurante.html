@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UcoBot · Sistema de gestión para restaurantes</title>
+<style>
+  :root{
+    --lime:#d8ff55; --lime-2:#D1F366; --ink:#1C1C28; --ink-2:#1f2030;
+    --bg:#0f1017; --card:#171922; --line:#262a37; --muted:#9aa3b2; --white:#f4f6fb;
+    --ok:#34d399; --amber:#fbbf24; --red:#fb7185; --sky:#38bdf8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--white);line-height:1.5}
+  .wrap{max-width:1120px;margin:0 auto;padding:0 20px}
+  a{color:inherit}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:rgba(216,255,85,.12);color:var(--lime);border:1px solid rgba(216,255,85,.3);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+  .btn{display:inline-block;background:var(--lime);color:var(--ink);font-weight:800;border-radius:14px;padding:14px 26px;text-decoration:none;transition:transform .15s}
+  .btn:hover{transform:translateY(-2px)}
+
+  /* HERO */
+  header.hero{padding:70px 0 40px;background:
+    radial-gradient(900px 400px at 80% -10%, rgba(216,255,85,.14), transparent 60%),
+    radial-gradient(700px 400px at 0% 0%, rgba(56,189,248,.08), transparent 55%)}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:44px}
+  .brand .logo{width:44px;height:44px;border-radius:12px;background:var(--lime);display:grid;place-items:center;color:var(--ink);font-weight:900;font-size:20px}
+  .brand b{font-size:19px;letter-spacing:-.01em}
+  .brand span{display:block;font-size:10px;letter-spacing:.28em;color:var(--muted);font-weight:700}
+  .hero h1{font-size:clamp(34px,6vw,60px);line-height:1.03;letter-spacing:-.03em;font-weight:900;max-width:16ch}
+  .hero h1 em{font-style:normal;color:var(--lime)}
+  .hero p.lead{margin-top:20px;font-size:clamp(16px,2.4vw,21px);color:var(--muted);max-width:56ch}
+  .hero .cta{margin-top:32px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .hero .cta small{color:var(--muted);font-size:13px}
+
+  /* STAT STRIP */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:56px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:20px}
+  .stat .n{font-size:30px;font-weight:900;letter-spacing:-.02em}
+  .stat .n small{color:var(--lime)}
+  .stat .l{color:var(--muted);font-size:13px;margin-top:2px}
+
+  /* SECTION */
+  section{padding:56px 0}
+  .eyebrow{color:var(--lime);font-weight:800;font-size:12px;letter-spacing:.18em;text-transform:uppercase}
+  h2.sec{font-size:clamp(26px,4vw,40px);font-weight:900;letter-spacing:-.02em;margin-top:10px}
+  .sub{color:var(--muted);margin-top:12px;max-width:60ch;font-size:16px}
+
+  .feature{display:grid;grid-template-columns:1.05fr 1fr;gap:44px;align-items:center;margin-top:40px}
+  .feature.rev{grid-template-columns:1fr 1.05fr}
+  .feature.rev .copy{order:2}
+  .feature h3{font-size:24px;font-weight:800;letter-spacing:-.01em}
+  .feature p{color:var(--muted);margin-top:12px}
+  .checks{margin-top:18px;display:grid;gap:10px}
+  .check{display:flex;gap:10px;align-items:flex-start;font-size:15px}
+  .check .t{width:20px;height:20px;border-radius:6px;background:rgba(216,255,85,.15);color:var(--lime);display:grid;place-items:center;flex:0 0 auto;font-weight:900;font-size:12px;margin-top:1px}
+
+  /* MOCK (device) */
+  .mock{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:16px;box-shadow:0 30px 60px -30px rgba(0,0,0,.8)}
+  .mock .bar{display:flex;gap:6px;margin-bottom:14px}
+  .mock .bar i{width:10px;height:10px;border-radius:50%;background:#2b3040;display:block}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .tag{font-size:9px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;font-weight:800}
+  .prod{display:flex;gap:10px;align-items:center;background:#11131b;border:1px solid var(--line);border-radius:16px;padding:10px}
+  .prod .ph{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#c4ccd6,#aab3c0);display:grid;place-items:center;color:#5b6472;font-weight:900;flex:0 0 auto}
+  .prod .nm{font-size:14px;font-weight:700}
+  .prod .pr{margin-left:auto;font-weight:800}
+  .qty{display:inline-flex;align-items:center;gap:8px;background:#0d0f16;border:1px solid var(--line);border-radius:999px;padding:3px 6px;font-size:12px}
+  .qty b{min-width:14px;text-align:center}
+  .paybtns{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+  .pay{border:1px solid var(--line);border-radius:12px;padding:9px;text-align:center;font-size:12px;font-weight:700;color:var(--muted)}
+  .pay.on{background:var(--ink-2);color:var(--lime);border-color:transparent}
+  .cta-line{margin-top:14px;background:var(--lime);color:var(--ink);border-radius:14px;text-align:center;font-weight:900;padding:13px;letter-spacing:.12em}
+  .soft{background:#0d0f16;border:1px solid var(--line);border-radius:14px;padding:12px}
+
+  /* TICKET */
+  .ticket{background:#fff;color:#111;border-radius:10px;padding:16px 18px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;max-width:280px;margin:0 auto;box-shadow:0 20px 50px -20px rgba(0,0,0,.6)}
+  .ticket .c{text-align:center}
+  .ticket .biz{font-weight:800;text-transform:uppercase;font-size:14px}
+  .ticket .sep{border-top:1px dashed #bbb;margin:8px 0}
+  .ticket .tr{display:flex;justify-content:space-between;padding:2px 0}
+  .ticket .big{font-size:16px;font-weight:800}
+  .ticket .tip{background:#f2ffd0;border-radius:6px;padding:6px 8px;margin-top:6px}
+
+  /* BENTO admin */
+  .bento{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:36px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px}
+  .tile.big{grid-column:span 2;grid-row:span 2}
+  .tile .h{display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}
+  .tile .v{font-size:32px;font-weight:900;letter-spacing:-.02em;margin-top:8px}
+  .tile .v.sm{font-size:22px}
+  .barbar{height:8px;border-radius:999px;background:#0d0f16;overflow:hidden;margin-top:8px}
+  .barbar i{display:block;height:100%;background:var(--lime);border-radius:999px}
+  .branchrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .branchrow:last-child{border-bottom:0}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+  .chip{font-size:10px;font-weight:800;border-radius:999px;padding:2px 8px}
+  .chip.ok{background:rgba(52,211,153,.15);color:var(--ok)}
+  .chip.warn{background:rgba(251,191,36,.15);color:var(--amber)}
+
+  /* GRID of small features */
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:36px}
+  .fcard{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:22px}
+  .fcard .ic{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;font-size:22px;margin-bottom:14px}
+  .fcard h4{font-size:17px;font-weight:800}
+  .fcard p{color:var(--muted);font-size:14px;margin-top:8px}
+
+  footer{padding:60px 0 40px;border-top:1px solid var(--line);margin-top:40px;text-align:center}
+  footer .big{font-size:clamp(24px,4vw,36px);font-weight:900;letter-spacing:-.02em}
+  footer .m{color:var(--muted);margin-top:12px}
+  .madeby{margin-top:26px;color:var(--muted);font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+
+  @media(max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .feature,.feature.rev{grid-template-columns:1fr}
+    .feature.rev .copy{order:0}
+    .bento{grid-template-columns:repeat(2,1fr)}
+    .tile.big{grid-column:span 2}
+    .grid3{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="brand">
+      <div class="logo">U</div>
+      <div><b>UcoBot</b><span>CODEA DESARROLLOS</span></div>
+    </div>
+    <span class="pill">● Sistema de gestión gastronómica</span>
+    <h1>Tu restaurante, <em>ordenado</em> de la caja a la cocina.</h1>
+    <p class="lead">Punto de venta, pedidos, caja, stock, recetas, fidelización y un chatbot que atiende por WhatsApp. Todo en un solo lugar — y si tenés varios locales, los controlás desde una sola cuenta.</p>
+    <div class="cta">
+      <a class="btn" href="#pos">Ver cómo funciona</a>
+      <small>Pensado para bares, restobares y cafeterías.</small>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="n">1</div><div class="l">Sistema para todo el negocio</div></div>
+      <div class="stat"><div class="n">∞ <small>locales</small></div><div class="l">Multi-sucursal desde una cuenta</div></div>
+      <div class="stat"><div class="n">24/7</div><div class="l">El bot toma pedidos solo</div></div>
+      <div class="stat"><div class="n">0<small>papel</small></div><div class="l">Caja y cierres digitales</div></div>
+    </div>
+  </div>
+</header>
+
+<!-- POS -->
+<section id="pos">
+  <div class="wrap">
+    <div class="eyebrow">Punto de venta</div>
+    <h2 class="sec">Cobrá en dos toques, sin trabarte.</h2>
+    <p class="sub">El carrito primero muestra los productos en grande para armar el pedido. Al tocar <b>Cobrar</b>, el mismo espacio se transforma en los métodos de pago. Rápido y claro en cualquier pantalla táctil.</p>
+
+    <div class="feature">
+      <div class="copy">
+        <h3>Un flujo pensado para el mostrador</h3>
+        <p>Menos toques, cero confusión: armás, cobrás y listo.</p>
+        <div class="checks">
+          <div class="check"><span class="t">✓</span><span>Cobro simple o <b>dividido en varios medios</b> (efectivo + tarjeta + Nave…)</span></div>
+          <div class="check"><span class="t">✓</span><span>Propina configurable y cálculo de vuelto automático</span></div>
+          <div class="check"><span class="t">✓</span><span>Productos con opciones (sabores, tamaños) y promociones</span></div>
+          <div class="check"><span class="t">✓</span><span>Imprime el ticket al toque (58 / 80 mm)</span></div>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="row"><span class="tag">Carrito actual</span><span class="tag">2 productos</span></div>
+        <div style="display:grid;gap:8px;margin-top:10px">
+          <div class="prod"><span class="ph">L</span><div><div class="nm">Lomo Completo</div><div class="qty">– <b>1</b> +</div></div><span class="pr">$ 33.000</span></div>
+          <div class="prod"><span class="ph">C</span><div><div class="nm">Coca 500ml</div><div class="qty">– <b>2</b> +</div></div><span class="pr">$ 8.000</span></div>
+        </div>
+        <div class="paybtns">
+          <span class="pay on">Efectivo</span><span class="pay">Tarjeta</span><span class="pay">Transf.</span>
+          <span class="pay">QR</span><span class="pay">Nave</span><span class="pay">Varios</span>
+        </div>
+        <div class="row" style="margin-top:14px"><b>TOTAL</b><b style="font-size:20px">$ 41.000</b></div>
+        <div class="cta-line">COBRAR ›</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CAJA -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Caja</div>
+    <h2 class="sec">Abrí y cerrá caja con arqueo — y encadenada.</h2>
+    <p class="sub">El monto inicial de cada turno es el cierre del turno anterior. Cada venta queda a nombre del responsable. Al cerrar, imprimís el detalle del día con las propinas separadas para retirarlas.</p>
+
+    <div class="feature rev">
+      <div class="mock" style="max-width:340px;margin:0 auto">
+        <div class="ticket">
+          <div class="c biz">El Sitio Restobar</div>
+          <div class="c" style="font-weight:800">CIERRE DE CAJA</div>
+          <div class="sep"></div>
+          <div class="tr"><span>Responsable</span><b>Martina</b></div>
+          <div class="tr"><span>Apertura</span><span>24/07 09:00</span></div>
+          <div class="tr"><span>Cierre</span><span>24/07 18:30</span></div>
+          <div class="tr"><span>Monto inicial</span><span>$ 20.000</span></div>
+          <div class="sep"></div>
+          <div class="c" style="font-weight:800">MOVIMIENTOS DE CAJA</div>
+          <div class="tr"><span>Ventas</span><span>42</span></div>
+          <div class="tr"><span>Efectivo</span><span>$ 180.000</span></div>
+          <div class="tr"><span>Tarjeta</span><span>$ 95.000</span></div>
+          <div class="tr"><span>Nave</span><span>$ 60.000</span></div>
+          <div class="sep"></div>
+          <div class="tr big"><span>Total generado</span><span>$ 335.000</span></div>
+          <div class="tr"><span>Efectivo esperado</span><span>$ 200.000</span></div>
+          <div class="tip"><div class="tr big"><span>PROPINAS A RETIRAR</span><span>$ 14.500</span></div><div class="c" style="color:#777;font-size:10px">Se retiran aparte del efectivo</div></div>
+        </div>
+      </div>
+      <div class="copy">
+        <h3>Cierre claro, sin planillas</h3>
+        <div class="checks">
+          <div class="check"><span class="t">✓</span><span>Arqueo por medio de pago con diferencia calculada</span></div>
+          <div class="check"><span class="t">✓</span><span><b>Propinas separadas</b> para retirarlas del cajón</span></div>
+          <div class="check"><span class="t">✓</span><span>Cierre automático opcional (por horas o a una hora fija)</span></div>
+          <div class="check"><span class="t">✓</span><span>Historial de cajas con reimpresión</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PEDIDOS -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Pedidos</div>
+    <h2 class="sec">De la comanda a la entrega, bajo control.</h2>
+    <p class="sub">Los pedidos entran del punto de venta y del chatbot. Editás, avanzás el estado y cobrás desde una sola pantalla — y marcás qué se entregó, hasta por unidad.</p>
+
+    <div class="feature">
+      <div class="copy">
+        <h3>Entrega por unidad y edición en vivo</h3>
+        <p>¿Dos hamburguesas y salió una? Marcás una entregada y la otra queda pendiente.</p>
+        <div class="checks">
+          <div class="check"><span class="t">✓</span><span>Estados: pendiente → confirmado → en preparación → listo → cobrado</span></div>
+          <div class="check"><span class="t">✓</span><span>Agregar/quitar productos con opciones sin cerrar el pedido</span></div>
+          <div class="check"><span class="t">✓</span><span><b>Marcar entregado por unidad</b> (1 de 2, o las dos)</span></div>
+          <div class="check"><span class="t">✓</span><span>Actualización en tiempo real cuando entra un pedido nuevo</span></div>
+        </div>
+      </div>
+      <div class="mock">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="row"><span class="tag">Pedido #A93F · Mesa 4</span><span class="chip warn">Preparando</span></div>
+        <div style="display:grid;gap:8px;margin-top:12px">
+          <div class="prod" style="background:linear-gradient(90deg,rgba(52,211,153,.18),transparent)"><span class="ph" style="background:#2f7d5b;color:#eafff4">H</span><div><div class="nm">Hamburguesa</div><div class="tag" style="color:var(--ok)">✓ Entregado · 1u</div></div><span class="pr">$ 16.000</span></div>
+          <div class="prod"><span class="ph">H</span><div><div class="nm">Hamburguesa</div><div class="tag">Entregar 1</div></div><span class="pr">$ 16.000</span></div>
+          <div class="prod"><span class="ph">C</span><div><div class="nm">Coca 500ml</div><div class="tag">Entregar</div></div><span class="pr">$ 4.000</span></div>
+        </div>
+        <div class="row" style="margin-top:14px"><b>TOTAL</b><b style="font-size:18px">$ 36.000</b></div>
+        <div class="cta-line">COBRAR</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STOCK -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Stock y recetas</div>
+    <h2 class="sec">Se descuenta solo con cada venta.</h2>
+    <p class="sub">Cargás los insumos y qué usa cada plato. Al vender, el sistema descuenta la mercadería y te avisa lo que falta — con una lista de compras lista para imprimir.</p>
+
+    <div class="feature rev">
+      <div class="mock">
+        <div class="row"><span class="tag" style="color:var(--lime)">🛒 Lista de compras</span><span class="chip warn">4 por reponer</span></div>
+        <div style="display:grid;gap:8px;margin-top:12px">
+          <div class="soft row"><span>Pan de hamburguesa <span class="tag">quedan 5 · min 20</span></span><b style="color:var(--lime)">comprar 15</b></div>
+          <div class="soft row"><span>Carne picada <span class="tag">quedan 4.2kg · min 5</span></span><b style="color:var(--lime)">comprar 0.8kg</b></div>
+          <div class="soft row"><span>Coca 500ml <span class="tag">quedan 4 · min 12</span></span><b style="color:var(--lime)">comprar 8</b></div>
+          <div class="soft row"><span>Queso tybo <span class="tag">quedan 1.7kg · min 3</span></span><b style="color:var(--lime)">comprar 1.3kg</b></div>
+        </div>
+        <div class="row" style="margin-top:12px"><span class="tag">Costo estimado</span><b style="font-size:18px">$ 36.820</b></div>
+      </div>
+      <div class="copy">
+        <h3>Nada de quedarse sin mercadería</h3>
+        <div class="checks">
+          <div class="check"><span class="t">✓</span><span>Recetas: cada plato descuenta sus insumos al venderse</span></div>
+          <div class="check"><span class="t">✓</span><span>Stock directo para bebidas e items comprados</span></div>
+          <div class="check"><span class="t">✓</span><span><b>Alerta y notificación</b> cuando algo está por agotarse</span></div>
+          <div class="check"><span class="t">✓</span><span>Cargá la compra (a mano o por foto del ticket) y sube el stock + el gasto</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ADMIN / SUCURSALES -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Multi-sucursal · Administración</div>
+    <h2 class="sec">Todos tus locales, desde una sola cuenta.</h2>
+    <p class="sub">Desde el resumen del administrador ves cada sucursal: cuánto vendió, con qué medios cobró, el estado de su caja y su stock — y podés entrar a operar cualquiera sin cambiar de usuario.</p>
+
+    <div class="bento">
+      <div class="tile big">
+        <div class="h"><span>Mis locales</span><span>storefront</span></div>
+        <div class="branchrow"><span><span class="dot" style="background:var(--ok)"></span><b>Casa central</b> <span class="tag">51 ventas</span></span><b>$ 3.256.880</b></div>
+        <div class="barbar"><i style="width:90%"></i></div>
+        <div class="branchrow" style="margin-top:10px"><span><span class="dot" style="background:var(--ok)"></span><b>El Sitio Centro</b> <span class="tag">12 ventas</span></span><b>$ 351.600</b></div>
+        <div class="barbar"><i style="width:22%"></i></div>
+        <div style="margin-top:14px;display:flex;gap:6px;flex-wrap:wrap">
+          <span class="pay" style="padding:6px 10px">Finanzas</span>
+          <span class="pay" style="padding:6px 10px">Caja</span>
+          <span class="pay" style="padding:6px 10px">Pedidos</span>
+          <span class="pay" style="padding:6px 10px">Stock</span>
+        </div>
+      </div>
+      <div class="tile"><div class="h"><span>Vendido</span><span>↗</span></div><div class="v">$ 3.6M</div><div class="tag" style="color:var(--ok)">+67% vs mes ant.</div></div>
+      <div class="tile"><div class="h"><span>Ventas</span><span>🛒</span></div><div class="v">63</div></div>
+      <div class="tile"><div class="h"><span>Cajas abiertas</span><span>👛</span></div><div class="v">1</div></div>
+      <div class="tile"><div class="h"><span>Nivel de stock</span><span>📊</span></div><div class="v sm">86%</div><div class="tag" style="color:var(--red)">▼ -10% semana</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MAS -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Y además</div>
+    <h2 class="sec">Todo lo que un local necesita.</h2>
+    <div class="grid3">
+      <div class="fcard"><div class="ic" style="background:rgba(56,189,248,.15);color:var(--sky)">🤖</div><h4>Chatbot por WhatsApp</h4><p>Toma pedidos, responde consultas y hasta permite que el cliente modifique o cancele su pedido desde el chat.</p></div>
+      <div class="fcard"><div class="ic" style="background:rgba(216,255,85,.15);color:var(--lime)">🎁</div><h4>Fidelización</h4><p>Puntos y tarjeta de sellos. Los clientes suman con cada compra y canjean premios.</p></div>
+      <div class="fcard"><div class="ic" style="background:rgba(251,191,36,.15);color:var(--amber)">👥</div><h4>Empleados</h4><p>Cada empleado con su usuario y las secciones que puede usar. La caja queda a nombre de quien la abre.</p></div>
+      <div class="fcard"><div class="ic" style="background:rgba(52,211,153,.15);color:var(--ok)">💳</div><h4>Cobros integrados</h4><p>Efectivo, tarjeta, transferencia, QR de Mercado Pago y Nave (Banco Galicia).</p></div>
+      <div class="fcard"><div class="ic" style="background:rgba(251,113,133,.15);color:var(--red)">🧾</div><h4>Finanzas claras</h4><p>Ingresos, gastos y compras en un solo lugar, con movimientos del día y por período.</p></div>
+      <div class="fcard"><div class="ic" style="background:rgba(56,189,248,.15);color:var(--sky)">📱</div><h4>Funciona en el celular</h4><p>Pensado para usarse desde el teléfono o la tablet del mostrador, además de la compu.</p></div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span class="pill">● Listo para tu local</span>
+    <div class="big" style="margin-top:18px">Un solo sistema para todo tu restaurante.</div>
+    <div class="m">Punto de venta · Pedidos · Caja · Stock · Recetas · Multi-sucursal · Chatbot</div>
+    <div class="madeby">UcoBot — CODEA Desarrollos</div>
+  </div>
+</footer>
+
+</body>
+</html>

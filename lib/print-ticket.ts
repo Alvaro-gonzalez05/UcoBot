@@ -165,13 +165,16 @@ export function buildCashCloseTicketInner(d: CashCloseTicketData): string {
     <div class="center bold" style="margin:2px 0 4px;">MOVIMIENTOS DE CAJA</div>
     <div class="row"><span>Ventas</span><span>${d.salesCount}</span></div>
     ${methodRows}
-    ${d.tipsTotal && d.tipsTotal > 0 ? `<div class="row"><span>Propinas</span><span>${money(d.tipsTotal)}</span></div>` : ""}
     ${d.cancelledCount ? `<div class="row"><span>Cancelados</span><span>${d.cancelledCount}</span></div>` : ""}
     <div class="sep"></div>
     <div class="row total"><span>Total generado</span><span>${money(salesTotal)}</span></div>
     <div class="row"><span>Efectivo esperado</span><span>${money(d.expectedCash)}</span></div>
     ${typeof d.countedCash === "number" ? `<div class="row"><span>Efectivo contado</span><span>${money(d.countedCash)}</span></div>` : ""}
     ${typeof d.difference === "number" ? `<div class="row"><span>Diferencia</span><span>${d.difference >= 0 ? "+" : ""}${money(d.difference)}</span></div>` : ""}
+    ${d.tipsTotal && d.tipsTotal > 0 ? `
+    <div class="sep"></div>
+    <div class="row total"><span>PROPINAS A RETIRAR</span><span>${money(d.tipsTotal)}</span></div>
+    <div class="center muted" style="margin-top:2px;">Se retiran aparte del efectivo de caja</div>` : ""}
     ${d.notes ? `<div class="notes">Nota: ${esc(d.notes)}</div>` : ""}
     <div class="center muted footer">Documento interno de control</div>
     <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`

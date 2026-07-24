@@ -6,7 +6,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
 import { Banknote, CreditCard, Landmark, QrCode, Smartphone, CheckCircle2, Loader2, ShoppingBag, Users, ChevronLeft, Check, Minus } from "lucide-react"
@@ -634,27 +633,31 @@ export function OrderCheckoutPanel({
         </div>
       )}
 
-      {/* Medio de pago — select compacto */}
+      {/* Medio de pago — botones directos (un toque, más rápido en pantalla táctil) */}
       <div>
         <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">Método de pago</p>
-        <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-          <SelectTrigger className="h-11 rounded-xl text-sm font-semibold">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PAYMENT_OPTIONS.map((option) => {
-              const Icon = option.icon
-              return (
-                <SelectItem key={option.id} value={option.id} className="text-sm">
-                  <span className="flex items-center gap-2">
-                    <Icon className="h-4 w-4 flex-shrink-0" />
-                    {option.label}
-                  </span>
-                </SelectItem>
-              )
-            })}
-          </SelectContent>
-        </Select>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {PAYMENT_OPTIONS.map((option) => {
+            const Icon = option.icon
+            const active = paymentMethod === option.id
+            return (
+              <button
+                key={option.id}
+                type="button"
+                onClick={() => setPaymentMethod(option.id)}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-xl border px-2 py-2.5 text-xs font-semibold transition-all",
+                  active
+                    ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-md"
+                    : "border-border bg-card text-muted-foreground hover:border-foreground/30"
+                )}
+              >
+                <Icon className="h-4 w-4 flex-shrink-0" />
+                <span className="truncate">{option.label}</span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Propina configurada (checkbox) */}

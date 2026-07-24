@@ -7,10 +7,9 @@ import { cn, normalizeSearchText } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
-import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Smartphone, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote, ChevronLeft } from "lucide-react"
+import { ShoppingBag, Search, Plus, Minus, X, CreditCard, Banknote, Landmark, CheckCircle2, ReceiptText, Loader2, QrCode, Smartphone, Gift, Settings, UserPlus, UserRound, Star, Stamp, Printer, StickyNote, ChevronLeft, ChevronRight } from "lucide-react"
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-methods"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { motion, AnimatePresence } from "framer-motion"
 import QRCode from "react-qr-code"
@@ -183,6 +182,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const [customTip, setCustomTip] = useState(0)
   const [amountPaid, setAmountPaid] = useState("")
   const [orderNote, setOrderNote] = useState("")
+  // Carrito en dos pasos: "cart" arma el pedido (productos grandes), "pay" cobra
+  // (métodos de pago grandes, ocupan el espacio de los productos).
+  const [checkoutStep, setCheckoutStep] = useState<"cart" | "pay">("cart")
+  const [notePopoverOpen, setNotePopoverOpen] = useState(false)
   // Pago en varios medios: lista de pagos parciales acumulados sobre esta venta
   const [multiPay, setMultiPay] = useState(false)
   const [posPayments, setPosPayments] = useState<PaymentRecord[]>([])
@@ -198,6 +201,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   // Solo los medios de pago habilitados por el negocio
   const enabledPaymentOptions = paymentOptions.filter((o) => posSettings.payment_methods.includes(o.id))
+
+  // Si el carrito se vacía, volver siempre al paso "armar pedido"
+  useEffect(() => {
+    if (cartItems.length === 0 && checkoutStep === "pay") setCheckoutStep("cart")
+  }, [cartItems.length, checkoutStep])
 
   // En mobile, ocultar el downbar del dashboard mientras el carrito está abierto
   useEffect(() => {
@@ -845,6 +853,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
     setPosPayments([])
     setSplitAmount("")
     setOrderNote("")
+    setCheckoutStep("cart")
     setSaleSuccess(null)
     setPosPrintPhase(null)
     setLastTicket(null)
@@ -1214,12 +1223,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     type="button"
                     onClick={() => addProductToCart(product)}
                     className={cn(
-                      "group relative rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-muted shadow-[0_16px_30px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_16px_30px_-12px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_24px_40px_-14px_rgba(17,24,39,0.6)] dark:hover:shadow-[0_24px_40px_-14px_rgba(0,0,0,1)] active:scale-95",
+                      "group relative rounded-[2rem] bg-white dark:bg-card p-3 text-left border border-slate-200 dark:border-border shadow-[0_16px_30px_-12px_rgba(17,24,39,0.5)] dark:shadow-[0_16px_30px_-12px_rgba(0,0,0,0.9)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_24px_40px_-14px_rgba(17,24,39,0.6)] dark:hover:shadow-[0_24px_40px_-14px_rgba(0,0,0,1)] active:scale-95",
                       justAdded?.id === product.id && "ring-2 ring-[#D1F366] scale-[0.97]"
                     )}
                   >
                     {/* Media: imagen o placeholder con la inicial. El badge va acá (nunca tapa el nombre) */}
-                    <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#eef0f3] dark:bg-muted">
+                    <div className="relative mb-3 overflow-hidden rounded-[1.5rem] bg-[#d6dbe3] dark:bg-muted">
                       {/* "+N" al agregar: centrado sobre la imagen (su overflow-hidden evita cualquier corte externo) */}
                       <AnimatePresence>
                         {justAdded?.id === product.id && (
@@ -1254,8 +1263,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
                         ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#eef1f5] to-[#e1e5ea] dark:from-muted dark:to-card">
-                            <span className="select-none text-4xl font-black text-slate-300 dark:text-muted-foreground/40">
+                          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#dbe0e7] to-[#c4ccd6] dark:from-muted dark:to-card">
+                            <span className="select-none text-4xl font-black text-slate-400 dark:text-muted-foreground/40">
                               {product.name.charAt(0).toUpperCase()}
                             </span>
                           </div>
@@ -1476,6 +1485,29 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   </PopoverContent>
                 </Popover>
 
+                {/* Nota del pedido: ícono compacto arriba (antes ocupaba una fila entera abajo) */}
+                <Popover open={notePopoverOpen} onOpenChange={setNotePopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      title="Nota del pedido"
+                      className="relative flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground transition-colors hover:bg-muted/70"
+                    >
+                      <StickyNote className="h-4 w-4" />
+                      {orderNote.trim() && <span className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[#d8ff55]" />}
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-72 p-3">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Nota del pedido</p>
+                    <Input
+                      value={orderNote}
+                      onChange={(e) => setOrderNote(e.target.value)}
+                      placeholder="Ej: sin sal, para llevar…"
+                      className="h-9 text-sm"
+                      autoFocus
+                    />
+                  </PopoverContent>
+                </Popover>
                 <button
                   type="button"
                   onClick={() => setCashDialogOpen(true)}
@@ -1508,9 +1540,9 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
               </div>
             </div>
 
-            {/* Carrito + fidelización — única zona scrolleable */}
-            <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 sm:px-4 pt-1 pb-1 space-y-3 text-left">
-                <div className="w-full rounded-[1.5rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-3.5">
+            {/* Carrito + fidelización — se oculta en el paso de pago para dar lugar a los métodos */}
+            <div className={cn("flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar px-3 sm:px-4 pt-1 pb-1 space-y-3 text-left", checkoutStep === "pay" && "hidden")}>
+                <div className="w-full rounded-[1.5rem] border border-slate-200 bg-[#e8eaf0] dark:bg-muted/40 p-3.5">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Carrito actual</p>
@@ -1525,8 +1557,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   ) : (
                     <div className="space-y-3">
                       {cartItems.map((item) => (
-                        <div key={item.lineId} className="flex min-w-0 flex-row items-center gap-3 rounded-[1.25rem] bg-white dark:bg-card p-3 shadow-sm dark:shadow-none">
-                          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-[1rem] bg-slate-100 dark:bg-muted">
+                        <div key={item.lineId} className="flex min-w-0 flex-row items-center gap-2.5 rounded-[1.25rem] border border-slate-200/70 dark:border-transparent bg-white dark:bg-card p-2.5 shadow-sm dark:shadow-none">
+                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-[0.9rem] bg-[#d6dbe3] dark:bg-muted">
                             {item.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
@@ -1536,11 +1568,12 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                               </div>
                             )}
                           </div>
+                          {/* Nombre + opciones (acotados) a la izquierda, controles a la derecha */}
                           <div className="min-w-0 flex-1">
-                            <h4 className="text-sm font-semibold leading-tight text-slate-800 dark:text-foreground line-clamp-3 break-words">{item.name}</h4>
+                            <h4 className="text-sm font-semibold leading-tight text-slate-800 dark:text-foreground line-clamp-2 break-words">{item.name}</h4>
                             {item.options && item.options.length > 0 && (
                               <div className="mt-0.5 flex items-start gap-1.5">
-                                <p className="flex-1 text-[11px] leading-tight text-slate-500 dark:text-muted-foreground">
+                                <p className="flex-1 text-[11px] leading-tight text-slate-500 dark:text-muted-foreground line-clamp-1">
                                   {item.options.map((o) => o.name + (o.delta > 0 ? ` (+${formatCurrency(o.delta)})` : "")).join(" · ")}
                                 </p>
                                 {(optionsByProduct[item.productId]?.length ?? 0) > 0 && (
@@ -1554,22 +1587,22 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                                 )}
                               </div>
                             )}
-                            <p className="truncate text-xs text-slate-400 mt-1">{formatCurrency(item.price)} / ud</p>
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <button type="button" onClick={() => updateQuantity(item.lineId, -1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <button type="button" onClick={() => updateQuantity(item.lineId, -1)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
                                 <Minus className="h-3 w-3" />
                               </button>
                               <span className="min-w-4 text-center text-sm font-semibold text-slate-700 dark:text-foreground">{item.quantity}</span>
-                              <button type="button" onClick={() => updateQuantity(item.lineId, 1)} className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
+                              <button type="button" onClick={() => updateQuantity(item.lineId, 1)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-muted text-slate-600 dark:text-muted-foreground transition-colors hover:bg-slate-200 dark:hover:bg-muted/70">
                                 <Plus className="h-3 w-3" />
                               </button>
+                              <span className="ml-auto shrink-0 text-[11px] text-slate-400">{formatCurrency(item.price)}/u</span>
                             </div>
                           </div>
-                          <div className="flex h-full shrink-0 flex-col items-end justify-between gap-2 overflow-hidden text-right">
+                          <div className="flex h-full shrink-0 flex-col items-end justify-between gap-1.5 self-stretch text-right">
                             <button type="button" onClick={() => removeItem(item.lineId)} className="shrink-0 p-1 hover:bg-slate-50 dark:hover:bg-muted transition-colors rounded-full">
                               <X className="h-4 w-4 text-slate-300 hover:text-slate-500" />
                             </button>
-                            <p className="truncate text-sm font-bold text-slate-800 dark:text-foreground">{formatCurrency(item.price * item.quantity)}</p>
+                            <p className="shrink-0 whitespace-nowrap text-sm font-bold text-slate-800 dark:text-foreground">{formatCurrency(item.price * item.quantity)}</p>
                           </div>
                         </div>
                       ))}
@@ -1579,7 +1612,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
                 {/* Tarjeta de sellos */}
                 {selectedClient && isStampsMode && loyaltySettings && (
-                  <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
+                  <div className="w-full rounded-[1.75rem] border border-slate-200 bg-[#e8eaf0] dark:bg-muted/40 p-4">
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Gift className="h-4 w-4 text-slate-400" />
@@ -1634,7 +1667,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
                 {/* Canje de premios (modo puntos) */}
                 {selectedClient && !isStampsMode && rewards.length > 0 && (
-                  <div className="w-full rounded-[1.75rem] border border-slate-100 bg-[#f8f8fb] dark:bg-muted/30 p-4">
+                  <div className="w-full rounded-[1.75rem] border border-slate-200 bg-[#e8eaf0] dark:bg-muted/40 p-4">
                     <div className="mb-3 flex items-center gap-2">
                       <Gift className="h-4 w-4 text-slate-400" />
                       <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-400">Canjear premio</p>
@@ -1676,9 +1709,13 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                 )}
             </div>
 
-            {/* Pago + factura — fijo abajo */}
+            {/* Pago + factura. En el paso "pay" ocupa todo el alto (los métodos van grandes,
+                donde estaban los productos); en "cart" queda compacto abajo. */}
             <div
-              className="flex-shrink-0 px-3 sm:px-4 pt-2.5 pb-3 sm:pb-4 space-y-2.5 border-t border-slate-100 dark:border-border text-left"
+              className={cn(
+                "px-3 sm:px-4 pt-2.5 pb-3 sm:pb-4 space-y-2.5 border-t border-slate-100 dark:border-border text-left",
+                checkoutStep === "pay" ? "flex-1 min-h-0 overflow-y-auto custom-scrollbar" : "flex-shrink-0"
+              )}
               style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
             >
               {saleSuccess ? (
@@ -1808,7 +1845,15 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                 )
               ) : (
               <>
+                {checkoutStep === "pay" && (
                 <div>
+                  <button
+                    type="button"
+                    onClick={() => setCheckoutStep("cart")}
+                    className="mb-3 flex items-center gap-1 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-muted-foreground transition-colors hover:text-slate-900 dark:hover:text-foreground"
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Volver al pedido
+                  </button>
                   <div className="mb-2 flex items-center justify-between px-0.5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-slate-400">Metodo de pago</p>
                     {cartItems.length > 0 && (
@@ -1824,29 +1869,29 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                       </button>
                     )}
                   </div>
-                  {/* Select compacto: ocupa una fila en vez de una grilla de botones */}
-                  <Select
-                    value={paymentMethod ?? "__none__"}
-                    onValueChange={(v) => setPaymentMethod(v === "__none__" ? null : v)}
-                  >
-                    <SelectTrigger className="h-11 rounded-xl border-slate-200 dark:border-border bg-white dark:bg-card text-sm font-semibold">
-                      <SelectValue placeholder="Elegí un método (o pasá sin cobrar)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__" className="text-sm text-muted-foreground">Sin cobrar todavía</SelectItem>
-                      {enabledPaymentOptions.map((option) => {
-                        const Icon = option.icon
-                        return (
-                          <SelectItem key={option.id} value={option.id} className="text-sm">
-                            <span className="flex items-center gap-2">
-                              <Icon className="h-4 w-4 flex-shrink-0" />
-                              {option.label}
-                            </span>
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
+                  {/* Botones directos: un toque. Tocar el activo lo deselecciona (pasar sin cobrar). */}
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {enabledPaymentOptions.map((option) => {
+                      const Icon = option.icon
+                      const active = paymentMethod === option.id
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => setPaymentMethod((prev) => (prev === option.id ? null : option.id))}
+                          className={cn(
+                            "flex items-center justify-center gap-2 rounded-xl border px-2 py-2.5 text-xs font-semibold transition-all",
+                            active
+                              ? "border-transparent bg-[#1f2030] text-[#d8ff55] shadow-md"
+                              : "border-slate-200 dark:border-border bg-white dark:bg-card text-slate-500 dark:text-muted-foreground hover:border-foreground/30"
+                          )}
+                        >
+                          <Icon className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{option.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
 
                   {/* Builder de pago en varios medios */}
                   {multiPay && cartItems.length > 0 && (
@@ -1892,6 +1937,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     </div>
                   )}
                 </div>
+                )}
 
                 <div className="w-full rounded-[1.5rem] border border-slate-100 dark:border-border bg-white dark:bg-card p-3 shadow-sm dark:shadow-none">
                   <div className="space-y-1.5 text-sm text-slate-500 dark:text-muted-foreground">
@@ -1946,8 +1992,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     <p className="min-w-0 truncate text-xl font-black tracking-tight text-slate-900 dark:text-foreground sm:text-2xl">{formatCurrency(total)}</p>
                   </div>
 
-                  {/* Paga con → vuelto (solo efectivo) */}
-                  {paymentMethod === "cash" && cartItems.length > 0 && (
+                  {/* Paga con → vuelto (solo efectivo, y solo en el paso de pago) */}
+                  {checkoutStep === "pay" && paymentMethod === "cash" && cartItems.length > 0 && (
                     <div className="mt-2.5 space-y-1.5">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-400 flex-shrink-0 w-[68px]">Paga con</span>
@@ -1985,20 +2031,28 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                     </div>
                   )}
 
-                  {cartItems.length > 0 && (
-                    <div className="mt-2.5 flex items-start gap-2">
-                      <StickyNote className="mt-2 h-4 w-4 shrink-0 text-slate-400" />
-                      <Input
-                        value={orderNote}
-                        onChange={(e) => setOrderNote(e.target.value)}
-                        placeholder="Nota / mensaje del pedido (opcional)"
-                        className="h-8 text-sm"
-                      />
-                    </div>
-                  )}
-
                   <div className="flex flex-col gap-2 mt-3">
-                    {multiPay ? (
+                    {checkoutStep === "cart" ? (
+                      /* Paso ARMAR: botón grande "Cobrar" (va al paso de pago) + pasar pedido */
+                      <>
+                        <Button
+                          onClick={() => setCheckoutStep("pay")}
+                          disabled={isSubmitting || cartItems.length === 0}
+                          className="h-12 w-full rounded-[1.25rem] bg-[#d8ff55] text-sm font-bold uppercase tracking-[0.25em] text-slate-900 hover:bg-[#c8ef42] disabled:opacity-60"
+                        >
+                          Cobrar
+                          {cartItems.length > 0 && <ChevronRight className="ml-1 h-4 w-4" />}
+                        </Button>
+                        <Button
+                          onClick={moveOrder}
+                          disabled={isSubmitting || cartItems.length === 0}
+                          variant="outline"
+                          className="h-11 w-full rounded-[1.25rem] border-slate-200 dark:border-border text-sm font-bold uppercase tracking-[0.25em] text-slate-600 dark:text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted hover:text-slate-900 dark:hover:text-foreground"
+                        >
+                          Pasar pedido
+                        </Button>
+                      </>
+                    ) : multiPay ? (
                       <Button
                         onClick={finalizeMultiPay}
                         disabled={isSubmitting || cartItems.length === 0 || posPayments.length === 0}
@@ -2038,14 +2092,6 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                         {paymentMethod && !isSubmitting && <CheckCircle2 className="ml-2 h-4 w-4" />}
                       </Button>
                     )}
-                    <Button
-                      onClick={moveOrder}
-                      disabled={isSubmitting || cartItems.length === 0}
-                      variant="outline"
-                      className="h-11 w-full rounded-[1.25rem] border-slate-200 dark:border-border text-sm font-bold uppercase tracking-[0.25em] text-slate-600 dark:text-muted-foreground hover:bg-slate-50 dark:hover:bg-muted hover:text-slate-900 dark:hover:text-foreground"
-                    >
-                      Pasar pedido
-                    </Button>
                   </div>
                 </div>
               </>
