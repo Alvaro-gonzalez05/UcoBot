@@ -95,12 +95,18 @@ async function loadSessionTotals(
     const payments = Array.isArray(row.payments) ? row.payments : []
     if (payments.length === 0) continue
     totals.salesCount += 1
-    totals.tips += Number(row.tip_amount) || 0
+
+    // Propina del pedido SIN duplicar: al cobrar, el vuelto dejado de propina se
+    // guarda en el pago (p.tip) Y también se acumula en tip_amount. Sumar los dos
+    // contaba la propina dos veces. Tomamos el mayor: cubre los pedidos donde solo
+    // está en tip_amount (POS con propina configurada) y los que solo tienen p.tip.
+    const tipFromPayments = payments.reduce((s: number, p: any) => s + (Number(p?.tip) || 0), 0)
+    totals.tips += Math.max(Number(row.tip_amount) || 0, tipFromPayments)
+
     for (const p of payments) {
       const method = p?.method || "other"
       totals.byMethod[method] = (totals.byMethod[method] || 0) + (Number(p?.amount) || 0)
-      // Vuelto dejado como propina en pagos divididos
-      if (p?.tip) totals.tips += Number(p.tip) || 0
+      // (la propina ya se contabilizó arriba, sin duplicar)
     }
   }
   return totals

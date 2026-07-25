@@ -37,6 +37,18 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Redirigir SIN perder las cookies que Supabase acaba de refrescar.
+  // Si se devuelve un NextResponse.redirect "pelado", las cookies nuevas de sesión
+  // (que viven en supabaseResponse) se descartan: el browser se queda con el token
+  // viejo y la sesión se corta sola → rebote al login aunque el usuario esté logueado.
+  const redirectKeepingCookies = (pathname: string) => {
+    const url = request.nextUrl.clone()
+    url.pathname = pathname
+    const res = NextResponse.redirect(url)
+    supabaseResponse.cookies.getAll().forEach((c) => res.cookies.set(c))
+    return res
+  }
+
   const publicRoutes = ["/", "/login", "/register", "/nosotros", "/capacidades", "/demo", "/privacidad", "/terminos", "/eliminacion-datos"]
   const isPublicRoute = publicRoutes.some(
     (route) =>
@@ -50,15 +62,11 @@ export async function updateSession(request: NextRequest) {
 
   if (!user && !isPublicRoute) {
     // no user, potentially respond by redirecting the user to the login page
-    const url = request.nextUrl.clone()
-    url.pathname = "/login"
-    return NextResponse.redirect(url)
+    return redirectKeepingCookies("/login")
   }
 
   if (user && (request.nextUrl.pathname === "/login" || request.nextUrl.pathname === "/register")) {
-    const url = request.nextUrl.clone()
-    url.pathname = "/dashboard"
-    return NextResponse.redirect(url)
+    return redirectKeepingCookies("/dashboard")
   }
 
   // Check for suspended account
@@ -70,9 +78,7 @@ export async function updateSession(request: NextRequest) {
       .single()
     
     if (profile?.subscription_status === 'suspended') {
-      const url = request.nextUrl.clone()
-      url.pathname = "/suspended"
-      return NextResponse.redirect(url)
+      return redirectKeepingCookies("/suspended")
     }
   }
 

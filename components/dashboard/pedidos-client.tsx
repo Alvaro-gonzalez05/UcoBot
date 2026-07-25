@@ -910,33 +910,84 @@ export function PedidosClient({
   const consolidateItems = <T extends { product_id?: string | null; quantity: number; options?: any[]; is_new?: boolean; removed?: boolean; delivered?: boolean }>(list: T[]): T[] =>
     mergeSameState(list.filter((i) => !i.removed).map((i) => ({ ...i, is_new: undefined })))
 
-  // Línea de producto en la tarjeta. Puntito de estado: sin relleno = pendiente de
-  // entrega, verde lleno = entregado, lima = recién agregado (+), rojo = quitado (−).
-  const renderCardItem = (item: any, i: number) => {
+  // Marca/desmarca entregado DESDE LA VISTA GENERAL (sin abrir el pedido).
+  // Misma regla que en el detalle: con varias unidades entrega de a una, dejando la
+  // línea original con lo que falta y la entregada como línea nueva (verde).
+  const toggleDeliveredOnCard = async (order: Order, index: number) => {
+    const items: any[] = Array.isArray(order.items) ? order.items : []
+    const item = items[index]
+    if (!item || item.removed) return
+
+    const nextItems = mergeSameState(
+      items.flatMap((i: any, idx: number) => {
+        if (idx !== index) return [i]
+        const qty = Number(i.quantity) || 1
+        if (qty <= 1) return [{ ...i, delivered: !i.delivered, is_new: i.delivered ? i.is_new : false }]
+        const targetDelivered = !i.delivered
+        return [
+          { ...i, quantity: qty - 1 },
+          { ...i, quantity: 1, delivered: targetDelivered, is_new: targetDelivered ? false : i.is_new },
+        ]
+      })
+    )
+
+    // Optimista: la tarjeta se actualiza al toque
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items: nextItems } : o)))
+    if (selectedOrder?.id === order.id) setEditItems(nextItems as any)
+
+    try {
+      await supabase.from("orders").update({ items: nextItems }).eq("id", order.id)
+      loadEditedOrders()
+    } catch (e) {
+      console.error("Error marcando entregado:", e)
+      toast.error("No se pudo actualizar")
+      // Revertir si falló
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items } : o)))
+    }
+  }
+
+  // Línea de producto en la tarjeta. El círculo es un BOTÓN: al tocarlo marca/desmarca
+  // la unidad como entregada (verde). Rojo = quitado, lima = recién agregado (+).
+  const renderCardItem = (item: any, i: number, order?: Order) => {
     const isRemoved = !!item?.removed
     const isNew = item?.is_new && !item?.delivered && !isRemoved
     const isDelivered = !!item?.delivered && !isRemoved
     const name = item.name || item.product_name || `Producto ${i + 1}`
+    const canToggle = !!order && !isRemoved
     return (
       <div key={i}>
-        <p className={cn(
-          "flex items-center gap-1.5 text-sm font-semibold truncate",
+        <div className={cn(
+          "flex items-center gap-2 text-sm font-semibold",
           isRemoved ? "text-rose-500 line-through" : isNew ? "text-[#5c7a16] dark:text-[#D1F366]" : "text-foreground"
         )}>
-          <span className={cn(
-            "h-2 w-2 shrink-0 rounded-full border-2 transition-colors",
-            isDelivered
-              ? "border-emerald-500 bg-emerald-500"
-              : isRemoved
-                ? "border-rose-400 bg-transparent"
-                : isNew
-                  ? "border-[#B3D93C] bg-[#B3D93C]"
-                  : "border-muted-foreground/50 bg-transparent"
-          )} />
-          {isRemoved ? `-${item.quantity}` : isNew ? `+${item.quantity}` : `${item.quantity}x`} {name}
-        </p>
+          {canToggle ? (
+            <button
+              type="button"
+              title={isDelivered ? "Marcar como no entregado" : "Marcar como entregado"}
+              onClick={(e) => { e.stopPropagation(); toggleDeliveredOnCard(order!, i) }}
+              className={cn(
+                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 hover:scale-110",
+                isDelivered
+                  ? "border-emerald-500 bg-emerald-500 text-white"
+                  : isNew
+                    ? "border-[#B3D93C] bg-transparent hover:bg-[#B3D93C]/20"
+                    : "border-muted-foreground/40 bg-transparent hover:border-emerald-500"
+              )}
+            >
+              {isDelivered && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+            </button>
+          ) : (
+            <span className={cn(
+              "h-6 w-6 shrink-0 rounded-full border-2",
+              isRemoved ? "border-rose-400 bg-transparent" : "border-muted-foreground/40 bg-transparent"
+            )} />
+          )}
+          <span className="min-w-0 truncate">
+            {isRemoved ? `-${item.quantity}` : isNew ? `+${item.quantity}` : `${item.quantity}x`} {name}
+          </span>
+        </div>
         {optionNames(item.options).length > 0 && (
-          <p className="pl-4 text-[11px] text-muted-foreground leading-tight truncate">{optionNames(item.options).join(" · ")}</p>
+          <p className="pl-8 text-[11px] text-muted-foreground leading-tight truncate">{optionNames(item.options).join(" · ")}</p>
         )}
       </div>
     )
@@ -1153,11 +1204,14 @@ export function PedidosClient({
           return [{ ...i, delivered: !i.delivered, is_new: i.delivered ? i.is_new : false }]
         }
         // Varias unidades: mover UNA unidad al otro estado (entregada ↔ pendiente).
-        // La unidad que cambia va primero; la que queda conserva qty-1.
+        // La línea ORIGINAL se queda en su lugar con qty-1 (lo que falta entregar) y
+        // la unidad que cambió de estado sale como línea NUEVA debajo. Así, al
+        // entregar 1 de 2, lo verde es lo entregado y lo de arriba sigue siendo el
+        // pendiente, sin que "se mueva" el que no tocaste.
         const targetDelivered = !i.delivered
         return [
-          { ...i, quantity: 1, delivered: targetDelivered, is_new: targetDelivered ? false : i.is_new },
           { ...i, quantity: qty - 1 },
+          { ...i, quantity: 1, delivered: targetDelivered, is_new: targetDelivered ? false : i.is_new },
         ]
       })
     )
@@ -1600,12 +1654,12 @@ export function PedidosClient({
                             const cols = [order.items.slice(0, half), order.items.slice(half)]
                             return cols.map((col, ci) => (
                               <div key={ci} className={cn("min-w-0 flex-1 space-y-0.5", ci === 1 && "border-l border-border pl-3")}>
-                                {col.map((item: any, i: number) => renderCardItem(item, ci === 1 ? half + i : i))}
+                                {col.map((item: any, i: number) => renderCardItem(item, ci === 1 ? half + i : i, order))}
                               </div>
                             ))
                           })()
                         ) : (
-                          order.items.map((item: any, i: number) => renderCardItem(item, i))
+                          order.items.map((item: any, i: number) => renderCardItem(item, i, order))
                         )
                       ) : (
                         <p className="text-sm text-muted-foreground">Sin detalle</p>
@@ -1725,7 +1779,7 @@ export function PedidosClient({
                     <div className="flex-1 min-w-[180px] flex flex-col justify-center px-4 md:px-6 md:border-x border-black/10 dark:border-white/10">
                       <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1">Detalle de Productos</span>
                       {Array.isArray(order.items) && order.items.length > 0 ? (
-                        order.items.map((item: any, i: number) => renderCardItem(item, i))
+                        order.items.map((item: any, i: number) => renderCardItem(item, i, order))
                       ) : (
                         <p className="text-sm text-muted-foreground">Sin detalle</p>
                       )}
