@@ -110,6 +110,16 @@ export function PedidosClient({
   // Búsqueda server-side: resultados (o null si no hay búsqueda activa) + estado de carga
   const [searchOrders, setSearchOrders] = useState<Order[] | null>(null)
   const [searching, setSearching] = useState(false)
+
+  /**
+   * Aplica un cambio a la lista principal Y a los resultados de búsqueda.
+   * Con el buscador activo se muestra `searchOrders`, así que si solo tocáramos
+   * `orders` las ediciones no se verían hasta borrar la búsqueda.
+   */
+  const patchOrders = (updater: (list: Order[]) => Order[]) => {
+    setOrders(updater)
+    setSearchOrders((prev) => (prev ? updater(prev) : prev))
+  }
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const [products, setProducts] = useState<Product[]>(initialProducts)
   const [categories, setCategories] = useState<string[]>(initialCategories)
@@ -229,10 +239,10 @@ export function PedidosClient({
             }
           } else if (payload.eventType === 'UPDATE') {
             const updatedOrder = payload.new as Order
-            setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o))
+            patchOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, ...updatedOrder } : o))
           } else if (payload.eventType === 'DELETE') {
             const deletedOrder = payload.old as Order
-            setOrders(prev => prev.filter(o => o.id !== deletedOrder.id))
+            patchOrders(prev => prev.filter(o => o.id !== deletedOrder.id))
           }
           // Cualquier cambio puede afectar la lista global de editados → la refrescamos
           loadEditedOrders()
@@ -380,24 +390,13 @@ export function PedidosClient({
     setSearching(true)
     const t = window.setTimeout(async () => {
       try {
-        const sel = `*, client:client_id(name, phone), conversation:conversation_id(platform)`
-        // 1) por teléfono / nombre de walk-in (guardado en delivery_phone)
-        const { data: byPhone } = await supabase
-          .from("orders").select(sel).eq("user_id", userId)
-          .ilike("delivery_phone", `%${term}%`).order("created_at", { ascending: false }).limit(50)
-        // 2) por nombre de cliente registrado
-        const { data: matchClients } = await supabase
-          .from("clients").select("id").eq("user_id", userId).ilike("name", `%${term}%`).limit(100)
-        let byClient: Order[] = []
-        if (matchClients && matchClients.length) {
-          const { data } = await supabase
-            .from("orders").select(sel).eq("user_id", userId)
-            .in("client_id", matchClients.map((c) => c.id)).order("created_at", { ascending: false }).limit(50)
-          byClient = (data as Order[]) || []
-        }
-        const map = new Map<string, Order>()
-        for (const o of [...((byPhone as Order[]) || []), ...byClient]) map.set(o.id, o)
-        setSearchOrders([...map.values()].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+        // RPC `search_orders`: busca por ID visible del pedido, cliente (registrado
+        // o walk-in) y notas, ignorando acentos y mayúsculas.
+        const { data, error } = await supabase
+          .rpc("search_orders", { p_term: term, p_limit: 50 })
+          .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
+        if (error) throw error
+        setSearchOrders((data as Order[]) || [])
       } catch (e) {
         console.error("Error searching orders:", e)
         setSearchOrders([])
@@ -493,7 +492,8 @@ export function PedidosClient({
     // (se desliza al costado) y las de abajo suben suave con el layout animation.
     setDeletingId(null)
     const snapshot = orders
-    setOrders((prev) => prev.filter((o) => o.id !== orderId))
+    const searchSnapshot = searchOrders
+    patchOrders((prev) => prev.filter((o) => o.id !== orderId))
     try {
       // Reponer stock antes de borrar (no-op si nunca se descontó o ya se repuso)
       await supabase.rpc("apply_order_stock", { p_order_id: orderId, p_direction: 1 })
@@ -503,7 +503,9 @@ export function PedidosClient({
     } catch (error) {
       console.error("Error deleting order:", error)
       toast.error("No se pudo eliminar el pedido")
-      setOrders(snapshot) // restaurar si falló
+      // restaurar ambas listas si falló
+      setOrders(snapshot)
+      setSearchOrders(searchSnapshot)
     }
   }
 
@@ -583,7 +585,7 @@ export function PedidosClient({
         .select()
         .single()
       if (error) throw error
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...data } : o)))
+      patchOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, ...data } : o)))
       // Sin toast: la tarjeta se recolorea al nuevo estado y hace un flash animado
       setPoppedId(order.id)
       window.setTimeout(() => setPoppedId((p) => (p === order.id ? null : p)), 700)
@@ -719,7 +721,7 @@ export function PedidosClient({
 
   const handleOrderFinalized = (orderId: string) => {
     // El cobro consolidó las marcas de edición en la base → reflejamos lo mismo acá
-    setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: "completed", items: consolidateItems((o.items as any[]) || []) } : o)))
+    patchOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status: "completed", items: consolidateItems((o.items as any[]) || []) } : o)))
     setCheckoutOrder(null)
     loadEditedOrders()
   }
@@ -931,11 +933,11 @@ export function PedidosClient({
       })
     )
 
-    // Si con este toque quedó TODO entregado, el pedido pasa solo a "listo".
-    const nextStatus = allItemsDelivered(nextItems) && canAutoReady(order.status) ? "ready" : null
+    // Todo entregado → "listo". Si estaba listo y se desmarcó algo → "preparando".
+    const nextStatus = statusAfterDelivery(nextItems, order.status)
 
     // Optimista: la tarjeta se actualiza al toque
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items: nextItems, ...(nextStatus ? { status: nextStatus } : {}) } : o)))
+    patchOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items: nextItems, ...(nextStatus ? { status: nextStatus } : {}) } : o)))
     if (selectedOrder?.id === order.id) {
       setEditItems(nextItems as any)
       if (nextStatus) setEditStatus(nextStatus)
@@ -946,13 +948,14 @@ export function PedidosClient({
         .from("orders")
         .update({ items: nextItems, ...(nextStatus ? { status: nextStatus } : {}) })
         .eq("id", order.id)
-      if (nextStatus) toast.success("Pedido listo", { description: "Se entregaron todos los productos." })
+      if (nextStatus === "ready") toast.success("Pedido listo", { description: "Se entregaron todos los productos." })
+      else if (nextStatus === "preparing") toast.info("Pedido en preparación", { description: "Quedó un producto sin entregar." })
       loadEditedOrders()
     } catch (e) {
       console.error("Error marcando entregado:", e)
       toast.error("No se pudo actualizar")
       // Revertir si falló
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items, status: order.status } : o)))
+      patchOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items, status: order.status } : o)))
     }
   }
 
@@ -976,7 +979,7 @@ export function PedidosClient({
               title={isDelivered ? "Marcar como no entregado" : "Marcar como entregado"}
               onClick={(e) => { e.stopPropagation(); toggleDeliveredOnCard(order!, i) }}
               className={cn(
-                "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 hover:scale-110",
+                "flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 hover:scale-110",
                 isDelivered
                   ? "border-emerald-500 bg-emerald-500 text-white"
                   : isNew
@@ -984,11 +987,11 @@ export function PedidosClient({
                     : "border-muted-foreground/40 bg-transparent hover:border-emerald-500"
               )}
             >
-              {isDelivered && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
+              {isDelivered && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
             </button>
           ) : (
             <span className={cn(
-              "h-6 w-6 shrink-0 rounded-full border-2",
+              "h-[18px] w-[18px] shrink-0 rounded-full border-2",
               isRemoved ? "border-rose-400 bg-transparent" : "border-muted-foreground/40 bg-transparent"
             )} />
           )}
@@ -997,7 +1000,7 @@ export function PedidosClient({
           </span>
         </div>
         {optionNames(item.options).length > 0 && (
-          <p className="pl-8 text-[11px] text-muted-foreground leading-tight truncate">{optionNames(item.options).join(" · ")}</p>
+          <p className="pl-[26px] text-[11px] text-muted-foreground leading-tight truncate">{optionNames(item.options).join(" · ")}</p>
         )}
       </div>
     )
@@ -1050,7 +1053,7 @@ export function PedidosClient({
         .select()
         .single()
       if (error) throw error
-      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
+      patchOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
       // Sin toast: la animación verde de venta completada ya lo confirma
       setIsDetailOpen(false)
       setDetailMode("edit")
@@ -1065,7 +1068,7 @@ export function PedidosClient({
     if (!selectedOrder) return
     await supabase.from("orders").update({ payments }).eq("id", selectedOrder.id)
     setSelectedOrder((prev) => (prev ? { ...prev, payments } : prev))
-    setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, payments } : o)))
+    patchOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, payments } : o)))
   }
 
   // Quita un pago ya registrado (deshacer cobro). Si tenía propina, se descuenta también.
@@ -1085,7 +1088,7 @@ export function PedidosClient({
         .eq("id", selectedOrder.id)
       if (error) throw error
       setSelectedOrder((prev) => (prev ? { ...prev, payments: next, tip_amount: newTip, ...(revertStatus ? { status: revertStatus } : {}) } : prev))
-      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, payments: next, tip_amount: newTip, ...(revertStatus ? { status: revertStatus } : {}) } : o)))
+      patchOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, payments: next, tip_amount: newTip, ...(revertStatus ? { status: revertStatus } : {}) } : o)))
       if (revertStatus) setEditStatus(revertStatus)
       toast.success(`Pago quitado (${removed.label || removed.method}: ${formatCurrency(removed.amount + (removed.tip || 0))})${revertStatus ? " · el pedido volvió a Listo" : ""}`)
     } catch (error) {
@@ -1205,6 +1208,18 @@ export function PedidosClient({
   // Un pedido ya cobrado (completed) o cancelado no se toca.
   const canAutoReady = (status?: string) => ["pending", "confirmed", "preparing"].includes(status || "")
 
+  /**
+   * Estado que le corresponde al pedido según lo entregado, o null si no cambia.
+   *  - Se entregó TODO  → "listo"
+   *  - Estaba "listo" y se desmarcó algo → vuelve a "preparando"
+   */
+  const statusAfterDelivery = (items: any[], status?: string): string | null => {
+    const all = allItemsDelivered(items)
+    if (all && canAutoReady(status)) return "ready"
+    if (!all && status === "ready") return "preparing"
+    return null
+  }
+
   // Marca/desmarca un producto como entregado (control de cocina/mostrador). Persiste al toque.
   // Si la línea tiene VARIAS unidades, entrega/quita UNA por toque: se parte en una fila
   // "entregada" (qty que se entregó) y otra "pendiente", que después se fusionan solas si
@@ -1248,8 +1263,8 @@ export function PedidosClient({
       delivered: i.delivered || undefined,
       removed: i.removed || undefined,
     }))
-    // Si con este toque quedó TODO entregado, el pedido pasa solo a "listo".
-    const nextStatus = allItemsDelivered(nextItems) && canAutoReady(editStatus) ? "ready" : null
+    // Todo entregado → "listo". Si estaba listo y se desmarcó algo → "preparando".
+    const nextStatus = statusAfterDelivery(nextItems, editStatus)
 
     try {
       await supabase
@@ -1258,10 +1273,11 @@ export function PedidosClient({
         .eq("id", selectedOrder.id)
       if (nextStatus) {
         setEditStatus(nextStatus)
-        toast.success("Pedido listo", { description: "Se entregaron todos los productos." })
+        if (nextStatus === "ready") toast.success("Pedido listo", { description: "Se entregaron todos los productos." })
+        else toast.info("Pedido en preparación", { description: "Quedó un producto sin entregar." })
       }
       setSelectedOrder((prev) => (prev ? { ...prev, items: dbItems, ...(nextStatus ? { status: nextStatus } : {}) } : prev))
-      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, items: dbItems, ...(nextStatus ? { status: nextStatus } : {}) } : o)))
+      patchOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, items: dbItems, ...(nextStatus ? { status: nextStatus } : {}) } : o)))
       loadEditedOrders()
     } catch (e) {
       console.error("Error toggling delivered:", e)
@@ -1328,7 +1344,7 @@ export function PedidosClient({
         await supabase.rpc("apply_order_stock", { p_order_id: selectedOrder.id, p_direction: -1 })
       }
       setSelectedOrder((prev) => (prev ? { ...prev, ...data } : prev))
-      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
+      patchOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, ...data } : o)))
       if (!keepNew) setEditItems(source.map((i) => ({ ...i, is_new: false })))
       loadEditedOrders()
     } catch (error) {
