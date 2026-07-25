@@ -931,18 +931,28 @@ export function PedidosClient({
       })
     )
 
+    // Si con este toque quedó TODO entregado, el pedido pasa solo a "listo".
+    const nextStatus = allItemsDelivered(nextItems) && canAutoReady(order.status) ? "ready" : null
+
     // Optimista: la tarjeta se actualiza al toque
-    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items: nextItems } : o)))
-    if (selectedOrder?.id === order.id) setEditItems(nextItems as any)
+    setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items: nextItems, ...(nextStatus ? { status: nextStatus } : {}) } : o)))
+    if (selectedOrder?.id === order.id) {
+      setEditItems(nextItems as any)
+      if (nextStatus) setEditStatus(nextStatus)
+    }
 
     try {
-      await supabase.from("orders").update({ items: nextItems }).eq("id", order.id)
+      await supabase
+        .from("orders")
+        .update({ items: nextItems, ...(nextStatus ? { status: nextStatus } : {}) })
+        .eq("id", order.id)
+      if (nextStatus) toast.success("Pedido listo", { description: "Se entregaron todos los productos." })
       loadEditedOrders()
     } catch (e) {
       console.error("Error marcando entregado:", e)
       toast.error("No se pudo actualizar")
       // Revertir si falló
-      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items } : o)))
+      setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, items, status: order.status } : o)))
     }
   }
 
@@ -1185,6 +1195,16 @@ export function PedidosClient({
     if (!target.is_new && !target.removed) setEditStatus("pending")
   }
 
+  // ¿Se entregó TODO el pedido? (los marcadores "−" quitados no cuentan)
+  const allItemsDelivered = (items: any[]) => {
+    const real = (items || []).filter((i) => !i?.removed)
+    return real.length > 0 && real.every((i) => !!i?.delivered)
+  }
+
+  // Estados desde los que auto-avanzar a "listo" al terminar de entregar.
+  // Un pedido ya cobrado (completed) o cancelado no se toca.
+  const canAutoReady = (status?: string) => ["pending", "confirmed", "preparing"].includes(status || "")
+
   // Marca/desmarca un producto como entregado (control de cocina/mostrador). Persiste al toque.
   // Si la línea tiene VARIAS unidades, entrega/quita UNA por toque: se parte en una fila
   // "entregada" (qty que se entregó) y otra "pendiente", que después se fusionan solas si
@@ -1228,10 +1248,20 @@ export function PedidosClient({
       delivered: i.delivered || undefined,
       removed: i.removed || undefined,
     }))
+    // Si con este toque quedó TODO entregado, el pedido pasa solo a "listo".
+    const nextStatus = allItemsDelivered(nextItems) && canAutoReady(editStatus) ? "ready" : null
+
     try {
-      await supabase.from("orders").update({ items: dbItems }).eq("id", selectedOrder.id)
-      setSelectedOrder((prev) => (prev ? { ...prev, items: dbItems } : prev))
-      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, items: dbItems } : o)))
+      await supabase
+        .from("orders")
+        .update({ items: dbItems, ...(nextStatus ? { status: nextStatus } : {}) })
+        .eq("id", selectedOrder.id)
+      if (nextStatus) {
+        setEditStatus(nextStatus)
+        toast.success("Pedido listo", { description: "Se entregaron todos los productos." })
+      }
+      setSelectedOrder((prev) => (prev ? { ...prev, items: dbItems, ...(nextStatus ? { status: nextStatus } : {}) } : prev))
+      setOrders((prev) => prev.map((o) => (o.id === selectedOrder.id ? { ...o, items: dbItems, ...(nextStatus ? { status: nextStatus } : {}) } : o)))
       loadEditedOrders()
     } catch (e) {
       console.error("Error toggling delivered:", e)
@@ -2319,13 +2349,16 @@ export function PedidosClient({
                         <div className="mt-1 flex justify-between border-t border-border pt-1 font-bold"><span>Total a cobrar</span><span>{formatCurrency(editTotal + ticketTip)}</span></div>
                       </div>
                     )}
+                    {/* Mismo panel que el botón "Cobrar" de las tarjetas: con lista de
+                        productos y checkbox de propina, para que la experiencia sea idéntica. */}
                     <OrderCheckoutPanel
                       total={editTotal + ticketTip}
                       items={editItems.filter((i) => !i.removed)}
-                      showItems={false}
                       initialPayments={selectedOrder.payments}
                       onFinalize={finalizeFromModal}
                       onPaymentsChange={savePartialPayments}
+                      tipEnabled={posTipEnabled}
+                      tipPercent={posTipPercent}
                     />
                   </motion.div>
                 ) : detailMode === "print" ? (
