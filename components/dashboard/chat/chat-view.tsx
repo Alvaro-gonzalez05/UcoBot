@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useMemo, useCallback, Fragment } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import dynamic from "next/dynamic"
 import { createClient } from "@/lib/supabase/client"
 
@@ -25,7 +25,7 @@ import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
 import { cn } from "@/lib/utils"
-import { format, isToday, isYesterday, isSameDay } from "date-fns"
+import { format, isToday, isYesterday } from "date-fns"
 import { es } from "date-fns/locale"
 import { useIntersectionObserver } from "@/hooks/use-intersection-observer"
 import {
@@ -2083,6 +2083,21 @@ export function ChatView({ userId }: ChatViewProps) {
   const recurringOrderCount = clientOrders.length
   const totalPurchases = clientProfile?.total_purchases || clientOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0)
 
+  // Mensajes agrupados por día. Cada bloque lleva su propia fecha pegajosa: si
+  // todas las fechas cuelgan del mismo contenedor, se pegan a la misma altura y
+  // se superponen entre sí (se veía "20 de" y "Hoy" encimados).
+  const messageGroups = useMemo(() => {
+    const groups: { key: string; items: { msg: Message; index: number }[] }[] = []
+    messages.forEach((msg, index) => {
+      const d = new Date(msg.created_at)
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+      const last = groups[groups.length - 1]
+      if (last && last.key === key) last.items.push({ msg, index })
+      else groups.push({ key, items: [{ msg, index }] })
+    })
+    return groups
+  }, [messages])
+
   const latestClientMessage = [...messages].reverse().find((msg) => msg.sender_type === "client")
   const internalNote = latestClientMessage?.content
     ? `\"${latestClientMessage.content.slice(0, 120)}${latestClientMessage.content.length > 120 ? "..." : ""}\"`
@@ -2474,12 +2489,17 @@ export function ChatView({ userId }: ChatViewProps) {
                   <p>No hay mensajes en esta conversación.</p>
                 </div>
               ) : (
-                messages.map((msg, index) => {
+                messageGroups.map((group) => (
+                  <section key={group.key} className="space-y-4">
+                    {/* La fecha se pega arriba solo mientras dura SU día */}
+                    <div className="sticky top-2 z-20 flex justify-center select-none pointer-events-none">
+                      <span className="bg-white dark:bg-slate-800 text-muted-foreground text-xs font-medium px-3 py-1 rounded-lg shadow-sm border">
+                        {formatDateSeparator(group.items[0].msg.created_at)}
+                      </span>
+                    </div>
+                    {group.items.map(({ msg, index }) => {
                   const isClient = msg.sender_type === 'client'
                   const isSticker = !!msg.metadata?.is_sticker
-                  const showDateSeparator =
-                    index === 0 ||
-                    !isSameDay(new Date(msg.created_at), new Date(messages[index - 1].created_at))
                   // Solo los mensajes posteriores a la apertura del chat entran animados.
                   // El tope de 4 evita que un desfase de reloj anime medio historial.
                   const isNew =
@@ -2492,15 +2512,8 @@ export function ChatView({ userId }: ChatViewProps) {
                     ? { opacity: 0 }
                     : { opacity: 0, transform: `translate3d(${isClient ? "-10px" : "10px"}, 6px, 0) scale(0.98)` }
                   return (
-                    <Fragment key={msg.id}>
-                      {showDateSeparator && (
-                        <div className="sticky top-2 z-20 flex justify-center my-3 select-none pointer-events-none">
-                          <span className="bg-white dark:bg-slate-800 text-muted-foreground text-xs font-medium px-3 py-1 rounded-lg shadow-sm border">
-                            {formatDateSeparator(msg.created_at)}
-                          </span>
-                        </div>
-                      )}
                     <motion.div
+                      key={msg.id}
                       initial={isNew ? enterFrom : false}
                       animate={{ opacity: 1, transform: "translate3d(0px, 0px, 0) scale(1)" }}
                       transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
@@ -2687,9 +2700,10 @@ export function ChatView({ userId }: ChatViewProps) {
                     </div>
                     </SwipeableMessage>
                     </motion.div>
-                    </Fragment>
                   )
-                })
+                    })}
+                  </section>
+                ))
               )}
             </div>
 
