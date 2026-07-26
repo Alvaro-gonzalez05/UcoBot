@@ -297,6 +297,9 @@ async function processInstagramMessage(entry: any, request: NextRequest) {
         .select('*')
         .contains('platforms', ['instagram'])
         .eq('user_id', integration.user_id)
+        // Orden fijo: si la cuenta tiene más de un bot, sin ORDER BY se elegía
+        // cualquiera y el mismo cliente terminaba duplicado en la bandeja.
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle()
 

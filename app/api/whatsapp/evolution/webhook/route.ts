@@ -270,6 +270,9 @@ async function handlePhoneEchoes(instance: string, echoes: any[]) {
     .eq('user_id', integration.user_id)
     .contains('platforms', ['whatsapp'])
     .eq('is_active', true)
+    // Mismo bot siempre (ver webhook de Cloud API): sin ORDER BY, una cuenta con
+    // varios bots duplicaba la conversación del mismo cliente.
+    .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle()
   if (!bot) return

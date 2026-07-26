@@ -168,12 +168,18 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
 
       // Get the bot for this user and platform
       // We can do this in parallel with checking for duplicate messages
+      //
+      // OJO: sin ORDER BY, un `limit(1)` sobre una cuenta con MÁS DE UN bot activo
+      // devuelve cualquiera y puede variar entre requests. Como la conversación se
+      // ataba al bot_id, el mismo cliente terminaba duplicado en la bandeja.
+      // Orden fijo (el bot más antiguo) → siempre el mismo bot para el mismo número.
       const botPromise = supabase
         .from('bots')
         .select('*')
         .eq('user_id', integration.user_id)
         .contains('platforms', ['whatsapp'])
         .eq('is_active', true)
+        .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle()
 
@@ -319,22 +325,31 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       // OPTIMIZATION: Parallelize Conversation and Client Lookup
       
       // 1. Find conversation
-      // Flexible search to handle 549 vs local numbers
+      // Se busca por CUENTA (user_id), no por bot_id: si la cuenta tiene más de un
+      // bot, atarla al bot creaba una conversación nueva por cada bot y el mismo
+      // cliente aparecía duplicado en la bandeja. El número es del negocio, así que
+      // la charla es una sola sin importar qué bot la atienda.
       let convQuery = supabase
         .from('conversations')
         .select('*')
-        .eq('bot_id', bot.id);
+        .eq('user_id', integration.user_id)
+        .eq('platform', 'whatsapp');
 
-      // If senderPhone is Argentina mobile (549...), check for local version too
+      // Variantes AR: 549XXX (WhatsApp) / 54XXX / XXX (local), para no duplicar
+      // por diferencias de formato del mismo número.
       if (senderPhone.startsWith('549')) {
-         const shortPhone = senderPhone.substring(3); 
-         convQuery = convQuery.or(`client_phone.eq.${senderPhone},client_phone.eq.${shortPhone}`);
+         const shortPhone = senderPhone.substring(3);
+         convQuery = convQuery.or(
+           `client_phone.eq.${senderPhone},client_phone.eq.${shortPhone},client_phone.eq.54${shortPhone}`
+         );
       } else {
          convQuery = convQuery.eq('client_phone', senderPhone);
       }
 
+      // La más activa primero: si ya quedaron duplicados de antes, se sigue usando
+      // esa (la que tiene la charla real) en vez de abrir otra.
       const conversationPromise = convQuery
-        .order('created_at', { ascending: false })
+        .order('last_message_at', { ascending: false, nullsFirst: false })
         .limit(1)
         .maybeSingle()
 

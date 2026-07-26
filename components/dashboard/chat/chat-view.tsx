@@ -9,7 +9,8 @@ const LocationMap = dynamic(
   () => import("@/components/ui/location-map").then((m) => m.LocationMap),
   { ssr: false }
 )
-import { motion, useMotionValue, useTransform, PanInfo, AnimatePresence } from "framer-motion"
+import { motion, useMotionValue, useTransform, PanInfo, AnimatePresence, useReducedMotion } from "framer-motion"
+import { playMessageSound, primeSounds } from "@/lib/sounds"
 import { ImageLightbox } from "./image-lightbox"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
@@ -19,7 +20,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -301,6 +302,42 @@ const SwipeableMessage = ({
   )
 }
 
+/**
+ * Copiar el texto de un mensaje. Aparece al pasar el mouse, junto a "responder".
+ * Confirma con un check por un momento en vez de un toast: el feedback queda
+ * donde el usuario está mirando y no interrumpe la lectura del chat.
+ */
+function CopyMessageButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1600)
+    } catch {
+      toast.error("No se pudo copiar")
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      title={copied ? "¡Copiado!" : "Copiar mensaje"}
+      aria-label={copied ? "Mensaje copiado" : "Copiar mensaje"}
+      onClick={copy}
+      className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hidden md:flex active:scale-95"
+    >
+      {copied ? (
+        <Check className="h-3 w-3 text-emerald-500" />
+      ) : (
+        <Copy className="h-3 w-3" />
+      )}
+    </Button>
+  )
+}
+
 // Reproductor de audio estilo WhatsApp (waveform + play/pause), temático claro/oscuro
 function AudioPlayer({
   src,
@@ -498,6 +535,41 @@ export function ChatView({ userId }: ChatViewProps) {
   useEffect(() => {
     selectedConversationRef.current = selectedConversation
   }, [selectedConversation])
+
+  // Animación de entrada SOLO para mensajes nuevos. Al abrir una charla con
+  // cientos de mensajes, animarlos todos se vería como un temblor: los que ya
+  // estaban aparecen quietos y solo lo que llega (o se envía) entra animado.
+  const prefersReducedMotion = useReducedMotion()
+  const chatOpenedAt = useRef<number>(Date.now())
+  // Mensajes ya animados. Al enviar, el mensaje optimista ("temp-…") se reemplaza
+  // por el real con OTRO id: sin esto React lo tomaría como nuevo y la burbuja
+  // entraría dos veces. Se registra por contenido, que sobrevive al reemplazo.
+  const animatedSigs = useRef<Set<string>>(new Set())
+  const msgSig = (m: Message) => `${m.sender_type}|${m.content ?? ""}`
+
+  useEffect(() => {
+    chatOpenedAt.current = Date.now()
+    animatedSigs.current = new Set()
+  }, [selectedConversation?.id])
+
+  // Habilita el audio con el primer click/tecla (política de autoplay del navegador)
+  useEffect(() => primeSounds(), [])
+
+  // Suena junto con la animación de entrada, y marca los últimos como ya animados.
+  useEffect(() => {
+    const entrantes = messages
+      .slice(-4)
+      .filter(
+        (m) =>
+          new Date(m.created_at).getTime() > chatOpenedAt.current &&
+          !animatedSigs.current.has(msgSig(m))
+      )
+    // Un solo sonido aunque lleguen varios juntos: una ráfaga sería insoportable.
+    const ultimo = entrantes[entrantes.length - 1]
+    if (ultimo) playMessageSound(ultimo.sender_type === "client" ? "in" : "out")
+
+    for (const m of messages.slice(-4)) animatedSigs.current.add(msgSig(m))
+  }, [messages])
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
@@ -2408,6 +2480,17 @@ export function ChatView({ userId }: ChatViewProps) {
                   const showDateSeparator =
                     index === 0 ||
                     !isSameDay(new Date(msg.created_at), new Date(messages[index - 1].created_at))
+                  // Solo los mensajes posteriores a la apertura del chat entran animados.
+                  // El tope de 4 evita que un desfase de reloj anime medio historial.
+                  const isNew =
+                    index >= messages.length - 4 &&
+                    new Date(msg.created_at).getTime() > chatOpenedAt.current &&
+                    !animatedSigs.current.has(msgSig(msg))
+                  // Entra desde su propio lado (el cliente por izquierda, nosotros por
+                  // derecha): el movimiento refuerza de quién es el mensaje.
+                  const enterFrom = prefersReducedMotion
+                    ? { opacity: 0 }
+                    : { opacity: 0, transform: `translate3d(${isClient ? "-10px" : "10px"}, 6px, 0) scale(0.98)` }
                   return (
                     <Fragment key={msg.id}>
                       {showDateSeparator && (
@@ -2417,22 +2500,31 @@ export function ChatView({ userId }: ChatViewProps) {
                           </span>
                         </div>
                       )}
+                    <motion.div
+                      initial={isNew ? enterFrom : false}
+                      animate={{ opacity: 1, transform: "translate3d(0px, 0px, 0) scale(1)" }}
+                      transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+                    >
                     <SwipeableMessage
                       onReply={() => setReplyingTo(msg)}
                       isClient={isClient}
                     >
                       <div id={`msg-${msg.id}`} className="relative group flex items-end gap-2">
                         {!isClient && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex"
-                            onClick={() => setReplyingTo(msg)}
-                          >
-                            <Reply className="h-3 w-3" />
-                          </Button>
+                          <div className="flex items-center gap-0.5">
+                            {!!msg.content && <CopyMessageButton text={msg.content} />}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Responder"
+                              className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hidden md:flex active:scale-95"
+                              onClick={() => setReplyingTo(msg)}
+                            >
+                              <Reply className="h-3 w-3" />
+                            </Button>
+                          </div>
                         )}
-                        
+
                         <div
                           className={cn(
                             "rounded-lg p-3 shadow-sm relative",
@@ -2579,17 +2671,22 @@ export function ChatView({ userId }: ChatViewProps) {
                       </div>
                       
                       {isClient && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity hidden md:flex"
-                          onClick={() => setReplyingTo(msg)}
-                        >
-                          <Reply className="h-3 w-3" />
-                        </Button>
+                        <div className="flex items-center gap-0.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Responder"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity hidden md:flex active:scale-95"
+                            onClick={() => setReplyingTo(msg)}
+                          >
+                            <Reply className="h-3 w-3" />
+                          </Button>
+                          {!!msg.content && <CopyMessageButton text={msg.content} />}
+                        </div>
                       )}
                     </div>
                     </SwipeableMessage>
+                    </motion.div>
                     </Fragment>
                   )
                 })
