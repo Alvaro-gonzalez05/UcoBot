@@ -555,7 +555,11 @@ export function ChatView({ userId }: ChatViewProps) {
   // Habilita el audio con el primer click/tecla (política de autoplay del navegador)
   useEffect(() => primeSounds(), [])
 
+  const [messages, setMessages] = useState<Message[]>([])
+
   // Suena junto con la animación de entrada, y marca los últimos como ya animados.
+  // Va DESPUÉS de declarar `messages`: el array de dependencias se evalúa durante
+  // el render, así que referenciarlo antes rompe el componente entero.
   useEffect(() => {
     const entrantes = messages
       .slice(-4)
@@ -570,7 +574,6 @@ export function ChatView({ userId }: ChatViewProps) {
 
     for (const m of messages.slice(-4)) animatedSigs.current.add(msgSig(m))
   }, [messages])
-  const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isLoadingMessages, setIsLoadingMessages] = useState(false)
   const [messagesPage, setMessagesPage] = useState(0)
