@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { cn, normalizeSearchText } from "@/lib/utils"
+import { searchProducts } from "@/lib/product-search"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
@@ -392,11 +393,10 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   // Filtrado client-side, tolerante a acentos. Con búsqueda activa se ignora
   // la categoría seleccionada (búsqueda global sobre todo el catálogo).
   const filteredProducts = useMemo(() => {
-    const q = normalizeSearchText(productSearch.trim())
+    const q = productSearch.trim()
     if (q) {
-      return allProducts.filter((p) =>
-        normalizeSearchText(`${p.name} ${p.description ?? ""} ${p.category ?? ""}`).includes(q)
-      )
+      // Ordenado por relevancia: primero los que coinciden en el NOMBRE.
+      return searchProducts(allProducts, q)
     }
     if (activeCategory !== "Todos") return allProducts.filter((p) => p.category === activeCategory)
     return allProducts

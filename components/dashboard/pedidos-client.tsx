@@ -19,6 +19,7 @@ import { ProductForm } from "./product-form"
 import { ProductImportWizard } from "./product-import-wizard"
 import { ProductOptionsManager } from "./product-options-manager"
 import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
+import { searchProducts } from "@/lib/product-search"
 import { ProductEditForm } from "./product-edit-form"
 import { OrderCheckoutDialog, OrderCheckoutPanel, type PaymentRecord } from "./order-checkout-dialog"
 import { printTicket, cleanTicketNotes } from "@/lib/print-ticket"
@@ -857,12 +858,13 @@ export function PedidosClient({
 
   // Productos del tab Catálogo filtrados por buscador (sin acentos) y categoría.
   // Con búsqueda activa se ignora la categoría (búsqueda global, como en el POS).
-  const productsTabFiltered = products.filter((p) => {
-    const q = normalizeSearchText(productTabSearch.trim())
-    if (q) return normalizeSearchText(`${p.name} ${p.description ?? ""} ${p.category ?? ""}`).includes(q)
-    if (productTabCategory !== "Todos") return p.category === productTabCategory
-    return true
-  })
+  const productsTabFiltered = (() => {
+    const q = productTabSearch.trim()
+    // Con búsqueda: ordenado por relevancia (primero los que coinciden en el nombre)
+    if (q) return searchProducts(products, q)
+    if (productTabCategory !== "Todos") return products.filter((p) => p.category === productTabCategory)
+    return products
+  })()
 
   // Al escribir, la categoría vuelve a "Todos" para que la UI coincida con los resultados
   const handleProductTabSearch = (value: string) => {
@@ -870,10 +872,8 @@ export function PedidosClient({
     if (value.trim() && productTabCategory !== "Todos") setProductTabCategory("Todos")
   }
 
-  // Productos que matchean el buscador del panel "Agregar" (sin acentos)
-  const addMatches = products.filter((p) =>
-    normalizeSearchText(`${p.name} ${p.category ?? ""}`).includes(normalizeSearchText(addSearch.trim()))
-  )
+  // Productos que matchean el buscador del panel "Agregar", por relevancia
+  const addMatches = searchProducts(products, addSearch)
 
   // Nombres de las opciones de un item (soporta strings u objetos {name})
   const optionNames = (opts?: any[]): string[] =>
