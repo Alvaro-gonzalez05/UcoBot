@@ -98,6 +98,17 @@ export async function POST(request: NextRequest) {
     const body = JSON.parse(rawBody || '{}')
     const type: string = body?.type || ''
 
+    // COEXISTENCIA — CARGA INICIAL: historial de chats y agenda de contactos.
+    // Llegan UNA SOLA VEZ, a los minutos del alta por coexistencia, y el historial
+    // viene en tandas grandes. Acá solo se estacionan y se responde 200 al toque:
+    // procesarlos en línea haría que YCloud reintente por timeout.
+    if (type === 'whatsapp.smb.history' || type === 'whatsapp.smb.app.state.sync') {
+      await stageSyncChunk(type, body).catch((e) =>
+        console.error('[YCloud sync] no se pudo estacionar el chunk:', e),
+      )
+      return NextResponse.json({ ok: true })
+    }
+
     // COEXISTENCIA: el dueño contestó desde la app de WhatsApp de su celular.
     // A diferencia de Evolution, acá no hay que adivinar con `fromMe`: este evento
     // se dispara SOLO para lo que sale del celular o de un dispositivo vinculado,
@@ -222,6 +233,64 @@ export async function POST(request: NextRequest) {
     // 200 igual: YCloud reintenta ante 5xx y no queremos tormenta de reintentos.
     return NextResponse.json({ ok: true })
   }
+}
+
+/**
+ * Estaciona un chunk de la carga inicial de coexistencia para que lo procese el cron.
+ *
+ * El número del negocio hay que sacarlo del propio payload, porque estos eventos no
+ * tienen la forma de un mensaje suelto: en `history` viene en los mensajes de cada
+ * hilo, y en `app_state_sync` en el metadata.
+ */
+async function stageSyncChunk(type: string, body: any) {
+  const isHistory = type === 'whatsapp.smb.history'
+  const data = isHistory ? body.whatsappSmbHistory ?? body.history : body.whatsappSmbAppStateSync ?? body.appStateSync
+
+  // El número del negocio puede venir en varios lugares según el evento.
+  const businessPhone = digitsOnly(
+    data?.phoneNumber ||
+      data?.metadata?.display_phone_number ||
+      data?.metadata?.phone_number ||
+      body?.whatsappSmbHistory?.threads?.[0]?.messages?.[0]?.to ||
+      '',
+  )
+
+  const admin = createAdminClient()
+
+  // Sin número no podemos saber de qué cuenta es: guardamos igual con el payload
+  // completo para no perderlo, pero queda en error para revisarlo a mano.
+  let userId: string | null = null
+  if (businessPhone) {
+    const { data: integration } = await admin
+      .from('integrations')
+      .select('user_id')
+      .eq('platform', 'whatsapp')
+      .eq('config->>phone_number_id', businessPhone)
+      .maybeSingle()
+    userId = integration?.user_id ?? null
+  }
+
+  if (!userId) {
+    console.error('[YCloud sync] chunk sin integración conocida. phone:', businessPhone, 'type:', type)
+    return
+  }
+
+  const meta = data?.metadata || {}
+
+  await admin.from('whatsapp_sync_chunks').insert({
+    user_id: userId,
+    phone_number_id: businessPhone,
+    event_type: isHistory ? 'history' : 'app_state_sync',
+    payload: body,
+    phase: meta.phase ?? null,
+    chunk_order: meta.chunk_order ?? null,
+    progress: meta.progress ?? null,
+  })
+
+  console.log(
+    `[YCloud sync] chunk estacionado (${isHistory ? 'history' : 'contactos'})` +
+      (meta.progress != null ? ` progreso ${meta.progress}%` : ''),
+  )
 }
 
 /**

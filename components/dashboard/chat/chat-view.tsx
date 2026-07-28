@@ -12,6 +12,7 @@ const LocationMap = dynamic(
 import { motion, useMotionValue, useTransform, PanInfo, AnimatePresence, useReducedMotion } from "framer-motion"
 import { playMessageSound, primeSounds } from "@/lib/sounds"
 import { ImageLightbox } from "./image-lightbox"
+import { HistoryImportBanner } from "./history-import-banner"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -2240,6 +2241,9 @@ export function ChatView({ userId }: ChatViewProps) {
           </div>
         </div>
         
+        {/* Importación inicial de chats (coexistencia): aparece sola cuando corre */}
+        <HistoryImportBanner />
+
         <div className="flex-1 overflow-y-auto custom-scrollbar pb-24 md:pb-0">
           <div className="flex flex-col">
             {isLoading ? (
