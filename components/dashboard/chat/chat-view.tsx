@@ -13,6 +13,7 @@ import { motion, useMotionValue, useTransform, PanInfo, AnimatePresence, useRedu
 import { playMessageSound, primeSounds } from "@/lib/sounds"
 import { ImageLightbox } from "./image-lightbox"
 import { HistoryImportBanner } from "./history-import-banner"
+import { NewChatDialog } from "./new-chat-dialog"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy, MessageSquarePlus } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -585,6 +586,7 @@ export function ChatView({ userId }: ChatViewProps) {
   const previousScrollHeightRef = useRef(0)
 
   const [searchTerm, setSearchTerm] = useState("")
+  const [newChatOpen, setNewChatOpen] = useState(false)
   // Etiquetas de lead configuradas por el dueño en el bot (allowed_tags)
   const [availableTags, setAvailableTags] = useState<string[]>([])
   // Filtros de la lista de conversaciones
@@ -2122,10 +2124,12 @@ export function ChatView({ userId }: ChatViewProps) {
     ? new Date(latestClientMessage.created_at).getTime()
     : 0
   const lastClientMs = Math.max(convLastClientMs, loadedLastClientMs)
+  // Si el cliente NUNCA escribió (lastClientMs === 0) la ventana está cerrada, no
+  // abierta: es el caso de una conversación arrancada desde "Nuevo chat". Antes se
+  // trataba como abierta y dejaba escribir un mensaje libre que Meta rechazaba.
   const whatsappWindowClosed =
     selectedConversation?.platform === "whatsapp" &&
-    lastClientMs > 0 &&
-    Date.now() - lastClientMs > 24 * 60 * 60 * 1000
+    (lastClientMs === 0 || Date.now() - lastClientMs > 24 * 60 * 60 * 1000)
 
   return (
     <div className="flex h-full md:gap-4 bg-background relative overflow-hidden md:overflow-visible">
@@ -2241,6 +2245,19 @@ export function ChatView({ userId }: ChatViewProps) {
           </div>
         </div>
         
+        {/* Arrancar una charla con un cliente que todavía no escribió nunca */}
+        <div className="px-3 pb-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2 text-xs"
+            onClick={() => setNewChatOpen(true)}
+          >
+            <MessageSquarePlus className="w-3.5 h-3.5" />
+            Nuevo chat
+          </Button>
+        </div>
+
         {/* Importación inicial de chats (coexistencia): aparece sola cuando corre */}
         <HistoryImportBanner />
 
@@ -3121,6 +3138,28 @@ export function ChatView({ userId }: ChatViewProps) {
           onSent={() => { setRefreshKey((k) => k + 1); fetchConversations(0) }}
         />
       )}
+
+      {/* Nuevo chat: arrancar una charla con un cliente del CRM */}
+      <NewChatDialog
+        open={newChatOpen}
+        onOpenChange={setNewChatOpen}
+        userId={userId}
+        onStarted={async (conversationId) => {
+          // Traemos la conversación recién creada y la abrimos directamente.
+          await fetchConversations(0)
+          const { data } = await supabase
+            .from("conversations")
+            .select("*, messages:messages(content, created_at, sender_type, is_read)")
+            .eq("id", conversationId)
+            .maybeSingle()
+          if (data) {
+            setConversations((prev) =>
+              prev.some((c) => c.id === conversationId) ? prev : [data as any, ...prev]
+            )
+            setSelectedConversation(data as any)
+          }
+        }}
+      />
 
       {/* Diálogo del mapa: se abre al tocar el preview de una ubicación */}
       <AnimatePresence>
