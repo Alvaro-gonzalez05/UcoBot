@@ -304,8 +304,39 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
             ? `Reaccionó con ${message.reaction.emoji}`
             : 'Quitó su reacción'
           break
+        case 'contacts': {
+          // Tarjeta de contacto compartida: mostramos nombre y teléfonos.
+          messageContent = { ...messageContent, contacts: message.contacts }
+          const c = message.contacts?.[0]
+          const cName = c?.name?.formatted_name || c?.name?.first_name || 'un contacto'
+          const cPhones = (c?.phones || []).map((p: any) => p.phone).filter(Boolean).join(', ')
+          textContent = `👤 El cliente compartió el contacto de ${cName}${cPhones ? ` (${cPhones})` : ''}`
+          break
+        }
+        case 'order': {
+          // Pedido armado desde el catálogo de WhatsApp.
+          messageContent = { ...messageContent, order: message.order }
+          const items = message.order?.product_items?.length || 0
+          textContent = `🛒 El cliente envió un pedido del catálogo con ${items} producto${items === 1 ? '' : 's'}`
+          break
+        }
+        case 'system':
+          // Avisos de la plataforma (típico: el cliente cambió de número).
+          messageContent = { ...messageContent, system: message.system }
+          textContent = message.system?.body || 'WhatsApp envió un aviso del sistema'
+          break
+        case 'unsupported':
+          // WhatsApp no puede entregar el contenido (formatos nuevos, encuestas,
+          // algunas plantillas). Igual dejamos rastro para que el operador lo vea.
+          messageContent = { ...messageContent, errors: message.errors }
+          textContent =
+            '⚠️ El cliente envió un mensaje que WhatsApp no puede mostrar acá. Revisalo desde el celular.'
+          break
         default:
-          textContent = `[${messageType} message]`
+          // Tipo nuevo que Meta agregó y todavía no contemplamos: no se pierde,
+          // queda visible con su nombre para poder detectarlo.
+          messageContent = { ...messageContent, [messageType]: (message as any)[messageType] }
+          textContent = `⚠️ Mensaje de tipo "${messageType}" recibido (todavía no se muestra completo acá)`
       }
 
       // Check for duplicate messages (check metadata for whatsapp_message_id)
@@ -549,6 +580,13 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
           continue
         }
 
+        // Pausa tomada durante la ventana de escucha: cortamos antes de gastar
+        // una llamada a la IA.
+        if (await isConversationPaused(conversationId)) {
+          console.log('⏸️ Pausada durante la ventana de escucha, no se responde')
+          continue
+        }
+
         console.log('⚡ No newer messages, generating response...')
         
         // Extract media ID if present (for images or audio)
@@ -562,6 +600,56 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
     } catch (error) {
       console.error('Error processing individual message:', error)
     }
+  }
+}
+
+/**
+ * Limpia el texto saliente de la IA.
+ *
+ * ANTES: para el proveedor 'cloud' se borraban los emojis y TODO lo que estuviera
+ * fuera de Latin-1 (`[^\x00-\xFF]`). Eso no solo mataba los emojis: también se comía
+ * la rayita larga (—), los puntos suspensivos (…), las comillas tipográficas (" ")
+ * y las viñetas (•). El resultado eran frases cortadas y comas colgando al final
+ * ("Necesito tu nombre, apellido, "), que es justo lo que se veía en la cuenta
+ * conectada por Cloud API y no en las otras.
+ *
+ * Por eso los mensajes salían SIN emojis por WhatsApp aunque en el dashboard se
+ * vieran bien: el filtro corría recién al enviar, después de guardar.
+ *
+ * AHORA no se borra ni se reemplaza ningún carácter: la Cloud API soporta UTF-8
+ * igual que YCloud y Evolution, así que las tres integraciones mandan exactamente
+ * el mismo texto. Si el negocio quiere emojis (o no), lo decide su prompt, no un
+ * filtro nuestro. Solo queda normalización de espacios en blanco.
+ */
+function sanitizeOutgoingText(text: string): string {
+  return (text || '')
+    .replace(/ /g, ' ')  // espacio duro (NBSP) -> espacio normal
+    .replace(/[ \t]+$/gm, '') // espacios sobrantes al final de cada renglon
+    .trim()
+}
+
+/**
+ * ¿La conversación está pausada AHORA? (lectura fresca de la base)
+ *
+ * Se usa como último control antes de enviar. Una pausa vencida no cuenta: de eso
+ * se encarga la reactivación automática del flujo principal.
+ */
+async function isConversationPaused(conversationId: string): Promise<boolean> {
+  try {
+    const supabase = createAdminClient()
+    const { data } = await supabase
+      .from('conversations')
+      .select('status, paused_until')
+      .eq('id', conversationId)
+      .maybeSingle()
+
+    if (!data || data.status !== 'paused') return false
+    if (!data.paused_until) return true // pausa indefinida
+    return new Date(data.paused_until) > new Date()
+  } catch (e) {
+    // Ante un error de lectura preferimos NO bloquear la respuesta del bot.
+    console.error('[pausa] no se pudo verificar el estado:', e)
+    return false
   }
 }
 
@@ -621,7 +709,17 @@ async function generateAndSendAIResponse(
     const aiResponse = await response.json()
 
     if (aiResponse.response) {
-      // Capa de proveedores: cloud (Meta) o evolution, según la integración.
+      // RE-CHEQUEO DE PAUSA. El chequeo inicial ocurre ANTES del debounce (7s por
+      // defecto) y de la generación de la IA: entre medio pueden pasar 10-20 s, que
+      // es justo cuando un humano ve el mensaje y toma la conversación (desde /chat
+      // o contestando por el celular). Sin esto, el bot contestaba igual y quedaban
+      // dos respuestas pisadas.
+      if (await isConversationPaused(conversationId)) {
+        console.log('⏸️ Pausada mientras se generaba la respuesta: no se envía')
+        return
+      }
+
+      // Capa de proveedores: cloud (Meta), ycloud o evolution, según la integración.
       const provider = getWhatsAppProvider(integration)
       if (!provider) {
         console.error('Missing WhatsApp provider configuration for integration')
@@ -635,17 +733,20 @@ async function generateAndSendAIResponse(
 
       let sent = false
       for (let i = 0; i < parts.length; i++) {
-        // Limpieza histórica de caracteres problemáticos (paridad con Cloud API)
-        const cleanPart = provider.name === 'cloud'
-          ? parts[i]
-              .replace(/[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu, '')
-              .replace(/[^\x00-\xFF]/g, '')
-              .trim()
-          : parts[i]
+        const cleanPart = sanitizeOutgoingText(parts[i])
         const result = await provider.sendText(senderPhone, cleanPart)
         sent = sent || result.success
         // Pequeña pausa entre mensajes para que se sienta natural
-        if (i < parts.length - 1) await new Promise((r) => setTimeout(r, 1200))
+        if (i < parts.length - 1) {
+          await new Promise((r) => setTimeout(r, 1200))
+          // Con "separar mensajes largos" esto puede tardar varios segundos más:
+          // si el humano entra en el medio, se corta acá y no se mandan las partes
+          // que faltan.
+          if (await isConversationPaused(conversationId)) {
+            console.log('⏸️ Pausada entre partes: se cortan los mensajes restantes')
+            break
+          }
+        }
       }
 
       if (sent) {

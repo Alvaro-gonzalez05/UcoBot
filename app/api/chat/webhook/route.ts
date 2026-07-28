@@ -1280,6 +1280,7 @@ ${handoverRules ? `- Reglas adicionales de escalado definidas por el negocio (ap
 ═══ REGLAS GENERALES ═══
 - SALUDO: saludá (o presentate) UNA SOLA VEZ, en tu primer mensaje de la conversación. Si en el HISTORIAL ya hay mensajes tuyos, la conversación YA empezó: NO vuelvas a decir "Hola", ni a saludar, ni a repetir el nombre del cliente al inicio. Continuá la charla de forma directa y natural, como una persona real que ya está hablando con el cliente.
 - MEMORIA Y RUMBO: antes de responder, leé todo el historial para saber EN QUÉ PUNTO está la conversación y qué se dijo. No reinicies ni repreguntes datos que el cliente ya dio. Cada respuesta tiene que HACER AVANZAR la charla hacia el objetivo (resolver la consulta, cerrar el pedido/turno/venta): retomá lo último que dijo el cliente y dá el siguiente paso concreto, no des vueltas ni repitas lo ya dicho.
+- EN POCOS MENSAJES: el flujo, los pasos y los datos a pedir los define el negocio (en TU PERSONALIDAD y en el bloque de cada función); respetalos siempre, son la referencia. Dentro de ese flujo, ayudá al cliente en la MENOR cantidad de mensajes posible: si necesitás varios datos, pedilos juntos en un mismo mensaje en lugar de uno por mensaje, y que cada respuesta tuya haga avanzar de verdad. Si el cliente ya dio parte de los datos, pedí solo lo que falta.
 - Respondé como parte del equipo del negocio, con mensajes cortos y naturales (no como un formulario).
 - No abuses de las preguntas: cerrá con una pregunta solo cuando realmente necesitás un dato o una decisión para avanzar; no termines TODOS los mensajes con una pregunta.
 - NO INVENTES NI ASUMAS DATOS DEL CLIENTE: nunca afirmes su zona, ciudad, ubicación, qué servicio tiene, nombre ni ningún dato que el cliente no haya dicho explícitamente o que no figure en INFORMACIÓN DEL CLIENTE ACTUAL. Está PROHIBIDO decir cosas como "veo que sos de la zona de X" si el cliente no lo dijo. Si necesitás un dato y no lo tenés, PREGUNTALO; nunca lo des por sabido.
@@ -1383,7 +1384,11 @@ PRIORIDADES ANTE CONFLICTO:
         // Cancelar / modificar pedidos existentes (feature edit_orders). El bot solo puede
         // referirse a los pedidos que le inyectamos en el prompt (recentEditableOrders):
         // el handler valida en servidor que el id pertenezca a ESTE cliente y esté editable.
-        const canEditOrders = featuresCheck.includes('edit_orders')
+        // edit_orders es una SUB-función de take_orders: sin la de tomar pedidos no
+        // corre. Se exigen las dos igual que al armar el prompt, para que el handler
+        // nunca actúe sobre un marcador que la IA no debería haber podido generar.
+        const canEditOrders =
+          featuresCheck.includes('edit_orders') && featuresCheck.includes('take_orders')
         const cancelMatch = canEditOrders ? aiResponse.match(/PEDIDO\s+CANCELADO\s*\[ID:\s*([a-f0-9-]{4,12})\]/i) : null
         const modifyMatch = canEditOrders ? aiResponse.match(/PEDIDO\s+MODIFICADO\s*\[ID:\s*([a-f0-9-]{4,12})\]/i) : null
 
@@ -1458,11 +1463,22 @@ PRIORIDADES ANTE CONFLICTO:
         // Quitamos los marcadores internos (ya se usaron para detectar/registrar el pedido o la
         // reserva) para que el cliente reciba el mensaje de confirmación que definió el dueño.
         aiResponse = toMessagingFormatting(aiResponse)
-          .replace(/(PEDIDO|RESERVA)\s+CONFIRMAD[OA]/gi, '')
-          .replace(/PEDIDO\s+(CANCELADO|MODIFICADO)\s*\[ID:[^\]]*\]/gi, '')
+          // 1) El marcador suele venir SOLO en su propia línea y muchas veces
+          //    seguido de ":" ("PEDIDO CONFIRMADO:"). Si solo se borraba el texto,
+          //    quedaba la puntuación huérfana y el cliente recibía un mensaje
+          //    terminado en ":" colgando. Se elimina la línea entera.
+          .replace(/^[ \t]*(PEDIDO|RESERVA)\s+CONFIRMAD[OA][ \t]*[:;.,–—-]*[ \t]*$/gim, '')
+          .replace(/^[ \t]*PEDIDO\s+(CANCELADO|MODIFICADO)\s*\[ID:[^\]]*\][ \t]*[:;.,–—-]*[ \t]*$/gim, '')
+          // 2) Fallback: el marcador quedó en medio de una frase. Se lleva también
+          //    los dos puntos que lo acompañen.
+          .replace(/(PEDIDO|RESERVA)\s+CONFIRMAD[OA][ \t]*:?/gi, '')
+          .replace(/PEDIDO\s+(CANCELADO|MODIFICADO)\s*\[ID:[^\]]*\][ \t]*:?/gi, '')
           .replace(/[ \t]{2,}/g, ' ')
           .replace(/ +([.,!?])/g, '$1')
+          .replace(/[ \t]+$/gm, '')
           .replace(/\n{3,}/g, '\n\n')
+          // 3) Red de seguridad: nada de puntuación colgando al final del mensaje.
+          .replace(/[\s:;,–—-]+$/, '')
           .trim()
 
         return { content: aiResponse, shouldPause }

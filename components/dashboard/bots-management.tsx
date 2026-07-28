@@ -86,9 +86,17 @@ const platformLabels = {
   email: "Email", // solo para mostrar bots legacy; no es seleccionable
 }
 
-const availableFeatures = [
+// `parent` marca una función que depende de otra: solo se muestra (y solo se puede
+// activar) si la función padre está activa. Editar/cancelar pedidos no tiene sentido
+// si el bot no toma pedidos.
+const availableFeatures: {
+  id: string
+  label: string
+  description: string
+  parent?: string
+}[] = [
   { id: "take_orders", label: "Tomar pedidos", description: "El bot puede registrar pedidos del catálogo de productos." },
-  { id: "edit_orders", label: "Editar y cancelar pedidos", description: "El cliente puede modificar o cancelar sus pedidos recientes (pendientes o confirmados) desde el chat." },
+  { id: "edit_orders", parent: "take_orders", label: "Editar y cancelar pedidos", description: "El cliente puede modificar o cancelar sus pedidos recientes (pendientes o confirmados) desde el chat." },
   { id: "take_reservations", label: "Tomar reservas", description: "El bot gestiona reservas de mesas o turnos." },
   { id: "register_clients", label: "Registro de clientes", description: "Identifica y registra clientes nuevos automáticamente." },
   { id: "loyalty_points", label: "Puntos de fidelización", description: "Los clientes pueden consultar su saldo de puntos de fidelidad." },
@@ -402,7 +410,11 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
     if (checked) {
       setFormData({ ...formData, features: [...formData.features, featureId] })
     } else {
-      setFormData({ ...formData, features: formData.features.filter((f) => f !== featureId) })
+      // Al apagar una función también se apagan las que dependen de ella, para no
+      // dejar activo (por ejemplo) "editar pedidos" sin "tomar pedidos".
+      const children = availableFeatures.filter((f) => f.parent === featureId).map((f) => f.id)
+      const toRemove = new Set([featureId, ...children])
+      setFormData({ ...formData, features: formData.features.filter((f) => !toRemove.has(f)) })
     }
   }
 
@@ -589,6 +601,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
           <div className="executive-card space-y-2">
             <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mb-1">Funcionalidades</p>
             {availableFeatures.map((feature) => {
+              // Sub-función: no se muestra si su función padre está apagada.
+              if (feature.parent && !formData.features.includes(feature.parent)) return null
               const isEnabled = formData.features.includes(feature.id)
               const supportsTag = ["take_orders", "take_reservations", "lead_qualification"].includes(feature.id)
               const tagsActive = tagsEnabledByFeature[feature.id] ?? false
@@ -598,7 +612,12 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                 lead_qualification: "Ej: inversor, comprador",
               }
               return (
-                <div key={feature.id} className="p-3 rounded-xl hover:bg-muted/50 transition-colors">
+                <div
+                  key={feature.id}
+                  className={`p-3 rounded-xl hover:bg-muted/50 transition-colors ${
+                    feature.parent ? "ml-6 border-l-2 border-border/60 rounded-l-none" : ""
+                  }`}
+                >
                   <div className="grid grid-cols-3 gap-4 items-center">
                   {/* Cols 1-2: feature + "Asignar tags" check */}
                   <div

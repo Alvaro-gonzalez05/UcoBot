@@ -23,11 +23,32 @@ import { digitsOnly, verifyYCloudSignature } from '@/lib/whatsapp/ycloud'
 /** Tipos de media que bajamos al bucket antes de pasar al pipeline. */
 const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'] as const
 
-/** Texto visible de un mensaje de YCloud, según su tipo. */
+/**
+ * Texto visible de un mensaje de YCloud, según su tipo.
+ *
+ * Sin esto, los echos que no eran texto ni media quedaban como "[button]" o
+ * "[interactive]" en el chat, sin decir qué se había apretado.
+ */
 function contentOf(msg: any): string {
   const t: string = msg?.type || 'text'
-  if (t === 'text') return msg.text?.body || ''
   const payload = msg?.[t] || {}
+
+  if (t === 'text') return msg.text?.body || ''
+  if (t === 'button') return payload.text || ''
+  if (t === 'interactive') {
+    return payload.button_reply?.title || payload.list_reply?.title || ''
+  }
+  if (t === 'reaction') {
+    return payload.emoji ? `Reaccionó con ${payload.emoji}` : 'Quitó su reacción'
+  }
+  if (t === 'location') {
+    const place = [payload.name, payload.address].filter(Boolean).join(' - ')
+    return place ? `📍 ${place}` : '📍 Ubicación'
+  }
+  if (t === 'template') {
+    // Plantilla enviada desde el celular: al menos dejamos el nombre.
+    return payload.name ? `Plantilla enviada: ${payload.name}` : 'Plantilla enviada'
+  }
   return payload.caption || ''
 }
 
@@ -116,14 +137,10 @@ export async function POST(request: NextRequest) {
 
     const msgType: string = msg.type || 'text'
 
-    // YCloud manda `unsupported` cuando Meta no pudo entregar el contenido
-    // (mensajes editados, encuestas, formatos nuevos) y `system` para avisos de
-    // cambio de número. No aportan nada al chat y le meten ruido a la IA:
-    // se descartan antes de reinyectar.
-    if (msgType === 'unsupported' || msgType === 'system') {
-      console.log('[YCloud webhook] tipo ignorado:', msgType)
-      return NextResponse.json({ ok: true })
-    }
+    // NO se descarta ningún tipo: `unsupported` (contenido que Meta no puede
+    // entregar) y `system` (avisos de cambio de número) también se reinyectan, para
+    // que el operador vea en el chat que algo llegó. El pipeline los guarda con un
+    // texto explicativo y NO dispara la IA con ellos (ver shouldProcessAI).
 
     // Forma Meta: el pipeline actual entiende exactamente esto.
     const m: any = {
