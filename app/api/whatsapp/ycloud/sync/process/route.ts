@@ -15,9 +15,22 @@ import { digitsOnly } from '@/lib/whatsapp/ycloud'
  *  - `last_message_at` toma la fecha REAL del último mensaje importado, así quedan
  *    ordenadas como lo que son: charlas del pasado, al fondo de la lista.
  *  - Los contactos se importan TODOS a `clients`.
+ *
+ * POR QUÉ ESTÁ ESCRITO EN LOTES (28/07/2026): YCloud manda UN evento por mensaje,
+ * y un alta real trajo ~8.400 de golpe. La versión anterior procesaba un chunk por
+ * vez con ~5 consultas cada uno — incluida una lectura de hasta 5.000 mensajes solo
+ * para deduplicar UNA fila — con un techo de 10 por minuto. Eso daba ~14 horas de
+ * cola, creciendo más rápido de lo que se vaciaba. Ahora una corrida reclama cientos
+ * de chunks, los agrupa por conversación y hace un puñado de consultas para todos.
  */
 
 export const maxDuration = 300
+
+/** Chunks que reclama cada corrida. Con el agrupado, esto son ~10 consultas. */
+const BATCH_SIZE = 800
+
+/** Un reclamo más viejo que esto quedó huérfano (la corrida se murió a mitad). */
+const CLAIM_TIMEOUT_MINUTES = 10
 
 /** Variantes de un teléfono argentino para buscar conversaciones existentes. */
 function phoneVariants(phone: string): string[] {
@@ -26,6 +39,15 @@ function phoneVariants(phone: string): string[] {
   if (d.startsWith('549')) out.push(d.substring(3), '54' + d.substring(3))
   else if (d.startsWith('54') && !d.startsWith('549')) out.push('549' + d.substring(2))
   return Array.from(new Set(out.filter(Boolean)))
+}
+
+/**
+ * Clave de agrupado de un teléfono: la MISMA para todas sus variantes AR, así
+ * 549261… y 54261… caen en la misma conversación en vez de duplicarla.
+ */
+function phoneKey(phone: string): string {
+  const d = digitsOnly(phone)
+  return d.startsWith('549') ? '54' + d.substring(3) : d
 }
 
 /** Texto legible de un mensaje del historial, según su tipo. */
@@ -43,32 +65,69 @@ function historyText(m: any): string {
 
 const STORABLE_TYPES = ['image', 'audio', 'document', 'video', 'location']
 
-async function processHistoryChunk(admin: any, chunk: any) {
-  const body = chunk.payload
-  const businessPhone = chunk.phone_number_id
+/** Un mensaje del historial ya extraído de su chunk. */
+interface PendingMessage {
+  clientPhone: string
+  wamid: string | null
+  outgoing: boolean
+  type: string
+  text: string
+  ts: string
+  raw: any
+}
 
-  // FORMA REAL: YCloud manda UN mensaje por evento, con la misma estructura que
-  // un mensaje normal — `whatsappInboundMessage` si lo mandó el cliente,
-  // `whatsappMessage` si lo mandó el negocio desde el celular. La doc de Meta
-  // describe tandas con `threads[]`, pero eso es el webhook crudo, no el de YCloud.
-  // Se arma un "hilo" de un solo mensaje para reusar la misma lógica de abajo.
+/**
+ * Extrae el mensaje de un evento de historial.
+ *
+ * FORMA REAL: YCloud manda UN mensaje por evento, con la misma estructura que un
+ * mensaje normal — `whatsappInboundMessage` si lo mandó el cliente,
+ * `whatsappMessage` si lo mandó el negocio desde el celular. La doc de Meta
+ * describe tandas con `threads[]`, pero eso es el webhook crudo, no el de YCloud.
+ */
+function extractHistoryMessage(chunk: any): PendingMessage | null {
+  const body = chunk.payload
   const inbound = body?.whatsappInboundMessage
   const outbound = body?.whatsappMessage
-  const single = inbound || outbound
-  if (!single) throw new Error('Evento de historial sin mensaje reconocible')
+  const m = inbound || outbound
+  if (!m) return null
 
-  const threads: any[] = [
-    {
-      id: inbound ? single.from : single.to, // el cliente, en ambos sentidos
-      messages: [{ ...single, __outgoing: !inbound }],
-    },
-  ]
+  // El cliente es el otro extremo, en ambos sentidos.
+  const clientPhone = digitsOnly((inbound ? m.from : m.to) || '')
+  if (!clientPhone || clientPhone === chunk.phone_number_id) return null
 
+  const type = m.type || 'text'
+
+  // `sendTime` viene ISO ("2026-05-16T16:16:41.000Z"); el `timestamp` en segundos
+  // es del formato crudo de Meta. Se aceptan los dos.
+  const ts = m.sendTime
+    ? new Date(m.sendTime).toISOString()
+    : m.timestamp
+      ? new Date(Number(m.timestamp) * 1000).toISOString()
+      : new Date().toISOString()
+
+  return {
+    clientPhone,
+    wamid: m.wamid || m.id || null,
+    outgoing: !inbound,
+    type,
+    text: historyText(m),
+    ts,
+    raw: m,
+  }
+}
+
+/**
+ * Importa TODOS los mensajes de historial del lote de una cuenta.
+ *
+ * Todo el trabajo se hace agrupado: una consulta para las conversaciones, una para
+ * los wamids ya conocidos, un insert masivo y un update por conversación tocada.
+ */
+async function processHistoryBatch(admin: any, userId: string, chunks: any[]) {
   // Un solo bot por cuenta (mismo criterio que el resto del pipeline).
   const { data: bot } = await admin
     .from('bots')
     .select('id')
-    .eq('user_id', chunk.user_id)
+    .eq('user_id', userId)
     .contains('platforms', ['whatsapp'])
     .eq('is_active', true)
     .order('created_at', { ascending: true })
@@ -77,208 +136,275 @@ async function processHistoryChunk(admin: any, chunk: any) {
 
   if (!bot) throw new Error('La cuenta no tiene un bot de WhatsApp activo')
 
-  for (const thread of threads) {
-    const clientPhone = digitsOnly(thread.id || thread.phoneNumber || thread.from || '')
-    if (!clientPhone || clientPhone === businessPhone) continue
+  // Agrupar los mensajes del lote por cliente.
+  const byClient = new Map<string, PendingMessage[]>()
+  for (const chunk of chunks) {
+    const msg = extractHistoryMessage(chunk)
+    if (!msg) continue
+    const key = phoneKey(msg.clientPhone)
+    const list = byClient.get(key)
+    if (list) list.push(msg)
+    else byClient.set(key, [msg])
+  }
+  if (byClient.size === 0) return
 
-    const messages: any[] = thread.messages || thread.chat || []
-    if (messages.length === 0) continue
+  // Conversaciones existentes de todos los clientes del lote, de una.
+  const allVariants = [...byClient.keys()].flatMap((k) => phoneVariants(k))
+  const { data: existing } = await admin
+    .from('conversations')
+    .select('id, client_phone, last_message_at')
+    .eq('bot_id', bot.id)
+    .in('client_phone', allVariants)
+    .order('created_at', { ascending: false })
 
-    // Conversación existente (cualquier variante del 9) o nueva.
-    const { data: existing } = await admin
+  const convByKey = new Map<string, { id: string; last_message_at: string | null }>()
+  for (const c of existing || []) {
+    const key = phoneKey(c.client_phone || '')
+    // El order por created_at DESC deja primero la más nueva; nos quedamos con esa.
+    if (!convByKey.has(key)) convByKey.set(key, { id: c.id, last_message_at: c.last_message_at })
+  }
+
+  // Crear de una sola vez las conversaciones que faltan.
+  const missing = [...byClient.keys()].filter((k) => !convByKey.has(k))
+  if (missing.length > 0) {
+    const { data: created } = await admin
       .from('conversations')
-      .select('id, context, last_message_at')
-      .eq('bot_id', bot.id)
-      .in('client_phone', phoneVariants(clientPhone))
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
+      .insert(
+        missing.map((key) => {
+          // Se guarda el teléfono tal como vino en el primer mensaje, no la clave
+          // normalizada: es el formato con el que WhatsApp lo va a mandar en vivo.
+          const phone = byClient.get(key)![0].clientPhone
+          return {
+            user_id: userId,
+            bot_id: bot.id,
+            client_phone: phone,
+            client_name: phone,
+            platform: 'whatsapp',
+            // ACTIVA a propósito: es una charla vieja, pero si el cliente escribe
+            // de nuevo el bot tiene que poder responder con normalidad.
+            status: 'active',
+            needs_attention: false,
+            context: { imported: true, imported_at: new Date().toISOString() },
+          }
+        }),
+      )
+      .select('id, client_phone')
 
-    let conversationId: string | undefined = existing?.id
-
-    if (!conversationId) {
-      const { data: created } = await admin
-        .from('conversations')
-        .insert({
-          user_id: chunk.user_id,
-          bot_id: bot.id,
-          client_phone: clientPhone,
-          client_name: clientPhone,
-          platform: 'whatsapp',
-          // ACTIVA a propósito: es una charla vieja, pero si el cliente escribe
-          // de nuevo el bot tiene que poder responder con normalidad.
-          status: 'active',
-          needs_attention: false,
-          context: { imported: true, imported_at: new Date().toISOString() },
-        })
-        .select('id')
-        .single()
-      conversationId = created?.id
+    for (const c of created || []) {
+      convByKey.set(phoneKey(c.client_phone || ''), { id: c.id, last_message_at: null })
     }
-    if (!conversationId) continue
+  }
 
-    // Dedup contra lo que ya haya entrado en vivo o en un chunk anterior.
-    // Se traen los ids ya guardados de la conversación y se filtra en memoria:
-    // filtrar por un path de JSON con una lista larga de wamids (que traen puntos
-    // e "=") es frágil en PostgREST.
+  const conversationIds = [...convByKey.values()].map((c) => c.id)
+
+  // Dedup contra lo ya guardado (en vivo o en un lote anterior): UNA consulta para
+  // todas las conversaciones tocadas, en vez de una por mensaje.
+  const seen = new Set<string>()
+  if (conversationIds.length > 0) {
     const { data: known } = await admin
       .from('messages')
       .select('metadata')
-      .eq('conversation_id', conversationId)
+      .in('conversation_id', conversationIds)
       .not('metadata->>whatsapp_message_id', 'is', null)
-      .limit(5000)
+      .limit(20000)
 
-    const seen = new Set(
-      (known || []).map((r: any) => r.metadata?.whatsapp_message_id).filter(Boolean),
-    )
+    for (const r of known || []) {
+      const id = (r.metadata as any)?.whatsapp_message_id
+      if (id) seen.add(id)
+    }
+  }
 
-    const rows: any[] = []
-    let newest: string | null = null
+  const rows: any[] = []
+  // Última fecha real por conversación, para reordenar la bandeja.
+  const newestByConv = new Map<string, string>()
+
+  for (const [key, messages] of byClient) {
+    const conv = convByKey.get(key)
+    if (!conv) continue
 
     for (const m of messages) {
-      const wamid = m.wamid || m.id
-      if (wamid && seen.has(wamid)) continue
+      // El propio lote puede traer el mismo wamid repetido (reintentos de YCloud).
+      if (m.wamid) {
+        if (seen.has(m.wamid)) continue
+        seen.add(m.wamid)
+      }
 
-      const outgoing = m.__outgoing ?? digitsOnly(m.from || '') === businessPhone
-      const type = m.type || 'text'
-      const internalType = STORABLE_TYPES.includes(type) ? type : 'text'
-
-      // `sendTime` viene ISO ("2026-05-16T16:16:41.000Z"); el `timestamp` en
-      // segundos es del formato crudo de Meta. Se aceptan los dos.
-      const ts = m.sendTime
-        ? new Date(m.sendTime).toISOString()
-        : m.timestamp
-          ? new Date(Number(m.timestamp) * 1000).toISOString()
-          : new Date().toISOString()
-      if (!newest || ts > newest) newest = ts
+      const internalType = STORABLE_TYPES.includes(m.type) ? m.type : 'text'
+      const prev = newestByConv.get(conv.id)
+      if (!prev || m.ts > prev) newestByConv.set(conv.id, m.ts)
 
       rows.push({
-        conversation_id: conversationId,
-        content: historyText(m),
-        sender_type: outgoing ? 'bot' : 'client',
+        conversation_id: conv.id,
+        content: m.text,
+        sender_type: m.outgoing ? 'bot' : 'client',
         message_type: internalType,
-        created_at: ts, // fecha REAL del mensaje, no la de la importación
+        created_at: m.ts, // fecha REAL del mensaje, no la de la importación
         metadata: {
-          whatsapp_message_id: wamid,
-          original_type: type,
+          whatsapp_message_id: m.wamid,
+          original_type: m.type,
           imported: true,
-          ...(outgoing ? { sent_by: 'phone' } : {}),
+          ...(m.outgoing ? { sent_by: 'phone' } : {}),
           // La media de más de 14 días no la comparte Meta: queda solo el texto.
-          ...(m[type] && typeof m[type] === 'object' ? { [type]: m[type] } : {}),
+          ...(m.raw[m.type] && typeof m.raw[m.type] === 'object'
+            ? { [m.type]: m.raw[m.type] }
+            : {}),
         },
       })
     }
+  }
 
-    if (rows.length > 0) {
-      await admin.from('messages').insert(rows)
-    }
+  // Inserts de a 500: es el tamaño que PostgREST maneja cómodo en un request.
+  for (let i = 0; i < rows.length; i += 500) {
+    const slice = rows.slice(i, i + 500)
+    const { error } = await admin.from('messages').insert(slice)
+    if (error) throw new Error(`insert de mensajes: ${error.message}`)
+  }
 
-    // La conversación se ordena por su última actividad REAL, así las charlas
-    // viejas caen al fondo en vez de aparecer como recientes.
-    if (newest && (!existing?.last_message_at || newest > existing.last_message_at)) {
-      await admin
-        .from('conversations')
-        .update({ last_message_at: newest })
-        .eq('id', conversationId)
+  // La conversación se ordena por su última actividad REAL, así las charlas viejas
+  // caen al fondo en vez de aparecer como recientes.
+  for (const [convId, newest] of newestByConv) {
+    const prev = [...convByKey.values()].find((c) => c.id === convId)?.last_message_at
+    if (!prev || newest > prev) {
+      await admin.from('conversations').update({ last_message_at: newest }).eq('id', convId)
     }
   }
 }
 
-async function processContactsChunk(admin: any, chunk: any) {
-  const body = chunk.payload
-  const data = body?.whatsappSmbAppStateSync ?? body?.appStateSync ?? {}
+/**
+ * Importa los contactos de la agenda del celular.
+ *
+ * Forma REAL del payload (verificada contra los datos que mandó YCloud):
+ *   whatsappSmbAppStateSync.stateSync[] = {
+ *     action: 'add' | 'remove',
+ *     contact: { userId, fullName, phoneNumber },
+ *     timestamp
+ *   }
+ * La doc hablaba de un array `contacts` con los campos planos, así que se aceptan
+ * las dos formas por si cambia.
+ */
+async function processContactsBatch(admin: any, userId: string, chunks: any[]) {
+  const wanted = new Map<string, string>() // phoneKey → nombre
 
-  // Forma REAL del payload (verificada contra los datos que mandó YCloud):
-  //   whatsappSmbAppStateSync.stateSync[] = {
-  //     action: 'add' | 'remove',
-  //     contact: { userId, fullName, phoneNumber },
-  //     timestamp
-  //   }
-  // La doc hablaba de un array `contacts` con los campos planos, así que se
-  // aceptan las dos formas por si cambia.
-  const entries: any[] = data.stateSync || data.contacts || []
+  for (const chunk of chunks) {
+    const data = chunk.payload?.whatsappSmbAppStateSync ?? chunk.payload?.appStateSync ?? {}
+    const entries: any[] = data.stateSync || data.contacts || []
 
-  for (const entry of entries) {
-    const c = entry.contact ?? entry
-    const phone = digitsOnly(c.phoneNumber || c.phone_number || '')
-    if (!phone) continue
+    for (const entry of entries) {
+      const c = entry.contact ?? entry
+      const phone = digitsOnly(c.phoneNumber || c.phone_number || '')
+      if (!phone) continue
 
-    // 'remove' = lo borró de la agenda del celular. No borramos el cliente del CRM
-    // (puede tener pedidos e historial): solo ignoramos la baja.
-    const action = (entry.action || c.action || 'add').toLowerCase()
-    if (action === 'remove') continue
+      // 'remove' = lo borró de la agenda del celular. No borramos el cliente del CRM
+      // (puede tener pedidos e historial): solo ignoramos la baja.
+      const action = (entry.action || c.action || 'add').toLowerCase()
+      if (action === 'remove') continue
 
-    const name =
-      c.fullName || c.full_name || c.firstName || c.first_name || phone
+      wanted.set(phoneKey(phone), c.fullName || c.full_name || c.firstName || c.first_name || phone)
+    }
+  }
+  if (wanted.size === 0) return
 
-    const { data: existing } = await admin
-      .from('clients')
-      .select('id, name')
-      .eq('user_id', chunk.user_id)
-      .in('phone', phoneVariants(phone))
-      .limit(1)
-      .maybeSingle()
+  const { data: existing } = await admin
+    .from('clients')
+    .select('id, name, phone')
+    .eq('user_id', userId)
+    .in('phone', [...wanted.keys()].flatMap((k) => phoneVariants(k)))
 
-    if (existing) {
-      // Solo completamos el nombre si el que tenemos es el teléfono pelado.
-      if (name && existing.name && digitsOnly(existing.name) === existing.name) {
-        await admin.from('clients').update({ name }).eq('id', existing.id)
-      }
+  const existingByKey = new Map<string, { id: string; name: string | null }>()
+  for (const c of existing || []) {
+    existingByKey.set(phoneKey(c.phone || ''), { id: c.id, name: c.name })
+  }
+
+  const toInsert: any[] = []
+  for (const [key, name] of wanted) {
+    const found = existingByKey.get(key)
+    if (!found) {
+      toInsert.push({ user_id: userId, name, phone: key })
       continue
     }
+    // Solo completamos el nombre si el que tenemos es el teléfono pelado.
+    if (name && found.name && digitsOnly(found.name) === found.name) {
+      await admin.from('clients').update({ name }).eq('id', found.id)
+    }
+  }
 
-    await admin.from('clients').insert({
-      user_id: chunk.user_id,
-      name,
-      phone,
-    })
+  for (let i = 0; i < toInsert.length; i += 500) {
+    await admin.from('clients').insert(toInsert.slice(i, i + 500))
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   try {
     const admin = createAdminClient()
 
-    // Tanda acotada: el cron corre seguido, no hace falta vaciar todo de una.
-    const { data: chunks } = await admin
+    // Reclamos huérfanos: una corrida anterior murió a mitad y dejó chunks tomados.
+    const staleBefore = new Date(Date.now() - CLAIM_TIMEOUT_MINUTES * 60 * 1000).toISOString()
+    await admin
       .from('whatsapp_sync_chunks')
-      .select('*')
-      .eq('status', 'pending')
-      .lt('attempts', 5)
-      .order('received_at', { ascending: true })
-      .order('chunk_order', { ascending: true, nullsFirst: true })
-      .limit(10)
+      .update({ status: 'pending', claimed_at: null })
+      .eq('status', 'processing')
+      .lt('claimed_at', staleBefore)
 
+    // RECLAMO atómico (FOR UPDATE SKIP LOCKED del lado de Postgres): dos corridas
+    // superpuestas del cron nunca agarran los mismos chunks. El timestamp hace de
+    // token del lote — al cerrar se filtra por él y no hace falta enumerar 800 ids,
+    // que armarían una URL que PostgREST rechaza.
+    const claimedAt = new Date().toISOString()
+    const { data: chunks, error: claimError } = await admin.rpc('claim_whatsapp_sync_chunks', {
+      p_limit: BATCH_SIZE,
+      p_claimed_at: claimedAt,
+    })
+
+    if (claimError) throw new Error(`no se pudo reclamar el lote: ${claimError.message}`)
     if (!chunks || chunks.length === 0) {
       return NextResponse.json({ ok: true, processed: 0 })
+    }
+
+    // Agrupar por cuenta y tipo: cada grupo se resuelve con un puñado de consultas.
+    const groups = new Map<string, any[]>()
+    for (const chunk of chunks) {
+      const key = `${chunk.user_id}|${chunk.event_type}`
+      const list = groups.get(key)
+      if (list) list.push(chunk)
+      else groups.set(key, [chunk])
     }
 
     let done = 0
     let failed = 0
 
-    for (const chunk of chunks) {
+    for (const [key, groupChunks] of groups) {
+      const [userId, eventType] = key.split('|')
+
+      // El lote se cierra por (cuenta, tipo, token del reclamo). Nunca por lista
+      // de ids: con cientos de UUIDs la URL de PostgREST se pasa de largo.
       try {
-        if (chunk.event_type === 'history') await processHistoryChunk(admin, chunk)
-        else await processContactsChunk(admin, chunk)
+        if (eventType === 'history') await processHistoryBatch(admin, userId, groupChunks)
+        else await processContactsBatch(admin, userId, groupChunks)
 
         await admin
           .from('whatsapp_sync_chunks')
-          .update({ status: 'done', processed_at: new Date().toISOString() })
-          .eq('id', chunk.id)
-        done++
+          .update({ status: 'done', processed_at: new Date().toISOString(), claimed_at: null })
+          .eq('claimed_at', claimedAt)
+          .eq('user_id', userId)
+          .eq('event_type', eventType)
+        done += groupChunks.length
       } catch (e: any) {
-        console.error('[YCloud sync] error procesando chunk', chunk.id, e)
-        const attempts = (chunk.attempts || 0) + 1
+        console.error('[YCloud sync] error procesando lote', key, e)
+        // El lote entero vuelve a la cola con un intento más. A los 5 se abandona
+        // y queda en 'error' para revisar a mano.
+        const attempts = (groupChunks[0]?.attempts || 0) + 1
         await admin
           .from('whatsapp_sync_chunks')
           .update({
             attempts,
             last_error: String(e?.message || e).slice(0, 500),
-            // A los 5 intentos se deja de reintentar y queda para revisar a mano.
             status: attempts >= 5 ? 'error' : 'pending',
+            claimed_at: null,
           })
-          .eq('id', chunk.id)
-        failed++
+          .eq('claimed_at', claimedAt)
+          .eq('user_id', userId)
+          .eq('event_type', eventType)
+        failed += groupChunks.length
       }
     }
 

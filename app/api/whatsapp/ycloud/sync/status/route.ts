@@ -9,12 +9,19 @@ import { getAccountContext } from '@/lib/account'
  * Devuelve `active` mientras queden tandas por procesar, y `justFinished` durante
  * un rato corto después de terminar, para que la UI pueda mostrar la animación de
  * "listo" antes de desaparecer.
+ *
+ * OJO CON EL PROGRESO (28/07/2026): antes se calculaba sobre los chunks recibidos
+ * en los últimos 60 minutos. Cuando la importación es grande y dura horas, esa
+ * ventana iba dejando afuera los chunks YA PROCESADOS mientras seguían entrando
+ * nuevos, así que la barra llegaba a 100% y volvía a 0. Ahora se cuenta sobre TODA
+ * la cola de la cuenta, con `count` exacto en vez de traerse las filas.
  */
 
-// Ventana en la que consideramos que una importación es "de ahora".
-const RECENT_MINUTES = 60
 // Cuánto tiempo se sigue avisando que terminó (para la animación de cierre).
 const JUST_FINISHED_MINUTES = 3
+
+/** Chunks tomados por una corrida del cron: siguen siendo trabajo pendiente. */
+const IN_FLIGHT = ['pending', 'processing']
 
 export async function GET(_request: NextRequest) {
   try {
@@ -27,61 +34,60 @@ export async function GET(_request: NextRequest) {
     const accountId = ctx?.ownerId || user.id
 
     const admin = createAdminClient()
-    const since = new Date(Date.now() - RECENT_MINUTES * 60 * 1000).toISOString()
+    const base = () =>
+      admin
+        .from('whatsapp_sync_chunks')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', accountId)
 
-    const { data: chunks } = await admin
-      .from('whatsapp_sync_chunks')
-      .select('event_type, status, progress, received_at, processed_at')
-      .eq('user_id', accountId)
-      .gte('received_at', since)
-      .order('received_at', { ascending: false })
-      .limit(200)
+    const [total, remaining, done, chats, contacts] = await Promise.all([
+      base(),
+      base().in('status', IN_FLIGHT),
+      base().eq('status', 'done'),
+      base().eq('event_type', 'history'),
+      base().eq('event_type', 'app_state_sync'),
+    ])
 
-    if (!chunks || chunks.length === 0) {
+    const totalCount = total.count ?? 0
+    if (totalCount === 0) {
       return NextResponse.json({ active: false, justFinished: false })
     }
 
-    const pending = chunks.filter((c) => c.status === 'pending').length
-    const history = chunks.filter((c) => c.event_type === 'history')
-    const contacts = chunks.filter((c) => c.event_type === 'app_state_sync')
-
-    // Meta manda el % en el metadata de cada tanda; nos quedamos con el más alto.
-    const reported = history
-      .map((c) => Number(c.progress))
-      .filter((n) => Number.isFinite(n))
-    const maxReported = reported.length > 0 ? Math.max(...reported) : 0
-
-    // Si no vino progreso, lo estimamos por tandas procesadas.
-    const processedRatio =
-      chunks.length > 0 ? ((chunks.length - pending) / chunks.length) * 100 : 0
-
-    const progress = Math.min(
-      100,
-      Math.round(maxReported > 0 ? maxReported : processedRatio),
-    )
-
-    const active = pending > 0
+    const remainingCount = remaining.count ?? 0
+    const doneCount = done.count ?? 0
+    const active = remainingCount > 0
 
     // Terminó recién: seguimos avisando un ratito para la animación de cierre.
     let justFinished = false
     if (!active) {
-      const lastProcessed = chunks
-        .map((c) => c.processed_at)
-        .filter(Boolean)
-        .sort()
-        .pop()
-      if (lastProcessed) {
-        const ageMin = (Date.now() - new Date(lastProcessed).getTime()) / 60000
+      const { data: last } = await admin
+        .from('whatsapp_sync_chunks')
+        .select('processed_at')
+        .eq('user_id', accountId)
+        .not('processed_at', 'is', null)
+        .order('processed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (last?.processed_at) {
+        const ageMin = (Date.now() - new Date(last.processed_at).getTime()) / 60000
         justFinished = ageMin <= JUST_FINISHED_MINUTES
       }
     }
 
+    const progress = Math.min(100, Math.round((doneCount / totalCount) * 100))
+
     return NextResponse.json({
       active,
       justFinished,
+      // Nunca 100% mientras quede algo: la barra llena con trabajo pendiente
+      // es justamente lo que hacía que pareciera que se reiniciaba.
       progress: active ? Math.min(progress, 99) : 100,
-      chats: history.length,
-      contacts: contacts.length,
+      done: doneCount,
+      total: totalCount,
+      remaining: remainingCount,
+      chats: chats.count ?? 0,
+      contacts: contacts.count ?? 0,
     })
   } catch (error) {
     console.error('[YCloud sync status] error:', error)

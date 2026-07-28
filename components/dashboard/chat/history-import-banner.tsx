@@ -16,6 +16,8 @@ type SyncStatus = {
   active: boolean
   justFinished: boolean
   progress?: number
+  done?: number
+  total?: number
 }
 
 export function HistoryImportBanner() {
@@ -23,6 +25,12 @@ export function HistoryImportBanner() {
   const [showDone, setShowDone] = useState(false)
   // Para detectar el flanco activo → terminado y disparar la animación una vez.
   const wasActiveRef = useRef(false)
+  // El total no se conoce de antemano: mientras se procesa la cola, WhatsApp sigue
+  // mandando mensajes viejos y el denominador crece. Sin este tope el porcentaje
+  // retrocedía cada vez que entraba una tanda nueva, que es lo que se veía como
+  // "el loader volvió a 0". Se guarda el máximo alcanzado y solo se reinicia
+  // cuando arranca una importación nueva.
+  const maxProgressRef = useRef(0)
 
   useEffect(() => {
     let cancelled = false
@@ -36,6 +44,9 @@ export function HistoryImportBanner() {
         if (cancelled) return
 
         setStatus(json)
+
+        // Importación nueva (venía quieto y arrancó): el tope empieza de cero.
+        if (!wasActiveRef.current && json.active) maxProgressRef.current = 0
 
         if (wasActiveRef.current && !json.active) {
           // Terminó: mostramos el "listo" y lo escondemos a los 4 segundos.
@@ -62,7 +73,17 @@ export function HistoryImportBanner() {
 
   const importing = status?.active === true
   const visible = importing || showDone || (status?.justFinished === true && showDone)
-  const progress = Math.max(0, Math.min(100, status?.progress ?? 0))
+
+  const reported = Math.max(0, Math.min(100, status?.progress ?? 0))
+  if (reported > maxProgressRef.current) maxProgressRef.current = reported
+  const progress = importing ? maxProgressRef.current : reported
+
+  // Con importaciones largas el porcentaje se mueve poco; el contador de mensajes
+  // es lo que muestra que efectivamente está avanzando.
+  const counter =
+    importing && status?.total
+      ? `${(status.done ?? 0).toLocaleString("es-AR")} de ${status.total.toLocaleString("es-AR")} mensajes`
+      : null
 
   return (
     <AnimatePresence>
@@ -106,7 +127,7 @@ export function HistoryImportBanner() {
                 </p>
                 <p className="text-[11px] text-muted-foreground truncate">
                   {importing
-                    ? "Podés seguir usando el chat mientras tanto"
+                    ? counter || "Podés seguir usando el chat mientras tanto"
                     : "Las conversaciones viejas quedaron con su fecha original"}
                 </p>
               </div>

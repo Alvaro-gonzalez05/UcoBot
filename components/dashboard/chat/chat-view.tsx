@@ -844,6 +844,12 @@ export function ChatView({ userId }: ChatViewProps) {
         { event: '*', schema: 'public', table: 'conversations', filter: `user_id=eq.${userId}` }, 
         async (payload) => {
           if (payload.eventType === 'INSERT') {
+            // Importación de coexistencia: entran cientos de conversaciones de
+            // golpe y cada una dispararía su propio fetch desde el navegador,
+            // trabando la lista. Son chats VIEJOS, no urgentes: los levanta el
+            // sync periódico de acá abajo.
+            if ((payload.new as any)?.context?.imported) return
+
             // Fetch the new conversation with its messages
             const { data, error } = await supabase
               .from("conversations")
