@@ -116,6 +116,15 @@ export async function POST(request: NextRequest) {
 
     const msgType: string = msg.type || 'text'
 
+    // YCloud manda `unsupported` cuando Meta no pudo entregar el contenido
+    // (mensajes editados, encuestas, formatos nuevos) y `system` para avisos de
+    // cambio de número. No aportan nada al chat y le meten ruido a la IA:
+    // se descartan antes de reinyectar.
+    if (msgType === 'unsupported' || msgType === 'system') {
+      console.log('[YCloud webhook] tipo ignorado:', msgType)
+      return NextResponse.json({ ok: true })
+    }
+
     // Forma Meta: el pipeline actual entiende exactamente esto.
     const m: any = {
       id: msg.wamid || msg.id,
@@ -292,13 +301,39 @@ async function handlePhoneEcho(msg: any) {
     if (link) storedUrl = await storeYCloudMedia(link, integration.user_id, msgType)
   }
 
-  const internalType = ['image', 'audio', 'document', 'video', 'location'].includes(msgType)
-    ? msgType
-    : 'text'
+  // OJO: el chat renderiza la media SOLO si existe `metadata.<tipo>`
+  // (ver chat-view.tsx: `message_type === 'image' && metadata?.image`). Con
+  // `stored_url` suelto no alcanza: se ve el texto "[image]" en vez de la foto.
+  // Por eso replicamos acá la misma forma que arma el pipeline entrante.
+  const extra: Record<string, any> = {}
+  const isMedia = (MEDIA_TYPES as readonly string[]).includes(msgType)
+
+  if (isMedia) {
+    extra[msgType] = {
+      ...(text ? { caption: text } : {}),
+      ...(msg?.[msgType]?.mime_type ? { mime_type: msg[msgType].mime_type } : {}),
+      ...(storedUrl ? { stored_url: storedUrl } : {}),
+    }
+    // Los stickers se guardan como 'image' (CHECK-safe) y se distinguen por is_sticker.
+    if (msgType === 'sticker') extra.is_sticker = true
+  } else if (msg?.[msgType]) {
+    // location, contacts, interactive, order, reaction: pasan tal cual, que es
+    // lo que espera la UI (ej. metadata.location.latitude para el mapa).
+    extra[msgType] = msg[msgType]
+  }
+
+  const internalType =
+    msgType === 'sticker'
+      ? 'image'
+      : ['image', 'audio', 'document', 'video', 'location'].includes(msgType)
+        ? msgType
+        : 'text'
 
   await admin.from('messages').insert({
     conversation_id: conversationId,
-    content: text || `[${msgType}]`,
+    // Para media el contenido es el epígrafe (o vacío), igual que en el pipeline
+    // entrante. Poner "[image]" acá hacía que se viera ese texto en el globo.
+    content: isMedia || msgType === 'location' ? text || '' : text || `[${msgType}]`,
     sender_type: 'bot',
     message_type: internalType,
     metadata: {
@@ -306,6 +341,7 @@ async function handlePhoneEcho(msg: any) {
       sent_by: 'phone', // lo mandó el dueño desde su celular
       is_handover: true,
       original_type: msgType,
+      ...extra,
       ...(storedUrl ? { stored_url: storedUrl } : {}),
     },
   })

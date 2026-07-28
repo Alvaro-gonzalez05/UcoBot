@@ -351,10 +351,38 @@ async function handlePhoneEchoes(instance: string, echoes: any[]) {
       }
 
       // Guardar como saliente (para que se vea en /chat)
-      const internalType = ['image', 'audio', 'document', 'video', 'location'].includes(type) ? type : 'text'
+      //
+      // OJO: el chat renderiza la media SOLO si existe `metadata.<tipo>`
+      // (ver chat-view.tsx: `message_type === 'image' && metadata?.image`). Con
+      // `stored_url` suelto no alcanza: se veía el texto "[image]" en vez de la foto.
+      const extra: Record<string, any> = {}
+      const isMedia = ['image', 'video', 'audio', 'document', 'sticker'].includes(type)
+      if (isMedia) {
+        extra[type] = {
+          ...(text ? { caption: text } : {}),
+          ...(storedUrl ? { stored_url: storedUrl } : {}),
+        }
+        if (type === 'sticker') extra.is_sticker = true
+      } else if (type === 'location' && item.message?.locationMessage) {
+        const loc = item.message.locationMessage
+        extra.location = {
+          latitude: loc.degreesLatitude,
+          longitude: loc.degreesLongitude,
+          name: loc.name,
+          address: loc.address,
+        }
+      }
+
+      const internalType =
+        type === 'sticker'
+          ? 'image'
+          : ['image', 'audio', 'document', 'video', 'location'].includes(type)
+            ? type
+            : 'text'
+
       await admin.from('messages').insert({
         conversation_id: conversationId,
-        content: text || `[${type}]`,
+        content: isMedia || type === 'location' ? text || '' : text || `[${type}]`,
         sender_type: 'bot',
         message_type: internalType,
         metadata: {
@@ -362,6 +390,7 @@ async function handlePhoneEchoes(instance: string, echoes: any[]) {
           sent_by: 'phone', // lo mandó el dueño desde su celular
           is_handover: true,
           original_type: type,
+          ...extra,
           ...(storedUrl ? { stored_url: storedUrl } : {}),
         },
       })
