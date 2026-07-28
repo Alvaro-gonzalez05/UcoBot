@@ -45,9 +45,24 @@ const STORABLE_TYPES = ['image', 'audio', 'document', 'video', 'location']
 
 async function processHistoryChunk(admin: any, chunk: any) {
   const body = chunk.payload
-  const data = body?.whatsappSmbHistory ?? body?.history ?? {}
-  const threads: any[] = data.threads || []
   const businessPhone = chunk.phone_number_id
+
+  // FORMA REAL: YCloud manda UN mensaje por evento, con la misma estructura que
+  // un mensaje normal — `whatsappInboundMessage` si lo mandó el cliente,
+  // `whatsappMessage` si lo mandó el negocio desde el celular. La doc de Meta
+  // describe tandas con `threads[]`, pero eso es el webhook crudo, no el de YCloud.
+  // Se arma un "hilo" de un solo mensaje para reusar la misma lógica de abajo.
+  const inbound = body?.whatsappInboundMessage
+  const outbound = body?.whatsappMessage
+  const single = inbound || outbound
+  if (!single) throw new Error('Evento de historial sin mensaje reconocible')
+
+  const threads: any[] = [
+    {
+      id: inbound ? single.from : single.to, // el cliente, en ambos sentidos
+      messages: [{ ...single, __outgoing: !inbound }],
+    },
+  ]
 
   // Un solo bot por cuenta (mismo criterio que el resto del pipeline).
   const { data: bot } = await admin
@@ -63,10 +78,10 @@ async function processHistoryChunk(admin: any, chunk: any) {
   if (!bot) throw new Error('La cuenta no tiene un bot de WhatsApp activo')
 
   for (const thread of threads) {
-    const clientPhone = digitsOnly(thread.id || '')
+    const clientPhone = digitsOnly(thread.id || thread.phoneNumber || thread.from || '')
     if (!clientPhone || clientPhone === businessPhone) continue
 
-    const messages: any[] = thread.messages || []
+    const messages: any[] = thread.messages || thread.chat || []
     if (messages.length === 0) continue
 
     // Conversación existente (cualquier variante del 9) o nueva.
@@ -121,16 +136,20 @@ async function processHistoryChunk(admin: any, chunk: any) {
     let newest: string | null = null
 
     for (const m of messages) {
-      if (m.id && seen.has(m.id)) continue
+      const wamid = m.wamid || m.id
+      if (wamid && seen.has(wamid)) continue
 
-      // `from` es el número del negocio → lo mandó el negocio (saliente).
-      const outgoing = digitsOnly(m.from || '') === businessPhone
+      const outgoing = m.__outgoing ?? digitsOnly(m.from || '') === businessPhone
       const type = m.type || 'text'
       const internalType = STORABLE_TYPES.includes(type) ? type : 'text'
 
-      const ts = m.timestamp
-        ? new Date(Number(m.timestamp) * 1000).toISOString()
-        : new Date().toISOString()
+      // `sendTime` viene ISO ("2026-05-16T16:16:41.000Z"); el `timestamp` en
+      // segundos es del formato crudo de Meta. Se aceptan los dos.
+      const ts = m.sendTime
+        ? new Date(m.sendTime).toISOString()
+        : m.timestamp
+          ? new Date(Number(m.timestamp) * 1000).toISOString()
+          : new Date().toISOString()
       if (!newest || ts > newest) newest = ts
 
       rows.push({
@@ -140,7 +159,7 @@ async function processHistoryChunk(admin: any, chunk: any) {
         message_type: internalType,
         created_at: ts, // fecha REAL del mensaje, no la de la importación
         metadata: {
-          whatsapp_message_id: m.id,
+          whatsapp_message_id: wamid,
           original_type: type,
           imported: true,
           ...(outgoing ? { sent_by: 'phone' } : {}),
@@ -168,19 +187,29 @@ async function processHistoryChunk(admin: any, chunk: any) {
 async function processContactsChunk(admin: any, chunk: any) {
   const body = chunk.payload
   const data = body?.whatsappSmbAppStateSync ?? body?.appStateSync ?? {}
-  const contacts: any[] = data.contacts || []
 
-  for (const c of contacts) {
-    const phone = digitsOnly(c.phone_number || c.phoneNumber || '')
+  // Forma REAL del payload (verificada contra los datos que mandó YCloud):
+  //   whatsappSmbAppStateSync.stateSync[] = {
+  //     action: 'add' | 'remove',
+  //     contact: { userId, fullName, phoneNumber },
+  //     timestamp
+  //   }
+  // La doc hablaba de un array `contacts` con los campos planos, así que se
+  // aceptan las dos formas por si cambia.
+  const entries: any[] = data.stateSync || data.contacts || []
+
+  for (const entry of entries) {
+    const c = entry.contact ?? entry
+    const phone = digitsOnly(c.phoneNumber || c.phone_number || '')
     if (!phone) continue
 
     // 'remove' = lo borró de la agenda del celular. No borramos el cliente del CRM
     // (puede tener pedidos e historial): solo ignoramos la baja.
-    const action = (c.action || 'add').toLowerCase()
+    const action = (entry.action || c.action || 'add').toLowerCase()
     if (action === 'remove') continue
 
     const name =
-      c.full_name || c.fullName || c.first_name || c.firstName || phone
+      c.fullName || c.full_name || c.firstName || c.first_name || phone
 
     const { data: existing } = await admin
       .from('clients')

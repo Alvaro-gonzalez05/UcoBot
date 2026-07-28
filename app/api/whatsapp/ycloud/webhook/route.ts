@@ -244,16 +244,24 @@ export async function POST(request: NextRequest) {
  */
 async function stageSyncChunk(type: string, body: any) {
   const isHistory = type === 'whatsapp.smb.history'
-  const data = isHistory ? body.whatsappSmbHistory ?? body.history : body.whatsappSmbAppStateSync ?? body.appStateSync
+  const data = isHistory ? body : body.whatsappSmbAppStateSync ?? body.appStateSync
 
-  // El número del negocio puede venir en varios lugares según el evento.
-  const businessPhone = digitsOnly(
-    data?.phoneNumber ||
-      data?.metadata?.display_phone_number ||
-      data?.metadata?.phone_number ||
-      body?.whatsappSmbHistory?.threads?.[0]?.messages?.[0]?.to ||
-      '',
-  )
+  // FORMA REAL (verificada contra los logs de entrega de YCloud):
+  //  - history: UN mensaje por evento, con la misma forma que un mensaje normal.
+  //    `whatsappInboundMessage` si lo mandó el cliente, `whatsappMessage` si lo
+  //    mandó el negocio. NO viene en tandas con threads/progress, como decía la
+  //    documentación de Meta.
+  //  - app_state_sync: un objeto con `phoneNumber` y el array `stateSync`.
+  let businessPhone = ''
+  if (isHistory) {
+    const inbound = body.whatsappInboundMessage
+    const outbound = body.whatsappMessage
+    const m = inbound || outbound
+    // En un entrante el negocio es el destinatario; en un saliente, el remitente.
+    businessPhone = digitsOnly((inbound ? m?.to : m?.from) || '')
+  } else {
+    businessPhone = digitsOnly(data?.phoneNumber || data?.metadata?.display_phone_number || '')
+  }
 
   const admin = createAdminClient()
 
@@ -275,7 +283,10 @@ async function stageSyncChunk(type: string, body: any) {
     return
   }
 
-  const meta = data?.metadata || {}
+  // YCloud no manda phase/chunk_order/progress (eso es del webhook crudo de Meta).
+  // Se dejan las columnas por si aparecen, pero el progreso de la UI se calcula
+  // por tandas procesadas.
+  const meta = { ...(data || {}), ...(data?.metadata || {}) } as any
 
   await admin.from('whatsapp_sync_chunks').insert({
     user_id: userId,
@@ -283,7 +294,7 @@ async function stageSyncChunk(type: string, body: any) {
     event_type: isHistory ? 'history' : 'app_state_sync',
     payload: body,
     phase: meta.phase ?? null,
-    chunk_order: meta.chunk_order ?? null,
+    chunk_order: meta.chunk_order ?? meta.chunkOrder ?? null,
     progress: meta.progress ?? null,
   })
 
