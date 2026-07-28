@@ -126,6 +126,17 @@ export async function listYCloudTemplates(wabaId: string): Promise<any[]> {
   return out
 }
 
+/**
+ * Endpoints de webhook configurados en la cuenta de YCloud, con los eventos a los
+ * que están suscritos. Se usa para diagnosticar: si el envío anda pero no entra
+ * nada, el problema casi siempre está acá (endpoint deshabilitado, URL vieja o
+ * evento sin tildar).
+ */
+export async function listYCloudWebhookEndpoints(): Promise<any[]> {
+  const data = await ycloudFetch('/webhookEndpoints?page=1&limit=100')
+  return unwrapList(data)
+}
+
 export async function createYCloudTemplate(payload: Record<string, any>): Promise<any> {
   return await ycloudFetch('/whatsapp/templates', {
     method: 'POST',
@@ -163,6 +174,27 @@ export function toE164(phone: string): string {
   let d = digitsOnly(phone)
   if (d.startsWith('549')) d = '54' + d.substring(3)
   return `+${d}`
+}
+
+/**
+ * Variantes con las que un móvil argentino puede aparecer: con y sin el 9.
+ *
+ * Hace falta para resolver el NÚMERO DEL NEGOCIO en el webhook. El `to` que manda
+ * YCloud sale del payload de Meta, y Meta lo reporta con el formato con el que se
+ * registró ese WABA: al recrear la WABA el mismo número puede pasar de 549261… a
+ * 54261… (o al revés). Si se compara literal contra config.phone_number_id, la
+ * integración deja de encontrarse y los mensajes entrantes se descartan en
+ * silencio, aunque el envío siga funcionando.
+ *
+ * Para el resto de los países devuelve el número tal cual.
+ */
+export function businessPhoneVariants(phone: string): string[] {
+  const d = digitsOnly(phone)
+  if (!d) return []
+  const out = new Set<string>([d])
+  if (d.startsWith('549')) out.add('54' + d.substring(3))
+  else if (d.startsWith('54')) out.add('549' + d.substring(2))
+  return [...out]
 }
 
 /* ------------------------------------------------------------------ */

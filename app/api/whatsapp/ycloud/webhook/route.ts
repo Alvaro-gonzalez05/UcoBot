@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { storeMediaBuffer } from '@/lib/meta/store-media'
-import { digitsOnly, verifyYCloudSignature } from '@/lib/whatsapp/ycloud'
+import { businessPhoneVariants, digitsOnly, verifyYCloudSignature } from '@/lib/whatsapp/ycloud'
 
 /**
  * Webhook de YCloud (BSP oficial).
@@ -22,6 +22,34 @@ import { digitsOnly, verifyYCloudSignature } from '@/lib/whatsapp/ycloud'
 
 /** Tipos de media que bajamos al bucket antes de pasar al pipeline. */
 const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'] as const
+
+/**
+ * Busca la integración ACTIVA dueña de un número de negocio.
+ *
+ * Compara contra las variantes AR (con y sin el 9) en vez de literal: al recrear
+ * la WABA, Meta puede empezar a reportar el mismo número en el otro formato y el
+ * `eq` exacto dejaba de matchear, con el efecto de que todo lo entrante se
+ * descartaba en silencio mientras el envío seguía andando.
+ *
+ * `is_active` es parte del filtro: una integración desconectada no debe recibir.
+ * Y `limit(1)` evita que un número que quedó en dos filas (histórico de otra
+ * cuenta) haga fallar el `maybeSingle` y se pierda el mensaje.
+ */
+async function findIntegrationByBusinessPhone(admin: any, businessPhone: string) {
+  const variants = businessPhoneVariants(businessPhone)
+  if (variants.length === 0) return null
+
+  const { data } = await admin
+    .from('integrations')
+    .select('user_id, config')
+    .eq('platform', 'whatsapp')
+    .eq('is_active', true)
+    .or(variants.map((v) => `config->>phone_number_id.eq.${v}`).join(','))
+    .limit(1)
+    .maybeSingle()
+
+  return data ?? null
+}
 
 /**
  * Texto visible de un mensaje de YCloud, según su tipo.
@@ -133,18 +161,24 @@ export async function POST(request: NextRequest) {
 
     // Dueño de la integración: lo necesitamos para el path del bucket de media.
     const admin = createAdminClient()
-    const { data: integration } = await admin
-      .from('integrations')
-      .select('user_id')
-      .eq('platform', 'whatsapp')
-      .eq('config->>phone_number_id', businessPhone)
-      .maybeSingle()
+    const integration = await findIntegrationByBusinessPhone(admin, businessPhone)
 
     if (!integration) {
-      console.log('[YCloud webhook] sin integración para el número:', businessPhone)
+      console.error(
+        '[YCloud webhook] sin integración ACTIVA para el número del negocio:',
+        businessPhone,
+        '| variantes probadas:',
+        businessPhoneVariants(businessPhone).join(', '),
+      )
       return NextResponse.json({ ok: true })
     }
     const ownerUserId: string = integration.user_id
+
+    // El pipeline de Meta resuelve por `config.phone_number_id` con igualdad
+    // exacta. Reinyectamos con el valor GUARDADO (no con el que vino en el
+    // webhook) para que un cambio de formato del lado de Meta no lo rompa.
+    const storedPhoneNumberId: string =
+      String((integration.config as any)?.phone_number_id || '') || businessPhone
 
     const msgType: string = msg.type || 'text'
 
@@ -198,8 +232,8 @@ export async function POST(request: NextRequest) {
               value: {
                 messaging_product: 'whatsapp',
                 metadata: {
-                  phone_number_id: businessPhone,
-                  display_phone_number: businessPhone,
+                  phone_number_id: storedPhoneNumberId,
+                  display_phone_number: storedPhoneNumberId,
                 },
                 contacts: [
                   {
@@ -268,14 +302,13 @@ async function stageSyncChunk(type: string, body: any) {
   // Sin número no podemos saber de qué cuenta es: guardamos igual con el payload
   // completo para no perderlo, pero queda en error para revisarlo a mano.
   let userId: string | null = null
+  let storedPhone = businessPhone
   if (businessPhone) {
-    const { data: integration } = await admin
-      .from('integrations')
-      .select('user_id')
-      .eq('platform', 'whatsapp')
-      .eq('config->>phone_number_id', businessPhone)
-      .maybeSingle()
+    const integration = await findIntegrationByBusinessPhone(admin, businessPhone)
     userId = integration?.user_id ?? null
+    // Se estaciona con el número tal como está en la integración, así el cron que
+    // procesa las tandas lo resuelve igual que el resto del pipeline.
+    storedPhone = String((integration?.config as any)?.phone_number_id || '') || businessPhone
   }
 
   if (!userId) {
@@ -290,7 +323,7 @@ async function stageSyncChunk(type: string, body: any) {
 
   await admin.from('whatsapp_sync_chunks').insert({
     user_id: userId,
-    phone_number_id: businessPhone,
+    phone_number_id: storedPhone,
     event_type: isHistory ? 'history' : 'app_state_sync',
     payload: body,
     phase: meta.phase ?? null,
@@ -323,13 +356,11 @@ async function handlePhoneEcho(msg: any) {
 
   const admin = createAdminClient()
 
-  const { data: integration } = await admin
-    .from('integrations')
-    .select('user_id, config')
-    .eq('platform', 'whatsapp')
-    .eq('config->>phone_number_id', businessPhone)
-    .maybeSingle()
-  if (!integration) return
+  const integration = await findIntegrationByBusinessPhone(admin, businessPhone)
+  if (!integration) {
+    console.error('[YCloud echo] sin integración ACTIVA para el número:', businessPhone)
+    return
+  }
 
   const { data: bot } = await admin
     .from('bots')
