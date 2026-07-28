@@ -18,6 +18,20 @@ type SyncStatus = {
   progress?: number
   done?: number
   total?: number
+  eta_seconds?: number | null
+}
+
+/**
+ * Tiempo restante en palabras. Redondeado a propósito: la estimación sale de un
+ * promedio y prometer "3 min 20 s" sería más preciso de lo que realmente es.
+ */
+function formatEta(seconds: number): string {
+  if (seconds < 90) return "menos de un minuto"
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `~${minutes} min`
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return rest === 0 ? `~${hours} h` : `~${hours} h ${rest} min`
 }
 
 export function HistoryImportBanner() {
@@ -85,6 +99,10 @@ export function HistoryImportBanner() {
       ? `${(status.done ?? 0).toLocaleString("es-AR")} de ${status.total.toLocaleString("es-AR")} mensajes`
       : null
 
+  const eta =
+    importing && status?.eta_seconds ? `falta ${formatEta(status.eta_seconds)}` : null
+  const subtitle = [counter, eta].filter(Boolean).join(" · ")
+
   return (
     <AnimatePresence>
       {visible && (
@@ -127,7 +145,7 @@ export function HistoryImportBanner() {
                 </p>
                 <p className="text-[11px] text-muted-foreground truncate">
                   {importing
-                    ? counter || "Podés seguir usando el chat mientras tanto"
+                    ? subtitle || "Podés seguir usando el chat mientras tanto"
                     : "Las conversaciones viejas quedaron con su fecha original"}
                 </p>
               </div>

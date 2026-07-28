@@ -23,6 +23,15 @@ const JUST_FINISHED_MINUTES = 3
 /** Chunks tomados por una corrida del cron: siguen siendo trabajo pendiente. */
 const IN_FLIGHT = ['pending', 'processing']
 
+/**
+ * Ventana para medir el ritmo de importación.
+ *
+ * El cron procesa en tandas grandes una vez por minuto, así que la velocidad
+ * instantánea salta entre 0 y cientos. Promediar sobre varios minutos da una
+ * estimación que no baila.
+ */
+const RATE_WINDOW_MINUTES = 5
+
 export async function GET(_request: NextRequest) {
   try {
     const supabase = await createClient()
@@ -77,9 +86,30 @@ export async function GET(_request: NextRequest) {
 
     const progress = Math.min(100, Math.round((doneCount / totalCount) * 100))
 
+    // Cuánto falta, medido por lo que se procesó recién. Solo tiene sentido si
+    // algo se movió en la ventana: recién arrancado (o si el cron está caído) no
+    // hay ritmo del que sacar una estimación, y ahí es mejor no decir nada que
+    // mentir con un número.
+    let etaSeconds: number | null = null
+    if (active) {
+      const since = new Date(Date.now() - RATE_WINDOW_MINUTES * 60 * 1000).toISOString()
+      const { count: recent } = await admin
+        .from('whatsapp_sync_chunks')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', accountId)
+        .eq('status', 'done')
+        .gte('processed_at', since)
+
+      if (recent && recent > 0) {
+        const perSecond = recent / (RATE_WINDOW_MINUTES * 60)
+        etaSeconds = Math.ceil(remainingCount / perSecond)
+      }
+    }
+
     return NextResponse.json({
       active,
       justFinished,
+      eta_seconds: etaSeconds,
       // Nunca 100% mientras quede algo: la barra llena con trabajo pendiente
       // es justamente lo que hacía que pareciera que se reiniciaba.
       progress: active ? Math.min(progress, 99) : 100,

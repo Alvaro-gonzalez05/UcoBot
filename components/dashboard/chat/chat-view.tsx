@@ -142,6 +142,25 @@ interface Message {
   is_read?: boolean
 }
 
+/**
+ * Inserta un mensaje en la lista respetando el orden cronológico.
+ *
+ * Hace falta porque el realtime no garantiza que lo que llega sea lo más nuevo:
+ * durante la importación de coexistencia entran mensajes de meses atrás, y
+ * apilarlos al final dejaba el chat con las fechas salteadas (19 de junio, 7 de
+ * junio, 15 de junio…). La lista viene ordenada ascendente, así que el caso
+ * normal — un mensaje nuevo de verdad — sigue siendo un push directo.
+ */
+function insertMessageOrdered(list: Message[], msg: Message): Message[] {
+  const ts = new Date(msg.created_at).getTime()
+  const last = list[list.length - 1]
+  if (!last || new Date(last.created_at).getTime() <= ts) return [...list, msg]
+
+  const idx = list.findIndex((m) => new Date(m.created_at).getTime() > ts)
+  if (idx === -1) return [...list, msg]
+  return [...list.slice(0, idx), msg, ...list.slice(idx)]
+}
+
 interface ClientProfile {
   id: string
   name: string
@@ -584,6 +603,12 @@ export function ChatView({ userId }: ChatViewProps) {
   const MESSAGES_PAGE_SIZE = 20
   const shouldScrollToBottomRef = useRef(true)
   const previousScrollHeightRef = useRef(0)
+  // El handler del realtime se crea una sola vez por conversación: sin el ref
+  // leería el `hasMoreMessages` del render en que se suscribió.
+  const hasMoreMessagesRef = useRef(true)
+  useEffect(() => {
+    hasMoreMessagesRef.current = hasMoreMessages
+  }, [hasMoreMessages])
 
   const [searchTerm, setSearchTerm] = useState("")
   const [newChatOpen, setNewChatOpen] = useState(false)
@@ -1117,9 +1142,20 @@ export function ChatView({ userId }: ChatViewProps) {
           setMessages(prev => {
             // Check if message already exists
             if (prev.some(m => m.id === newMessage.id)) return prev
-            
-            shouldScrollToBottomRef.current = true
-            
+
+            // Mensaje anterior al tramo cargado y todavía quedan páginas viejas
+            // por traer: lo dejamos pasar. Ponerlo arriba de todo lo mostraría
+            // suelto, sin los mensajes que lo rodean; aparece al paginar hacia
+            // atrás o al reabrir el chat.
+            const first = prev[0]
+            if (
+              first &&
+              hasMoreMessagesRef.current &&
+              new Date(newMessage.created_at).getTime() < new Date(first.created_at).getTime()
+            ) {
+              return prev
+            }
+
             // Remove optimistic message if it matches content and is recent (simple heuristic)
             // We assume the optimistic message is at the end
             const filtered = prev.filter(m => {
@@ -1128,8 +1164,14 @@ export function ChatView({ userId }: ChatViewProps) {
               }
               return true
             })
-            
-            return [...filtered, newMessage]
+
+            const next = insertMessageOrdered(filtered, newMessage)
+            // Solo seguimos al fondo si el mensaje realmente quedó último: con un
+            // mensaje importado (viejo) saltar abajo sería desconcertante.
+            if (next[next.length - 1]?.id === newMessage.id) {
+              shouldScrollToBottomRef.current = true
+            }
+            return next
           })
         }
       )
