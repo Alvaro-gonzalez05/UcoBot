@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
+import { sendYCloudMessage, toE164 } from "@/lib/whatsapp/ycloud"
 
 // Reenvía un sticker guardado a una conversación de WhatsApp
 export async function POST(request: NextRequest) {
@@ -62,9 +63,40 @@ export async function POST(request: NextRequest) {
     const accessToken = getWhatsAppToken(integration)
     const phoneNumberId = integration?.config?.phone_number_id
     const graphVersion = getGraphVersion()
+    const isYCloud = integration?.config?.provider === "ycloud"
 
-    if (!accessToken || !phoneNumberId) {
+    if (!phoneNumberId || (!accessToken && !isYCloud)) {
       return NextResponse.json({ error: "Configuración de WhatsApp inválida" }, { status: 500 })
+    }
+
+    // YCloud no tiene Media API propia: el sticker se manda por link público.
+    if (isYCloud) {
+      const { data: pub } = supabase.storage
+        .from("chat-media")
+        .getPublicUrl(sticker.storage_path)
+
+      if (!pub?.publicUrl) {
+        return NextResponse.json(
+          { error: "No se pudo obtener la URL pública del sticker" },
+          { status: 500 }
+        )
+      }
+
+      try {
+        const sent = await sendYCloudMessage({
+          from: integration.config.ycloud_from,
+          to: toE164(conversation.client_phone),
+          type: "sticker",
+          sticker: { link: pub.publicUrl },
+        })
+        return NextResponse.json({ success: true, whatsapp_message_id: sent?.id })
+      } catch (e: any) {
+        console.error("YCloud Send Error (sticker):", e)
+        return NextResponse.json(
+          { error: e?.message || "No se pudo enviar el sticker" },
+          { status: 502 }
+        )
+      }
     }
 
     // Descargar el .webp desde Storage

@@ -34,6 +34,13 @@ export async function GET(request: NextRequest) {
       .eq('is_active', true)
       .single()
 
+    // Con YCloud no existen los media-id de Meta: la media entrante ya se guarda
+    // en el bucket y se sirve por `stored_url`. Si algo llega acá, es un mensaje
+    // viejo de cuando la cuenta usaba Cloud API.
+    if (integration?.config?.provider === 'ycloud') {
+      return new NextResponse("Media no disponible para integraciones YCloud", { status: 404 })
+    }
+
     const accessToken = getWhatsAppToken(integration)
     if (integrationError || !accessToken) {
       return new NextResponse("Integration not found or invalid", { status: 404 })

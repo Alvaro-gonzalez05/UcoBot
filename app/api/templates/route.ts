@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWhatsAppToken, getGraphVersion } from '@/lib/meta/credentials'
+import { listYCloudTemplates } from '@/lib/whatsapp/ycloud'
 
 // Endpoint para obtener plantillas de mensaje desde las APIs de Meta y proveedores externos
 export async function GET(request: NextRequest) {
@@ -124,6 +125,41 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
     // Integraciones nuevas (Embedded Signup / manual) guardan waba_id;
     // las legacy guardaban business_account_id.
     const wabaId = integrationConfig?.waba_id || integrationConfig?.business_account_id
+    const isYCloud = integrationConfig?.provider === 'ycloud'
+
+    // YCloud no expone token de Meta: las plantillas se piden por su propia API.
+    // Se normalizan a la forma de Graph, así el resto de esta función no cambia.
+    if (isYCloud) {
+      if (!wabaId) {
+        console.log('Missing WABA id for YCloud integration')
+        return []
+      }
+      try {
+        const ycloudTemplates = await listYCloudTemplates(wabaId)
+        return bots.flatMap((bot: any) =>
+          ycloudTemplates.map((template: any) => ({
+            id: template.id,
+            name: template.name,
+            platform: 'whatsapp',
+            bot_id: bot.id,
+            bot_name: bot.name,
+            status: template.status,
+            language: template.language,
+            category: template.category,
+            components: template.components,
+            quality_score: template.quality_score,
+            body_content: extractWhatsAppTemplateBody(template.components),
+            variables: extractWhatsAppTemplateVariables(template.components),
+            can_use: template.status === 'APPROVED',
+            source: 'ycloud_api',
+            last_synced: new Date().toISOString(),
+          })),
+        )
+      } catch (error) {
+        console.error('Error fetching WhatsApp templates from YCloud:', error)
+        return []
+      }
+    }
 
     if (!wabaId || !whatsappToken) {
       console.log('Missing WhatsApp integration configuration')

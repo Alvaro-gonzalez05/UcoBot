@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWhatsAppToken, getGraphVersion } from '@/lib/meta/credentials'
+import {
+  listYCloudTemplates,
+  createYCloudTemplate,
+  deleteYCloudTemplate,
+} from '@/lib/whatsapp/ycloud'
 
 /**
  * Gestión de plantillas de WhatsApp contra la API de Meta.
@@ -28,8 +33,10 @@ async function getWhatsAppContext() {
   // Integraciones nuevas guardan waba_id; las legacy, business_account_id
   const wabaId = integration?.config?.waba_id || integration?.config?.business_account_id
   const token = getWhatsAppToken(integration)
+  // YCloud gestiona las plantillas por su propia API: no hay token de Meta.
+  const isYCloud = integration?.config?.provider === 'ycloud'
 
-  if (!wabaId || !token) {
+  if (!wabaId || (!token && !isYCloud)) {
     return {
       error: NextResponse.json(
         { error: 'Conectá WhatsApp primero para poder gestionar plantillas.' },
@@ -38,7 +45,7 @@ async function getWhatsAppContext() {
     }
   }
 
-  return { wabaId, token, userId: data.user.id }
+  return { wabaId, token, isYCloud, userId: data.user.id }
 }
 
 function buildComponents(body: any) {
@@ -75,6 +82,19 @@ function buildComponents(body: any) {
 export async function GET() {
   const ctx = await getWhatsAppContext()
   if ('error' in ctx) return ctx.error
+
+  if (ctx.isYCloud) {
+    try {
+      const templates = await listYCloudTemplates(ctx.wabaId)
+      return NextResponse.json({ success: true, templates })
+    } catch (error: any) {
+      console.error('Error fetching templates from YCloud:', error)
+      return NextResponse.json(
+        { error: error?.message || 'No se pudieron obtener las plantillas de YCloud' },
+        { status: 400 }
+      )
+    }
+  }
 
   const res = await fetch(
     `https://graph.facebook.com/${getGraphVersion()}/${ctx.wabaId}/message_templates?fields=name,status,language,category,components,quality_score&limit=100`,
@@ -123,6 +143,19 @@ export async function POST(request: NextRequest) {
       category,
       allow_category_change: true,
       components: buildComponents(body),
+    }
+
+    if (ctx.isYCloud) {
+      try {
+        const template = await createYCloudTemplate({ ...payload, wabaId: ctx.wabaId })
+        return NextResponse.json({ success: true, template })
+      } catch (error: any) {
+        console.error('Error creating template in YCloud:', error)
+        return NextResponse.json(
+          { error: error?.message || 'YCloud rechazó la creación de la plantilla' },
+          { status: 400 }
+        )
+      }
     }
 
     const res = await fetch(
@@ -174,6 +207,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'El cuerpo del mensaje es obligatorio' }, { status: 400 })
     }
 
+    if (ctx.isYCloud) {
+      // YCloud no expone edición de plantillas: hay que borrar y volver a crear.
+      return NextResponse.json(
+        {
+          error:
+            'Con YCloud las plantillas no se editan. Eliminá la plantilla y creala de nuevo con los cambios.',
+        },
+        { status: 400 }
+      )
+    }
+
     const res = await fetch(
       `https://graph.facebook.com/${getGraphVersion()}/${templateId}`,
       {
@@ -215,6 +259,19 @@ export async function DELETE(request: NextRequest) {
   const name = new URL(request.url).searchParams.get('name')
   if (!name) {
     return NextResponse.json({ error: 'Falta el nombre de la plantilla' }, { status: 400 })
+  }
+
+  if (ctx.isYCloud) {
+    try {
+      await deleteYCloudTemplate(ctx.wabaId, name)
+      return NextResponse.json({ success: true })
+    } catch (error: any) {
+      console.error('Error deleting template in YCloud:', error)
+      return NextResponse.json(
+        { error: error?.message || 'No se pudo eliminar la plantilla' },
+        { status: 400 }
+      )
+    }
   }
 
   const res = await fetch(

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createServiceClient } from "@/lib/supabase/service"
-import { getWhatsAppToken, getInstagramToken, getGraphVersion, getGraphHost } from "@/lib/meta/credentials"
+import { getInstagramToken, getGraphVersion, getGraphHost } from "@/lib/meta/credentials"
+import { getWhatsAppProvider } from "@/lib/whatsapp/provider"
 
 export async function POST(req: NextRequest) {
   try {
@@ -94,17 +95,21 @@ async function executeAfterSubmit(supabase: any, form_id: string, conversation_i
       .limit(1)
 
     const integration = integrations?.[0]
-    const token = platform === "whatsapp"
-      ? getWhatsAppToken(integration)
-      : getInstagramToken(integration)
 
-    if (token) {
-      if (platform === "whatsapp") {
-        const phoneNumberId = integration?.config?.phone_number_id
-        if (phoneNumberId) {
-          sendWhatsAppMessage(token, phoneNumberId, recipient, messageText).catch(console.error)
-        }
-      } else if (platform === "instagram") {
+    if (platform === "whatsapp") {
+      // Vía capa de proveedores: funciona igual con Cloud API, YCloud y Evolution.
+      const provider = getWhatsAppProvider(integration)
+      if (provider) {
+        provider
+          .sendText(recipient, messageText)
+          .then((res) => {
+            if (!res.success) console.error("WhatsApp send error (after_form):", res.error)
+          })
+          .catch(console.error)
+      }
+    } else if (platform === "instagram") {
+      const token = getInstagramToken(integration)
+      if (token) {
         sendInstagramMessage(token, recipient, messageText).catch(console.error)
       }
     }
@@ -129,34 +134,6 @@ async function executeAfterSubmit(supabase: any, form_id: string, conversation_i
     updates.status = "paused"
   }
   await supabase.from("conversations").update(updates).eq("id", conversation_id)
-}
-
-async function sendWhatsAppMessage(
-  accessToken: string,
-  phoneNumberId: string,
-  recipientPhone: string,
-  message: string
-) {
-  let normalizedPhone = recipientPhone
-  if (recipientPhone.startsWith("549")) {
-    normalizedPhone = "54" + recipientPhone.substring(3)
-  }
-
-  const response = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${phoneNumberId}/messages`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: normalizedPhone,
-      type: "text",
-      text: { body: message },
-    }),
-  })
-
-  if (!response.ok) {
-    const data = await response.json()
-    console.error("WhatsApp API error (after_form):", data)
-  }
 }
 
 async function sendInstagramMessage(accessToken: string, recipientId: string, message: string) {

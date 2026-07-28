@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { getWhatsAppToken, getGraphVersion } from '@/lib/meta/credentials'
+import { getWhatsAppProvider } from '@/lib/whatsapp/provider'
 import { storeMediaBuffer } from '@/lib/meta/store-media'
 
 export async function POST(request: NextRequest) {
@@ -54,37 +55,16 @@ export async function POST(request: NextRequest) {
     }
 
     const integration = integrations[0]
+    const isYCloud = integration.config?.provider === 'ycloud'
     const accessToken = getWhatsAppToken(integration)
     const phoneNumberId = integration.config?.phone_number_id
     const graphVersion = getGraphVersion()
 
-    if (!accessToken || !phoneNumberId) {
+    // YCloud no usa token de Meta: manda la media por link, sin upload previo.
+    if (!phoneNumberId || (!accessToken && !isYCloud)) {
       return NextResponse.json({ error: 'Invalid configuration' }, { status: 500 })
     }
 
-    // 1. Upload to WhatsApp Media API
-    const whatsappFormData = new FormData()
-    whatsappFormData.append('file', file)
-    whatsappFormData.append('messaging_product', 'whatsapp')
-
-    const uploadRes = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/media`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
-      body: whatsappFormData
-    })
-
-    if (!uploadRes.ok) {
-      const error = await uploadRes.json()
-      console.error('WhatsApp Media Upload Error:', error)
-      return NextResponse.json({ error: 'Failed to upload media to WhatsApp' }, { status: 500 })
-    }
-
-    const uploadData = await uploadRes.json()
-    const mediaId = uploadData.id
-
-    // 2. Send Message with Media ID
     const recipientPhone = conversation.client_phone
     // Normalize phone
     let normalizedPhone = recipientPhone
@@ -98,41 +78,8 @@ export async function POST(request: NextRequest) {
     else if (file.type.startsWith('audio/')) messageType = 'audio'
     else if (file.type.startsWith('video/')) messageType = 'video'
 
-    const messageBody: any = {
-      messaging_product: 'whatsapp',
-      to: normalizedPhone,
-      type: messageType,
-    }
-
-    messageBody[messageType] = {
-      id: mediaId,
-      caption: caption || undefined
-    }
-    
-    // For documents, add filename
-    if (messageType === 'document') {
-        messageBody[messageType].filename = file.name
-    }
-
-    const sendRes = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(messageBody)
-    })
-
-    if (!sendRes.ok) {
-      const error = await sendRes.json()
-      console.error('WhatsApp Send Error:', error)
-      return NextResponse.json({ error: 'Failed to send media message' }, { status: 500 })
-    }
-
-    const sendData = await sendRes.json()
-    const whatsappMessageId = sendData.messages?.[0]?.id
-
-    // Guardar una copia permanente en nuestro storage (ya tenemos el archivo).
+    // Copia permanente en nuestro storage. Para Cloud API es solo un respaldo;
+    // para YCloud es OBLIGATORIA, porque el envío va por link público.
     let storedUrl: string | null = null
     try {
       const buffer = Buffer.from(await file.arrayBuffer())
@@ -144,6 +91,96 @@ export async function POST(request: NextRequest) {
       })
     } catch (e) {
       console.error('No se pudo guardar copia de la media saliente:', e)
+    }
+
+    let mediaId: string | null = null
+    let whatsappMessageId: string | undefined
+
+    if (isYCloud) {
+      if (!storedUrl) {
+        return NextResponse.json(
+          { error: 'No se pudo preparar el archivo para enviarlo' },
+          { status: 500 }
+        )
+      }
+
+      const provider = getWhatsAppProvider(integration)
+      if (!provider) {
+        return NextResponse.json({ error: 'Invalid configuration' }, { status: 500 })
+      }
+
+      const result = await provider.sendMedia(recipientPhone, {
+        url: storedUrl,
+        kind: messageType as 'image' | 'video' | 'audio' | 'document',
+        caption: caption || undefined,
+        filename: messageType === 'document' ? file.name : undefined,
+      })
+
+      if (!result.success) {
+        console.error('YCloud media send error:', result.error)
+        return NextResponse.json(
+          { error: result.error || 'Failed to send media message' },
+          { status: 500 }
+        )
+      }
+      whatsappMessageId = result.messageId
+    } else {
+      // 1. Upload to WhatsApp Media API
+      const whatsappFormData = new FormData()
+      whatsappFormData.append('file', file)
+      whatsappFormData.append('messaging_product', 'whatsapp')
+
+      const uploadRes = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/media`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: whatsappFormData
+      })
+
+      if (!uploadRes.ok) {
+        const error = await uploadRes.json()
+        console.error('WhatsApp Media Upload Error:', error)
+        return NextResponse.json({ error: 'Failed to upload media to WhatsApp' }, { status: 500 })
+      }
+
+      const uploadData = await uploadRes.json()
+      mediaId = uploadData.id
+
+      // 2. Send Message with Media ID
+      const messageBody: any = {
+        messaging_product: 'whatsapp',
+        to: normalizedPhone,
+        type: messageType,
+      }
+
+      messageBody[messageType] = {
+        id: mediaId,
+        caption: caption || undefined
+      }
+
+      // For documents, add filename
+      if (messageType === 'document') {
+          messageBody[messageType].filename = file.name
+      }
+
+      const sendRes = await fetch(`https://graph.facebook.com/${graphVersion}/${phoneNumberId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messageBody)
+      })
+
+      if (!sendRes.ok) {
+        const error = await sendRes.json()
+        console.error('WhatsApp Send Error:', error)
+        return NextResponse.json({ error: 'Failed to send media message' }, { status: 500 })
+      }
+
+      const sendData = await sendRes.json()
+      whatsappMessageId = sendData.messages?.[0]?.id
     }
 
     // 3. Save to Database

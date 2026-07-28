@@ -34,30 +34,51 @@ export async function POST(request: NextRequest) {
       .single()
 
     const accessToken = getWhatsAppToken(integration)
-    if (!accessToken) {
+    const isYCloud = integration?.config?.provider === "ycloud"
+    if (!accessToken && !isYCloud) {
       return NextResponse.json({ error: "Integración de WhatsApp no encontrada" }, { status: 404 })
     }
 
-    // 1. URL del media
-    const mediaUrlRes = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${mediaId}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    })
-    if (!mediaUrlRes.ok) {
-      return NextResponse.json({ error: "No se pudo obtener el sticker (puede haber expirado)" }, { status: 404 })
-    }
-    const mediaUrlData = await mediaUrlRes.json()
-    const mediaUrl = mediaUrlData.url
-    if (!mediaUrl) {
-      return NextResponse.json({ error: "Sticker no disponible" }, { status: 404 })
-    }
+    let contentType: string
+    let buffer: Buffer
 
-    // 2. Descargar bytes
-    const mediaRes = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
-    if (!mediaRes.ok) {
-      return NextResponse.json({ error: "No se pudo descargar el sticker" }, { status: 502 })
+    if (isYCloud) {
+      // Con YCloud no hay media-id: el sticker entrante ya quedó en el bucket,
+      // así que acá llega directamente su `stored_url`.
+      if (!/^https?:\/\//.test(mediaId)) {
+        return NextResponse.json(
+          { error: "Con YCloud hay que guardar el sticker desde su URL, no desde un media ID" },
+          { status: 400 }
+        )
+      }
+      const mediaRes = await fetch(mediaId)
+      if (!mediaRes.ok) {
+        return NextResponse.json({ error: "No se pudo descargar el sticker" }, { status: 502 })
+      }
+      contentType = mediaRes.headers.get("content-type") || "image/webp"
+      buffer = Buffer.from(await mediaRes.arrayBuffer())
+    } else {
+      // 1. URL del media
+      const mediaUrlRes = await fetch(`https://graph.facebook.com/${getGraphVersion()}/${mediaId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!mediaUrlRes.ok) {
+        return NextResponse.json({ error: "No se pudo obtener el sticker (puede haber expirado)" }, { status: 404 })
+      }
+      const mediaUrlData = await mediaUrlRes.json()
+      const mediaUrl = mediaUrlData.url
+      if (!mediaUrl) {
+        return NextResponse.json({ error: "Sticker no disponible" }, { status: 404 })
+      }
+
+      // 2. Descargar bytes
+      const mediaRes = await fetch(mediaUrl, { headers: { Authorization: `Bearer ${accessToken}` } })
+      if (!mediaRes.ok) {
+        return NextResponse.json({ error: "No se pudo descargar el sticker" }, { status: 502 })
+      }
+      contentType = mediaRes.headers.get("content-type") || "image/webp"
+      buffer = Buffer.from(await mediaRes.arrayBuffer())
     }
-    const contentType = mediaRes.headers.get("content-type") || "image/webp"
-    const buffer = Buffer.from(await mediaRes.arrayBuffer())
 
     // 3. Subir a Storage
     const timestamp = Date.now()

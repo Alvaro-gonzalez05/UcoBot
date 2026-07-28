@@ -1,0 +1,229 @@
+import { createHmac, timingSafeEqual } from 'crypto'
+
+/**
+ * Cliente de la API de YCloud (BSP oficial de WhatsApp).
+ *
+ * Modelo: TODOS los WABAs de los clientes cuelgan de UNA cuenta de YCloud
+ * (la de UcoBot). Por eso hay una sola API key a nivel plataforma y un solo
+ * webhook; el número se elige por el campo `from` al enviar y se resuelve por
+ * `to` al recibir.
+ *
+ * El alta la hace el cliente en la consola white-label (popup), y después
+ * UcoBot le pregunta a esta API qué números aparecieron para vincularlos.
+ */
+
+export interface YCloudPhoneNumber {
+  /** ID interno de YCloud para el número */
+  id: string
+  wabaId: string
+  /** Número en E.164 con "+" (ej: +5492611234567) */
+  phoneNumber: string
+  verifiedName: string | null
+  qualityRating: string | null
+  status: string | null
+}
+
+/** Base de la API. Con white-label puede ser api.tudominio.com. */
+export function getYCloudApiBase(): string {
+  return (process.env.YCLOUD_API_BASE || 'https://api.ycloud.com/v2').replace(/\/$/, '')
+}
+
+export function getYCloudKey(): string | null {
+  return process.env.YCLOUD_API_KEY?.trim() || null
+}
+
+export function isYCloudConfigured(): boolean {
+  return !!getYCloudKey()
+}
+
+/** URL de la consola donde el cliente hace el Embedded Signup (popup). */
+export function getYCloudOnboardingUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_YCLOUD_ONBOARDING_URL ||
+    'https://www.ycloud.com/console/#/app/dashboard/account'
+  )
+}
+
+async function ycloudFetch(path: string, init?: RequestInit): Promise<any> {
+  const key = getYCloudKey()
+  if (!key) throw new Error('YCLOUD_API_KEY no está configurada')
+
+  const res = await fetch(`${getYCloudApiBase()}${path}`, {
+    ...init,
+    headers: {
+      'X-API-Key': key,
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  })
+
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const msg = data?.message || data?.error?.message || `YCloud HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return data
+}
+
+/**
+ * Las listas de YCloud v2 vienen paginadas. El wrapper cambió entre versiones
+ * de la doc (`items` / `data`), así que aceptamos las dos formas.
+ */
+function unwrapList(data: any): any[] {
+  if (Array.isArray(data)) return data
+  if (Array.isArray(data?.items)) return data.items
+  if (Array.isArray(data?.data)) return data.data
+  return []
+}
+
+/** Todos los números registrados en la cuenta (todas las WABAs). */
+export async function listYCloudPhoneNumbers(): Promise<YCloudPhoneNumber[]> {
+  const out: YCloudPhoneNumber[] = []
+  // Paginado defensivo: con muchos clientes esto crece.
+  for (let page = 1; page <= 20; page++) {
+    const data = await ycloudFetch(`/whatsapp/phoneNumbers?page=${page}&limit=100`)
+    const items = unwrapList(data)
+    for (const p of items) {
+      out.push({
+        id: String(p.id ?? ''),
+        wabaId: String(p.wabaId ?? ''),
+        phoneNumber: String(p.phoneNumber ?? p.display ?? ''),
+        verifiedName: p.verifiedName ?? null,
+        qualityRating: p.qualityRating ?? null,
+        status: p.status ?? null,
+      })
+    }
+    if (items.length < 100) break
+  }
+  return out.filter((p) => p.phoneNumber)
+}
+
+/**
+ * Plantillas de la WABA, ya normalizadas a la forma de la Graph API de Meta
+ * (name / status / language / category / components), que es la que espera
+ * todo el front de plantillas. Así el cambio de proveedor es invisible.
+ */
+export async function listYCloudTemplates(wabaId: string): Promise<any[]> {
+  const out: any[] = []
+  for (let page = 1; page <= 20; page++) {
+    const data = await ycloudFetch(
+      `/whatsapp/templates?filter.wabaId=${encodeURIComponent(wabaId)}&page=${page}&limit=100`,
+    )
+    const items = unwrapList(data)
+    for (const t of items) {
+      out.push({
+        id: t.id || `ycloud_${t.name}_${t.language}`,
+        name: t.name,
+        status: t.status,
+        language: t.language,
+        category: t.category,
+        components: t.components || [],
+        quality_score: t.qualityScore ?? null,
+      })
+    }
+    if (items.length < 100) break
+  }
+  return out
+}
+
+export async function createYCloudTemplate(payload: Record<string, any>): Promise<any> {
+  return await ycloudFetch('/whatsapp/templates', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteYCloudTemplate(
+  wabaId: string,
+  name: string,
+  language?: string,
+): Promise<void> {
+  const qs = new URLSearchParams({ wabaId, name })
+  if (language) qs.set('language', language)
+  await ycloudFetch(`/whatsapp/templates?${qs.toString()}`, { method: 'DELETE' })
+}
+
+/* ------------------------------------------------------------------ */
+/* Normalización de números                                            */
+/* ------------------------------------------------------------------ */
+
+/** Solo dígitos. Es la forma en que el pipeline guarda los teléfonos. */
+export function digitsOnly(phone: string): string {
+  return String(phone || '').replace(/\D/g, '')
+}
+
+/**
+ * E.164 con "+" para la API de YCloud.
+ *
+ * OJO con Argentina: YCloud reenvía a la Cloud API de Meta, que espera el móvil
+ * SIN el 9 (549261… → 54261…). Se mantiene la misma regla que CloudApiProvider
+ * para no cambiar el comportamiento histórico.
+ */
+export function toE164(phone: string): string {
+  let d = digitsOnly(phone)
+  if (d.startsWith('549')) d = '54' + d.substring(3)
+  return `+${d}`
+}
+
+/* ------------------------------------------------------------------ */
+/* Firma del webhook                                                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Verifica el header `YCloud-Signature` (HMAC-SHA256 sobre `{timestamp}.{body}`).
+ *
+ * El header trae el timestamp y la firma; toleramos tanto el formato con claves
+ * (`t=...,v1=...`) como una lista suelta separada por comas.
+ */
+export function verifyYCloudSignature(
+  rawBody: string,
+  header: string | null,
+  secret: string,
+): boolean {
+  if (!header) return false
+
+  const parts = header.split(',').map((s) => s.trim())
+  let timestamp: string | null = null
+  const candidates: string[] = []
+
+  for (const part of parts) {
+    const [k, v] = part.includes('=') ? part.split('=', 2) : [null, part]
+    if (k === 't' || k === 'timestamp') timestamp = v
+    else if (v) candidates.push(v)
+  }
+
+  // Sin pares clave=valor: asumimos "timestamp,firma"
+  if (!timestamp && parts.length >= 2) {
+    timestamp = parts[0]
+    candidates.push(parts[1])
+  }
+  if (!timestamp || candidates.length === 0) return false
+
+  const expected = createHmac('sha256', secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex')
+
+  return candidates.some((c) => {
+    const a = Buffer.from(expected, 'utf8')
+    const b = Buffer.from(c.toLowerCase(), 'utf8')
+    return a.length === b.length && timingSafeEqual(a, b)
+  })
+}
+
+/* ------------------------------------------------------------------ */
+/* Envío                                                               */
+/* ------------------------------------------------------------------ */
+
+export interface YCloudSendBody {
+  from: string
+  to: string
+  type: string
+  [key: string]: any
+}
+
+export async function sendYCloudMessage(body: YCloudSendBody): Promise<{ id?: string }> {
+  return await ycloudFetch('/whatsapp/messages', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}

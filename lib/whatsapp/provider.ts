@@ -1,4 +1,5 @@
 import { getGraphVersion } from '@/lib/meta/credentials'
+import { sendYCloudMessage, toE164, isYCloudConfigured } from '@/lib/whatsapp/ycloud'
 
 /**
  * Capa de proveedores de WhatsApp.
@@ -9,6 +10,8 @@ import { getGraphVersion } from '@/lib/meta/credentials'
  * Proveedores:
  *  - 'cloud'     (default) WhatsApp Cloud API oficial de Meta. Paridad exacta
  *                con el comportamiento histórico (normalización 549→54 incluida).
+ *  - 'ycloud'    YCloud, BSP oficial de Meta. El WABA del cliente cuelga de la
+ *                solución de YCloud, así que NO hace falta app de Meta propia.
  *  - 'evolution' Evolution API (Baileys / WhatsApp Web NO oficial). Puente
  *                temporal mientras se resuelve el Tech Provider de Meta.
  *
@@ -30,7 +33,7 @@ export interface MediaInput {
 }
 
 export interface WhatsAppProvider {
-  readonly name: 'cloud' | 'evolution'
+  readonly name: 'cloud' | 'ycloud' | 'evolution'
   sendText(to: string, text: string, opts?: { replyToId?: string }): Promise<SendResult>
   sendMedia(to: string, media: MediaInput): Promise<SendResult>
 }
@@ -117,6 +120,53 @@ class CloudApiProvider implements WhatsAppProvider {
       return { success: true, messageId: data.messages?.[0]?.id }
     } catch {
       return { success: false, error: 'Network error' }
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* YCloud (BSP oficial de Meta)                                        */
+/* ------------------------------------------------------------------ */
+
+class YCloudProvider implements WhatsAppProvider {
+  readonly name = 'ycloud' as const
+
+  /** `from` = número del negocio en E.164 con "+" (lo exige la API de YCloud). */
+  constructor(private from: string) {}
+
+  async sendText(to: string, text: string, opts?: { replyToId?: string }): Promise<SendResult> {
+    try {
+      const body: any = {
+        from: this.from,
+        to: toE164(to),
+        type: 'text',
+        text: { body: text, preview_url: false },
+      }
+      // Cita al mensaje anterior (mismo concepto que context.message_id en Meta)
+      if (opts?.replyToId) body.context = { message_id: opts.replyToId }
+
+      const data = await sendYCloudMessage(body)
+      return { success: true, messageId: data?.id }
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'YCloud error' }
+    }
+  }
+
+  async sendMedia(to: string, media: MediaInput): Promise<SendResult> {
+    try {
+      const data = await sendYCloudMessage({
+        from: this.from,
+        to: toE164(to),
+        type: media.kind,
+        [media.kind]: {
+          link: media.url,
+          ...(media.caption && media.kind !== 'audio' ? { caption: media.caption } : {}),
+          ...(media.kind === 'document' && media.filename ? { filename: media.filename } : {}),
+        },
+      })
+      return { success: true, messageId: data?.id }
+    } catch (e: any) {
+      return { success: false, error: e?.message || 'YCloud error' }
     }
   }
 }
@@ -210,6 +260,13 @@ export function getEvolutionConfig(): { baseUrl: string; apiKey: string } | null
  */
 export function getWhatsAppProvider(integration: IntegrationLike): WhatsAppProvider | null {
   const cfg = integration?.config || {}
+
+  if (cfg.provider === 'ycloud') {
+    // `ycloud_from` se guarda al vincular el número (E.164 con "+").
+    const from = cfg.ycloud_from || (cfg.phone_number_id ? `+${cfg.phone_number_id}` : null)
+    if (!from || !isYCloudConfigured()) return null
+    return new YCloudProvider(from)
+  }
 
   if (cfg.provider === 'evolution') {
     const evo = getEvolutionConfig()

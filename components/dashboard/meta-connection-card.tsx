@@ -381,12 +381,194 @@ function EvolutionConnectDialog({
   )
 }
 
+/**
+ * Alta de WhatsApp vía YCloud (BSP oficial).
+ *
+ * El Embedded Signup corre en la consola white-label de YCloud (dominio propio),
+ * que es OTRO origen: no nos puede mandar un postMessage al terminar. Por eso el
+ * flujo es: abrir popup → detectar que lo cerraron (popup.closed sí se puede leer
+ * cross-origin) → preguntarle a YCloud qué números aparecieron → vincular.
+ */
+function YCloudConnectDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onSaved: () => void
+}) {
+  type YCloudNumber = {
+    phone_number: string
+    key: string
+    waba_id: string
+    verified_name: string | null
+    state: "free" | "mine"
+  }
+
+  const [numbers, setNumbers] = useState<YCloudNumber[]>([])
+  const [loading, setLoading] = useState(false)
+  const [linking, setLinking] = useState<string | null>(null)
+  const [checked, setChecked] = useState(false)
+  const [onboardingUrl, setOnboardingUrl] = useState<string | null>(null)
+
+  const loadNumbers = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/integrations/whatsapp/ycloud")
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || "No se pudieron listar los números")
+        return
+      }
+      setOnboardingUrl(json.onboarding_url)
+      setNumbers(json.numbers || [])
+      setChecked(true)
+    } catch {
+      toast.error("Error de red al consultar YCloud")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!open) {
+      setNumbers([])
+      setChecked(false)
+      return
+    }
+    loadNumbers()
+  }, [open])
+
+  const openSignup = () => {
+    if (!onboardingUrl) return
+    const popup = window.open(onboardingUrl, "ycloud-signup", "width=1100,height=780")
+    if (!popup) {
+      toast.error("El navegador bloqueó la ventana. Permití los popups y reintentá.")
+      return
+    }
+    // No podemos leer nada de adentro (otro origen), pero sí saber si la cerraron.
+    const timer = setInterval(() => {
+      if (popup.closed) {
+        clearInterval(timer)
+        loadNumbers()
+      }
+    }, 1000)
+  }
+
+  const link = async (phone: string) => {
+    setLinking(phone)
+    try {
+      const res = await fetch("/api/integrations/whatsapp/ycloud", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone_number: phone }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || "No se pudo vincular el número")
+        return
+      }
+      toast.success(`Número ${json.integration?.display_phone_number || phone} conectado`)
+      onSaved()
+      onOpenChange(false)
+    } catch {
+      toast.error("Error de red al vincular el número")
+    } finally {
+      setLinking(null)
+    }
+  }
+
+  const free = numbers.filter((n) => n.state === "free")
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Conectar WhatsApp Business</DialogTitle>
+          <DialogDescription>
+            Se abre el alta oficial de Meta. Vas a necesitar tu Facebook Business y un
+            número que no esté usándose en la app de WhatsApp.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <Button
+            onClick={openSignup}
+            disabled={!onboardingUrl || loading}
+            className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2"
+          >
+            <Link2 className="w-4 h-4" />
+            Dar de alta mi número
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">
+              cuando termines, elegí tu número
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Consultando números…
+            </div>
+          ) : free.length === 0 ? (
+            <div className="rounded-lg border border-border/50 bg-muted/40 p-4 text-center space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {checked
+                  ? "Todavía no aparece ningún número nuevo."
+                  : "Sin números disponibles."}
+              </p>
+              <Button variant="outline" size="sm" className="gap-2" onClick={loadNumbers}>
+                <RefreshCw className="w-3.5 h-3.5" />
+                Buscar de nuevo
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {free.map((n) => (
+                <button
+                  key={n.key}
+                  onClick={() => link(n.phone_number)}
+                  disabled={linking !== null}
+                  className="w-full flex items-center gap-3 rounded-xl border border-border/60 hover:border-[#D1F366] hover:bg-muted/50 p-3 text-left transition-colors disabled:opacity-60"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-500 flex items-center justify-center flex-shrink-0">
+                    <FaWhatsapp className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold truncate">{n.phone_number}</p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {n.verified_name || "Sin nombre verificado"}
+                    </p>
+                  </div>
+                  {linking === n.phone_number ? (
+                    <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                  ) : (
+                    <span className="text-xs font-semibold text-[#1C1C28] bg-[#D1F366] rounded-lg px-2 py-1 flex-shrink-0">
+                      Vincular
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionCardProps) {
   const [status, setStatus] = useState<IntegrationStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
   const [manualOpen, setManualOpen] = useState(false)
   const [evolutionOpen, setEvolutionOpen] = useState(false)
+  const [ycloudOpen, setYcloudOpen] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
 
   const fetchStatus = async () => {
@@ -597,7 +779,9 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
   }
 
   const handleConnect = () => {
-    if (platform === "whatsapp") return connectWhatsApp()
+    // WhatsApp entra por YCloud (BSP oficial): no requiere app de Meta propia.
+    // El Embedded Signup propio queda como opción secundaria.
+    if (platform === "whatsapp") return setYcloudOpen(true)
     if (platform === "messenger") return connectMessenger()
     return connectInstagram()
   }
@@ -715,6 +899,16 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
                   variant="outline"
                   size="sm"
                   className="w-full text-xs gap-2"
+                  onClick={connectWhatsApp}
+                  disabled={connecting}
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  Conectar con mi propia app de Meta
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs gap-2"
                   onClick={() => setManualOpen(true)}
                 >
                   <Settings2 className="w-3.5 h-3.5" />
@@ -746,6 +940,13 @@ export function MetaConnectionCard({ platform, onStatusChange }: MetaConnectionC
         <EvolutionConnectDialog
           open={evolutionOpen}
           onOpenChange={setEvolutionOpen}
+          onSaved={fetchStatus}
+        />
+      )}
+      {platform === "whatsapp" && (
+        <YCloudConnectDialog
+          open={ycloudOpen}
+          onOpenChange={setYcloudOpen}
           onSaved={fetchStatus}
         />
       )}
