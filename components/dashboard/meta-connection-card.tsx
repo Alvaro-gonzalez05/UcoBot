@@ -479,7 +479,9 @@ function YCloudConnectDialog({
     }
   }
 
-  const free = numbers.filter((n) => n.state === "free")
+  // Se listan los libres Y el que ya es de esta cuenta: si lo desconectaron,
+  // tiene que poder volver a vincularse desde acá.
+  const selectable = numbers.filter((n) => n.state === "free" || n.state === "mine")
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -487,39 +489,22 @@ function YCloudConnectDialog({
         <DialogHeader>
           <DialogTitle>Conectar WhatsApp Business</DialogTitle>
           <DialogDescription>
-            Se abre el alta oficial de Meta. Vas a necesitar tu Facebook Business y un
-            número que no esté usándose en la app de WhatsApp.
+            Elegí el número que querés usar. Si todavía no tenés ninguno dado de alta en
+            Meta, primero creá uno con el botón de abajo.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <Button
-            onClick={openSignup}
-            disabled={!onboardingUrl || loading}
-            className="w-full bg-[#D1F366] text-[#1C1C28] hover:bg-[#B3D93C] font-bold rounded-xl gap-2"
-          >
-            <Link2 className="w-4 h-4" />
-            Dar de alta mi número
-          </Button>
-
-          <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">
-              cuando termines, elegí tu número
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               Consultando números…
             </div>
-          ) : free.length === 0 ? (
+          ) : selectable.length === 0 ? (
             <div className="rounded-lg border border-border/50 bg-muted/40 p-4 text-center space-y-2">
               <p className="text-sm text-muted-foreground">
                 {checked
-                  ? "Todavía no aparece ningún número nuevo."
+                  ? "Todavía no aparece ningún número. Dalo de alta y volvé a buscar."
                   : "Sin números disponibles."}
               </p>
               <Button variant="outline" size="sm" className="gap-2" onClick={loadNumbers}>
@@ -529,7 +514,7 @@ function YCloudConnectDialog({
             </div>
           ) : (
             <div className="space-y-2">
-              {free.map((n) => (
+              {selectable.map((n) => (
                 <button
                   key={n.key}
                   onClick={() => link(n.phone_number)}
@@ -549,13 +534,34 @@ function YCloudConnectDialog({
                     <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
                   ) : (
                     <span className="text-xs font-semibold text-[#1C1C28] bg-[#D1F366] rounded-lg px-2 py-1 flex-shrink-0">
-                      Vincular
+                      {n.state === "mine" ? "Reconectar" : "Vincular"}
                     </span>
                   )}
                 </button>
               ))}
             </div>
           )}
+
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">¿no está tu número?</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={openSignup}
+            disabled={!onboardingUrl || loading}
+            className="w-full gap-2"
+          >
+            <Link2 className="w-4 h-4" />
+            Dar de alta un número nuevo
+          </Button>
+          <p className="text-xs text-muted-foreground text-center">
+            Se abre el alta oficial de Meta en otra ventana. Necesitás tu Facebook
+            Business y un número que no esté en uso en la app de WhatsApp. Al cerrarla,
+            el número aparece acá solo.
+          </p>
         </div>
       </DialogContent>
     </Dialog>

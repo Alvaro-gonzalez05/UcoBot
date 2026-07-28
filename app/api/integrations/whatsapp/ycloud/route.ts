@@ -19,7 +19,13 @@ import {
  * POST → vincula un número a la cuenta del usuario
  */
 
-/** Números ya reclamados por integraciones ycloud, con su dueño. */
+/**
+ * Números ya reclamados por integraciones ycloud ACTIVAS, con su dueño.
+ *
+ * El filtro por is_active es clave: al desconectar, la fila queda inactiva (para
+ * no perder el historial de conversaciones). Sin este filtro el número seguía
+ * figurando como reclamado y no se podía volver a vincular nunca más.
+ */
 async function claimedNumbers(): Promise<Map<string, string>> {
   const admin = createAdminClient()
   const { data } = await admin
@@ -27,6 +33,7 @@ async function claimedNumbers(): Promise<Map<string, string>> {
     .select('user_id, config')
     .eq('platform', 'whatsapp')
     .eq('config->>provider', 'ycloud')
+    .eq('is_active', true)
 
   const map = new Map<string, string>()
   for (const row of data || []) {
