@@ -172,7 +172,7 @@ export async function listYCloudWebhookEndpoints(): Promise<any[]> {
 export async function registerYCloudPhoneNumber(
   wabaId: string,
   candidates: string[],
-): Promise<{ ok: boolean; usedId?: string; error?: string }> {
+): Promise<{ ok: boolean; usedId?: string; error?: string; skipped?: boolean; reason?: string }> {
   let lastError = 'Sin identificadores para registrar'
 
   for (const id of candidates.filter(Boolean)) {
@@ -183,7 +183,17 @@ export async function registerYCloudPhoneNumber(
       )
       return { ok: true, usedId: id }
     } catch (e: any) {
-      lastError = e?.message || 'Error desconocido'
+      const msg = e?.message || 'Error desconocido'
+
+      // Los números de coexistencia (SMB) NO se registran: YCloud responde
+      // "Register endpoint is not available for SMB businesses". No es un fallo,
+      // es que el paso no aplica — se corta acá para no reintentar con los otros
+      // identificadores ni ensuciar los logs en cada vinculación.
+      if (/not available for SMB/i.test(msg)) {
+        return { ok: true, skipped: true, reason: 'coexistencia (no requiere registro)' }
+      }
+
+      lastError = msg
     }
   }
 

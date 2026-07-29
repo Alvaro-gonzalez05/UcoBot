@@ -178,14 +178,28 @@ export async function POST(request: NextRequest) {
     // Llegan UNA SOLA VEZ, a los minutos del alta por coexistencia, y el historial
     // viene en tandas grandes. Acá solo se estacionan y se responde 200 al toque:
     // procesarlos en línea haría que YCloud reintente por timeout.
-    if (type === 'whatsapp.smb.history' || type === 'whatsapp.smb.app.state.sync') {
+    // El HISTORIAL ya no se maneja acá: tiene su propio endpoint en edge runtime
+    // (/api/whatsapp/ycloud/history). Convivir con esta ruta hacía que la ráfaga
+    // de miles de eventos consumiera los slots de concurrencia de Node y tirara
+    // abajo el resto de la app. Si igual llega alguno (endpoint viejo todavía
+    // suscrito), se acepta para no perderlo.
+    if (type === 'whatsapp.smb.history') {
       try {
         await stageSyncChunk(type, body)
       } catch (e) {
-        // 500 A PROPÓSITO: el historial llega UNA sola vez. Si respondemos 200 sin
-        // haber guardado, YCloud lo da por entregado y ese mensaje se pierde sin
-        // vuelta atrás. Con el 500 lo reintenta.
-        console.error('[YCloud sync] no se pudo estacionar el chunk:', e)
+        console.error('[YCloud sync] historial por la ruta vieja, falló:', e)
+        return NextResponse.json({ error: 'staging failed' }, { status: 500 })
+      }
+      return NextResponse.json({ ok: true })
+    }
+
+    // Contactos: volumen bajo (unas pocas tandas por alta) y además llega cada vez
+    // que el dueño toca la agenda del celular. Se queda acá.
+    if (type === 'whatsapp.smb.app.state.sync') {
+      try {
+        await stageSyncChunk(type, body)
+      } catch (e) {
+        console.error('[YCloud sync] no se pudo estacionar la tanda de contactos:', e)
         return NextResponse.json({ error: 'staging failed' }, { status: 500 })
       }
       return NextResponse.json({ ok: true })

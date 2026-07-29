@@ -394,6 +394,16 @@ export async function POST(_request: NextRequest) {
     })
 
     if (claimError) throw new Error(`no se pudo reclamar el lote: ${claimError.message}`)
+    // PURGA: una vez volcado a `messages`, el payload crudo no sirve para nada y
+    // se acumula rápido (llegó a 28.365 filas y 32 MB con una sola importación).
+    // Se borran los ya procesados de más de 6 h; el margen deja tiempo para
+    // diagnosticar si algo salió mal recién.
+    await admin
+      .from('whatsapp_sync_chunks')
+      .delete()
+      .eq('status', 'done')
+      .lt('processed_at', new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString())
+
     if (!chunks || chunks.length === 0) {
       return NextResponse.json({ ok: true, processed: 0 })
     }
