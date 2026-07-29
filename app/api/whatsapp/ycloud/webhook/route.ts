@@ -148,6 +148,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true })
     }
 
+    // ESTADO DE ENTREGA: el tilde / doble tilde / doble tilde azul de lo que
+    // mandamos nosotros. La cuenta ya estaba suscrita a este evento; hasta ahora
+    // se descartaba junto con el resto.
+    if (type === 'whatsapp.message.updated') {
+      await handleStatusUpdate(body.whatsappMessage).catch((e) =>
+        console.error('[YCloud status] error:', e),
+      )
+      return NextResponse.json({ ok: true })
+    }
+
     if (type !== 'whatsapp.inbound_message.received') {
       return NextResponse.json({ ok: true })
     }
@@ -490,4 +500,44 @@ async function handlePhoneEcho(msg: any) {
       last_message_at: new Date().toISOString(),
     })
     .eq('id', conversationId)
+}
+
+/**
+ * Estado de entrega de un mensaje que mandamos nosotros: el tilde, el doble
+ * tilde y el doble tilde azul.
+ *
+ * Estados de YCloud: accepted → sent → delivered → read, más `failed`.
+ *
+ * Se busca por los DOS identificadores porque no siempre guardamos el mismo: lo
+ * que manda UcoBot por API queda con el id de YCloud, y lo que sale del celular
+ * (coexistencia) con el wamid de WhatsApp.
+ *
+ * El orden de llegada NO está garantizado, así que el avance lo resuelve
+ * apply_whatsapp_delivery_status comparando rangos: un `delivered` demorado no
+ * puede pisar un `read` que ya llegó.
+ */
+async function handleStatusUpdate(msg: any) {
+  const status: string | null = msg?.status || null
+  if (!status) return
+
+  // 'accepted' es solo el acuse de YCloud de que tomó el pedido; no dice nada
+  // sobre WhatsApp todavía y haría parpadear el tilde sin motivo.
+  if (status === 'accepted') return
+
+  const ids = [msg?.id, msg?.wamid].filter(Boolean) as string[]
+  if (ids.length === 0) return
+
+  const admin = createAdminClient()
+  for (const id of ids) {
+    const { data, error } = await admin.rpc('apply_whatsapp_delivery_status', {
+      p_wamid: id,
+      p_status: status,
+    })
+    if (error) {
+      console.error('[YCloud status] no se pudo aplicar:', error.message)
+      return
+    }
+    // Encontrado por el primer identificador: no hace falta probar el otro.
+    if ((data as number) > 0) return
+  }
 }

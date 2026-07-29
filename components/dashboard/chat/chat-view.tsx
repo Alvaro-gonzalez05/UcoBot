@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy, MessageSquarePlus, Image as ImageIcon, Video, User, Heart, Ban, type LucideIcon } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy, MessageSquarePlus, Image as ImageIcon, Video, User, Heart, Ban, Clock, type LucideIcon } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -129,6 +129,8 @@ interface Conversation {
   // vista previa con ícono en vez del placeholder entre corchetes.
   last_message_kind?: string // Virtual field
   last_message_from?: string // Virtual field
+  last_message_status?: string | null // Virtual field
+  last_message_at_real?: string // Virtual field
   paused_until?: string | null
   needs_attention?: boolean
   in_review?: boolean
@@ -144,6 +146,69 @@ interface Message {
   message_type: string
   metadata?: any
   is_read?: boolean
+  // Estado de lo que MANDAMOS nosotros, según WhatsApp. Distinto de `is_read`,
+  // que dice si el operador leyó lo que mandó el cliente.
+  delivery_status?: 'accepted' | 'sent' | 'delivered' | 'read' | 'failed' | null
+}
+
+/**
+ * Tilde de estado de un mensaje saliente, como en WhatsApp.
+ *
+ * Reloj = todavía sin confirmación, un tilde = llegó a WhatsApp, doble = llegó al
+ * celular, doble azul = lo leyeron.
+ *
+ * El visto solo aparece si esa persona tiene activadas las confirmaciones de
+ * lectura. Si las apagó, WhatsApp nunca manda `read` y el mensaje se queda en
+ * doble tilde gris para siempre: es su privacidad, no un error nuestro.
+ */
+function DeliveryTick({
+  status,
+  createdAt,
+  className,
+}: {
+  status?: string | null
+  createdAt?: string
+  className?: string
+}) {
+  if (status === 'failed') {
+    return (
+      <CircleAlert
+        className={cn("h-3.5 w-3.5 shrink-0 text-red-500", className)}
+        aria-label="No se pudo entregar"
+      />
+    )
+  }
+
+  if (!status || status === 'accepted') {
+    // Los mensajes viejos (historial importado, o los que salieron del celular
+    // antes de que existiera esto) nunca van a recibir un estado. Dejarles un
+    // reloj para siempre sería peor que no mostrar nada, así que a los minutos
+    // el indicador desaparece en vez de mentir.
+    const age = createdAt ? Date.now() - new Date(createdAt).getTime() : 0
+    if (age > 5 * 60 * 1000) return null
+
+    return (
+      <Clock
+        className={cn("h-3 w-3 shrink-0 opacity-50", className)}
+        aria-label="Enviando"
+      />
+    )
+  }
+
+  if (status === 'sent') {
+    return <Check className={cn("h-3.5 w-3.5 shrink-0 opacity-60", className)} aria-label="Enviado" />
+  }
+
+  return (
+    <CheckCheck
+      className={cn(
+        "h-3.5 w-3.5 shrink-0",
+        status === 'read' ? "text-sky-500" : "opacity-60",
+        className
+      )}
+      aria-label={status === 'read' ? "Leído" : "Entregado"}
+    />
+  )
 }
 
 /**
@@ -173,11 +238,15 @@ function ConversationPreview({
   content,
   kind,
   fromMe,
+  status,
+  sentAt,
   className,
 }: {
   content?: string
   kind?: string
   fromMe?: boolean
+  status?: string | null
+  sentAt?: string
   className?: string
 }) {
   const entry = kind ? PREVIEW_KINDS[kind] : undefined
@@ -190,7 +259,7 @@ function ConversationPreview({
 
   return (
     <p className={cn("flex items-center gap-1 truncate", className)}>
-      {fromMe && <Check className="h-3 w-3 shrink-0 opacity-60" aria-hidden />}
+      {fromMe && <DeliveryTick status={status} createdAt={sentAt} className="h-3 w-3" />}
       {Icon && <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />}
       <span className="truncate">{text}</span>
     </p>
@@ -947,7 +1016,7 @@ export function ChatView({ userId }: ChatViewProps) {
             // no-leído no sube y el chat pausado no se pone azul hasta refrescar.
             const { data: lastMsgRows } = await supabase
               .from("messages")
-              .select("content, created_at, message_type, sender_type, metadata")
+              .select("content, created_at, message_type, sender_type, metadata, delivery_status")
               .eq("conversation_id", payload.new.id)
               .order("created_at", { ascending: false })
               .limit(1)
@@ -984,6 +1053,8 @@ export function ChatView({ userId }: ChatViewProps) {
                       last_message: lastContent ?? c.last_message,
                       last_message_kind: lastKind ?? c.last_message_kind,
                       last_message_from: lastMsg?.sender_type ?? c.last_message_from,
+                      last_message_status: lastMsg?.delivery_status ?? c.last_message_status,
+                      last_message_at_real: lastMsg?.created_at ?? c.last_message_at_real,
                       unread_count: unreadCount,
                     }
                   : c
@@ -2430,6 +2501,8 @@ export function ChatView({ userId }: ChatViewProps) {
                         content={conv.last_message}
                         kind={conv.last_message_kind}
                         fromMe={conv.last_message_from === 'bot'}
+                        status={conv.last_message_status}
+                        sentAt={conv.last_message_at_real}
                         className={cn(
                           "text-sm max-w-[180px]",
                           (showUnread || needsAttention) ? "font-medium text-foreground" : "text-muted-foreground"
@@ -2824,7 +2897,9 @@ export function ChatView({ userId }: ChatViewProps) {
                           isSticker ? "text-muted-foreground" : isClient ? "text-muted-foreground" : "text-primary-foreground/70"
                         )}>
                           {format(new Date(msg.created_at), "HH:mm")}
-                          {!isClient && <CheckCheck className="h-3 w-3" />}
+                          {!isClient && (
+                            <DeliveryTick status={msg.delivery_status} createdAt={msg.created_at} />
+                          )}
                         </div>
                       </div>
                       
