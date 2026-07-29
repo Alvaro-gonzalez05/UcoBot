@@ -525,19 +525,46 @@ async function handleStatusUpdate(msg: any) {
   if (status === 'accepted') return
 
   const ids = [msg?.id, msg?.wamid].filter(Boolean) as string[]
-  if (ids.length === 0) return
+  if (ids.length === 0) {
+    console.error('[YCloud status] evento sin id ni wamid, se descarta:', status)
+    return
+  }
 
   const admin = createAdminClient()
-  for (const id of ids) {
-    const { data, error } = await admin.rpc('apply_whatsapp_delivery_status', {
-      p_wamid: id,
-      p_status: status,
-    })
-    if (error) {
-      console.error('[YCloud status] no se pudo aplicar:', error.message)
-      return
+
+  const applyOnce = async (): Promise<number> => {
+    for (const id of ids) {
+      const { data, error } = await admin.rpc('apply_whatsapp_delivery_status', {
+        p_wamid: id,
+        p_status: status,
+      })
+      if (error) {
+        // Antes se cortaba acá y el estado se perdía sin dejar rastro claro.
+        console.error(`[YCloud status] RPC falló para ${id} (${status}):`, error.message)
+        continue
+      }
+      if ((data as number) > 0) return data as number
     }
-    // Encontrado por el primer identificador: no hace falta probar el otro.
-    if ((data as number) > 0) return
+    return 0
+  }
+
+  let applied = await applyOnce()
+
+  // CARRERA: WhatsApp puede confirmar el estado ANTES de que terminemos de guardar
+  // el mensaje que acabamos de mandar. En ese caso el UPDATE no encuentra la fila
+  // y el tilde queda para siempre en "reloj". Se reintenta una vez, corto.
+  if (applied === 0) {
+    await new Promise((r) => setTimeout(r, 1500))
+    applied = await applyOnce()
+  }
+
+  if (applied === 0) {
+    // Si igual no matchea es un mensaje que no mandamos nosotros (o se borró):
+    // se loguea con el id para poder rastrearlo, nunca se descarta en silencio.
+    console.warn(
+      `[YCloud status] "${status}" sin mensaje que actualizar. ids probados: ${ids.join(', ')}`,
+    )
+  } else {
+    console.log(`[YCloud status] ${status} aplicado (${applied} mensaje/s)`)
   }
 }
