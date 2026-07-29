@@ -5,6 +5,7 @@ import {
   listYCloudTemplates,
   createYCloudTemplate,
   deleteYCloudTemplate,
+  getIntegrationKey,
 } from '@/lib/whatsapp/ycloud'
 
 /**
@@ -45,7 +46,10 @@ async function getWhatsAppContext() {
     }
   }
 
-  return { wabaId, token, isYCloud, userId: data.user.id }
+  // Credencial de la cuenta de YCloud del cliente (cae a la de plataforma).
+  const ycloudKey = getIntegrationKey(integration)
+
+  return { wabaId, token, isYCloud, ycloudKey, userId: data.user.id }
 }
 
 function buildComponents(body: any) {
@@ -85,7 +89,7 @@ export async function GET() {
 
   if (ctx.isYCloud) {
     try {
-      const templates = await listYCloudTemplates(ctx.wabaId)
+      const templates = await listYCloudTemplates(ctx.wabaId, ctx.ycloudKey)
       return NextResponse.json({ success: true, templates })
     } catch (error: any) {
       console.error('Error fetching templates from YCloud:', error)
@@ -147,7 +151,10 @@ export async function POST(request: NextRequest) {
 
     if (ctx.isYCloud) {
       try {
-        const template = await createYCloudTemplate({ ...payload, wabaId: ctx.wabaId })
+        const template = await createYCloudTemplate(
+          { ...payload, wabaId: ctx.wabaId },
+          ctx.ycloudKey,
+        )
         return NextResponse.json({ success: true, template })
       } catch (error: any) {
         console.error('Error creating template in YCloud:', error)
@@ -263,7 +270,7 @@ export async function DELETE(request: NextRequest) {
 
   if (ctx.isYCloud) {
     try {
-      await deleteYCloudTemplate(ctx.wabaId, name)
+      await deleteYCloudTemplate(ctx.wabaId, name, undefined, ctx.ycloudKey)
       return NextResponse.json({ success: true })
     } catch (error: any) {
       console.error('Error deleting template in YCloud:', error)

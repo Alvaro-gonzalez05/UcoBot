@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { getAccountContext } from '@/lib/account'
-import { registerYCloudPhoneNumber, isYCloudConfigured } from '@/lib/whatsapp/ycloud'
+import { registerYCloudPhoneNumber, getIntegrationKey } from '@/lib/whatsapp/ycloud'
 
 /**
  * Fuerza el registro del número contra la Cloud API.
@@ -18,13 +18,6 @@ export async function POST(_request: NextRequest) {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
-    if (!isYCloudConfigured()) {
-      return NextResponse.json(
-        { error: 'YCloud no está configurado en el servidor (YCLOUD_API_KEY)' },
-        { status: 500 },
-      )
-    }
 
     const ctx = await getAccountContext()
     const ownerId = ctx?.ownerId || user.id
@@ -50,12 +43,20 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({ error: 'La integración no tiene WABA guardada' }, { status: 400 })
     }
 
+    const apiKey = getIntegrationKey(integration)
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Esta cuenta no tiene una API key de YCloud cargada' },
+        { status: 400 },
+      )
+    }
+
     // YCloud acepta su id interno del número o el E.164: se prueban ambos.
-    const result = await registerYCloudPhoneNumber(wabaId, [
-      config.ycloud_phone_id,
-      config.ycloud_from,
-      config.phone_number_id,
-    ])
+    const result = await registerYCloudPhoneNumber(
+      wabaId,
+      [config.ycloud_phone_id, config.ycloud_from, config.phone_number_id],
+      apiKey,
+    )
 
     if (!result.ok) {
       console.error('[YCloud register] falló:', result.error)

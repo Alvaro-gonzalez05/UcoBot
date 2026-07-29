@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient, createAdminClient } from "@/lib/supabase/server"
 import { getWhatsAppToken, getGraphVersion } from "@/lib/meta/credentials"
-import { sendYCloudMessage, toE164 } from "@/lib/whatsapp/ycloud"
+import { sendYCloudMessage, toE164, getIntegrationKey } from "@/lib/whatsapp/ycloud"
 
 // Reenvía un sticker guardado a una conversación de WhatsApp
 export async function POST(request: NextRequest) {
@@ -83,12 +83,15 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        const sent = await sendYCloudMessage({
-          from: integration.config.ycloud_from,
-          to: toE164(conversation.client_phone),
-          type: "sticker",
-          sticker: { link: pub.publicUrl },
-        })
+        const sent = await sendYCloudMessage(
+          {
+            from: integration.config.ycloud_from,
+            to: toE164(conversation.client_phone),
+            type: "sticker",
+            sticker: { link: pub.publicUrl },
+          },
+          getIntegrationKey(integration),
+        )
         return NextResponse.json({ success: true, whatsapp_message_id: sent?.id })
       } catch (e: any) {
         console.error("YCloud Send Error (sticker):", e)

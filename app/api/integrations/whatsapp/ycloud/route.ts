@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import {
   listYCloudPhoneNumbers,
-  isYCloudConfigured,
   getYCloudOnboardingUrl,
   registerYCloudPhoneNumber,
+  ensureYCloudWebhook,
+  getIntegrationKey,
   digitsOnly,
 } from '@/lib/whatsapp/ycloud'
 
@@ -27,6 +28,25 @@ import {
  * no perder el historial de conversaciones). Sin este filtro el número seguía
  * figurando como reclamado y no se podía volver a vincular nunca más.
  */
+/**
+ * API key de YCloud de la cuenta, ya guardada de una vinculación anterior.
+ *
+ * Cae a la credencial de plataforma (YCLOUD_API_KEY) para no romper las
+ * integraciones que se hicieron cuando todos los números colgaban de una sola
+ * cuenta de YCloud.
+ */
+async function getUserYCloudKey(userId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('integrations')
+    .select('config')
+    .eq('user_id', userId)
+    .eq('platform', 'whatsapp')
+    .maybeSingle()
+
+  return getIntegrationKey(data)
+}
+
 async function claimedNumbers(): Promise<Map<string, string>> {
   const admin = createAdminClient()
   const { data } = await admin
@@ -50,14 +70,21 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    if (!isYCloudConfigured()) {
-      return NextResponse.json(
-        { error: 'YCloud no está configurado en el servidor (YCLOUD_API_KEY)' },
-        { status: 500 },
-      )
+    // Credencial de ESTE cliente. Sin ella no hay nada que listar: el front
+    // muestra el campo para pegarla y el instructivo de dónde sacarla.
+    const apiKey = await getUserYCloudKey(user.id)
+    if (!apiKey) {
+      return NextResponse.json({
+        needs_api_key: true,
+        onboarding_url: getYCloudOnboardingUrl(),
+        numbers: [],
+      })
     }
 
-    const [numbers, claimed] = await Promise.all([listYCloudPhoneNumbers(), claimedNumbers()])
+    const [numbers, claimed] = await Promise.all([
+      listYCloudPhoneNumbers(apiKey),
+      claimedNumbers(),
+    ])
 
     const available = numbers
       .map((n) => {
@@ -95,21 +122,26 @@ export async function POST(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    if (!isYCloudConfigured()) {
-      return NextResponse.json(
-        { error: 'YCloud no está configurado en el servidor (YCLOUD_API_KEY)' },
-        { status: 500 },
-      )
-    }
-
     const body = await request.json()
     const requested = digitsOnly(String(body.phone_number || ''))
     if (!requested) {
       return NextResponse.json({ error: 'Falta el número a vincular' }, { status: 400 })
     }
 
+    // La key puede venir en este mismo pedido (alta nueva) o estar ya guardada
+    // de una vinculación anterior.
+    const provided = typeof body.api_key === 'string' ? body.api_key.trim() : ''
+    const apiKey = provided || (await getUserYCloudKey(user.id))
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Falta la API key de tu cuenta de YCloud' },
+        { status: 400 },
+      )
+    }
+
     // Validar contra YCloud: nunca confiar en el número que manda el cliente.
-    const numbers = await listYCloudPhoneNumbers()
+    // De paso valida la key: si es inválida, esto tira error acá y no se guarda nada.
+    const numbers = await listYCloudPhoneNumbers(apiKey)
     const match = numbers.find((n) => digitsOnly(n.phoneNumber) === requested)
     if (!match) {
       return NextResponse.json(
@@ -130,6 +162,15 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient()
 
+    // El webhook se configura por API en la cuenta del cliente. Es el paso que más
+    // se rompe a mano y el que produce el síntoma más confuso (envía pero no
+    // recibe), así que no se deja librado a que lo pegue bien en la consola.
+    const origin = (process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin).replace(/\/+$/, '')
+    const webhook = await ensureYCloudWebhook(apiKey, `${origin}/api/whatsapp/ycloud/webhook`)
+    if (webhook.error) {
+      console.warn('[YCloud] no se pudo configurar el webhook:', webhook.error)
+    }
+
     const config = {
       provider: 'ycloud',
       // El pipeline resuelve la integración por phone_number_id: para YCloud es
@@ -142,6 +183,10 @@ export async function POST(request: NextRequest) {
       verified_name: match.verifiedName,
       connection_method: 'ycloud',
       connected_at: new Date().toISOString(),
+      // Credenciales de la cuenta de YCloud de este cliente. Sin esto habría que
+      // volver al modelo de una sola cuenta para toda la plataforma.
+      ycloud_api_key: apiKey,
+      ...(webhook.secret ? { ycloud_webhook_secret: webhook.secret } : {}),
     }
 
     const { error: upsertError } = await admin
@@ -168,17 +213,22 @@ export async function POST(request: NextRequest) {
     // debería pasar solo, pero no siempre ocurre, así que lo forzamos al vincular.
     // Es idempotente y no bloquea: si falla, la integración queda igual y se puede
     // reintentar desde /api/integrations/whatsapp/ycloud/register.
-    const registration = await registerYCloudPhoneNumber(match.wabaId, [
-      match.id,
-      match.phoneNumber,
-      requested,
-    ])
+    const registration = await registerYCloudPhoneNumber(
+      match.wabaId,
+      [match.id, match.phoneNumber, requested],
+      apiKey,
+    )
     if (!registration.ok) {
       console.warn('[YCloud] número vinculado pero SIN registrar:', registration.error)
     }
 
     return NextResponse.json({
       success: true,
+      webhook_ok: !webhook.error,
+      webhook_error: webhook.error,
+      // Cuando el endpoint ya existía, YCloud no devuelve el secret al listarlo:
+      // hay que copiarlo de la consola para poder validar la firma.
+      webhook_secret_missing: !webhook.error && !webhook.secret && !webhook.created,
       registered: registration.ok,
       registration_error: registration.ok ? undefined : registration.error,
       integration: {

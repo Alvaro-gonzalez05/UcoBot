@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getWhatsAppToken, getGraphVersion } from '@/lib/meta/credentials'
-import { listYCloudTemplates } from '@/lib/whatsapp/ycloud'
+import { listYCloudTemplates, getIntegrationKey } from '@/lib/whatsapp/ycloud'
 
 // Endpoint para obtener plantillas de mensaje desde las APIs de Meta y proveedores externos
 export async function GET(request: NextRequest) {
@@ -135,7 +135,10 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
         return []
       }
       try {
-        const ycloudTemplates = await listYCloudTemplates(wabaId)
+        const ycloudTemplates = await listYCloudTemplates(
+          wabaId,
+          getIntegrationKey({ config: integrationConfig }),
+        )
         return bots.flatMap((bot: any) =>
           ycloudTemplates.map((template: any) => ({
             id: template.id,

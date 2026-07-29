@@ -3,7 +3,7 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import {
   listYCloudPhoneNumbers,
   listYCloudWebhookEndpoints,
-  isYCloudConfigured,
+  getIntegrationKey,
   businessPhoneVariants,
   digitsOnly,
 } from '@/lib/whatsapp/ycloud'
@@ -36,13 +36,6 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    if (!isYCloudConfigured()) {
-      return NextResponse.json(
-        { error: 'YCloud no está configurado en el servidor (YCLOUD_API_KEY)' },
-        { status: 500 },
-      )
-    }
-
     const admin = createAdminClient()
     const { data: integration } = await admin
       .from('integrations')
@@ -54,10 +47,19 @@ export async function GET(request: NextRequest) {
     const cfg = (integration?.config as any) || {}
     const savedPhone = digitsOnly(cfg.phone_number_id || '')
 
+    // Credencial de la cuenta de YCloud de ESTE cliente.
+    const apiKey = getIntegrationKey(integration)
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Esta cuenta todavía no tiene una API key de YCloud cargada' },
+        { status: 400 },
+      )
+    }
+
     // Lo que dice YCloud hoy sobre la cuenta.
     const [numbers, endpoints] = await Promise.all([
-      listYCloudPhoneNumbers().catch((e) => ({ error: e?.message } as any)),
-      listYCloudWebhookEndpoints().catch((e) => ({ error: e?.message } as any)),
+      listYCloudPhoneNumbers(apiKey).catch((e) => ({ error: e?.message } as any)),
+      listYCloudWebhookEndpoints(apiKey).catch((e) => ({ error: e?.message } as any)),
     ])
 
     const numberList = Array.isArray(numbers) ? numbers : []

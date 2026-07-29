@@ -83,6 +83,50 @@ async function resolveIntegrationCached(
   return value
 }
 
+/**
+ * Número del negocio dueño del evento, sea cual sea el tipo.
+ *
+ * En un entrante el negocio es el destinatario; en un saliente (echo, cambio de
+ * estado) es el remitente. Solo se usa para saber con qué secreto validar.
+ */
+function businessPhoneOfEvent(body: any): string {
+  const inbound = body?.whatsappInboundMessage
+  if (inbound?.to) return digitsOnly(inbound.to)
+
+  const outbound = body?.whatsappMessage
+  if (outbound?.from) return digitsOnly(outbound.from)
+
+  const sync = body?.whatsappSmbAppStateSync ?? body?.appStateSync
+  if (sync?.phoneNumber) return digitsOnly(sync.phoneNumber)
+
+  return ''
+}
+
+/**
+ * Secreto de firma de la cuenta a la que pertenece el evento.
+ *
+ * Cada cliente tiene su propia cuenta de YCloud, así que cada uno firma con un
+ * secreto distinto aunque todos peguen contra este mismo endpoint. Se cae al
+ * secreto de plataforma para las integraciones viejas, de cuando había una sola
+ * cuenta para todos.
+ */
+async function resolveWebhookSecret(body: any): Promise<string | null> {
+  const platformSecret = process.env.YCLOUD_WEBHOOK_SECRET?.trim() || null
+
+  const businessPhone = businessPhoneOfEvent(body)
+  if (!businessPhone) return platformSecret
+
+  try {
+    const integration = await findIntegrationByBusinessPhone(getSharedAdmin(), businessPhone)
+    const own = (integration?.config as any)?.ycloud_webhook_secret
+    if (typeof own === 'string' && own.trim()) return own.trim()
+  } catch (e) {
+    console.error('[YCloud webhook] no se pudo resolver el secreto:', e)
+  }
+
+  return platformSecret
+}
+
 async function findIntegrationByBusinessPhone(admin: any, businessPhone: string) {
   const variants = businessPhoneVariants(businessPhone)
   if (variants.length === 0) return null
@@ -158,7 +202,15 @@ export async function POST(request: NextRequest) {
     // Hay que leer el body crudo para poder validar la firma HMAC.
     const rawBody = await request.text()
 
-    const secret = process.env.YCLOUD_WEBHOOK_SECRET?.trim()
+    // El body se PARSEA antes de validar, porque con una cuenta de YCloud por
+    // cliente el secreto depende de a quién pertenece el evento y eso solo se
+    // sabe leyéndolo. Es seguro mientras no se ACTÚE sobre estos datos antes de
+    // la validación de abajo: acá solo se usan para elegir con qué secreto
+    // verificar la firma.
+    const body = JSON.parse(rawBody || '{}')
+    const type: string = body?.type || ''
+
+    const secret = await resolveWebhookSecret(body)
     if (secret) {
       const ok = verifyYCloudSignature(rawBody, request.headers.get('ycloud-signature'), secret)
       if (!ok) {
@@ -168,11 +220,8 @@ export async function POST(request: NextRequest) {
     } else {
       // Sin secreto configurado no se puede validar. Se acepta igual para no
       // bloquear la puesta en marcha, pero conviene configurarlo en producción.
-      console.warn('[YCloud webhook] YCLOUD_WEBHOOK_SECRET no configurado: firma sin verificar')
+      console.warn('[YCloud webhook] sin secreto para esta cuenta: firma sin verificar')
     }
-
-    const body = JSON.parse(rawBody || '{}')
-    const type: string = body?.type || ''
 
     // COEXISTENCIA — CARGA INICIAL: historial de chats y agenda de contactos.
     // Llegan UNA SOLA VEZ, a los minutos del alta por coexistencia, y el historial

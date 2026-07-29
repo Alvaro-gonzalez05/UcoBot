@@ -1,5 +1,5 @@
 import { getGraphVersion } from '@/lib/meta/credentials'
-import { sendYCloudMessage, toE164, isYCloudConfigured } from '@/lib/whatsapp/ycloud'
+import { sendYCloudMessage, toE164, getIntegrationKey } from '@/lib/whatsapp/ycloud'
 
 /**
  * Capa de proveedores de WhatsApp.
@@ -131,8 +131,15 @@ class CloudApiProvider implements WhatsAppProvider {
 class YCloudProvider implements WhatsAppProvider {
   readonly name = 'ycloud' as const
 
-  /** `from` = número del negocio en E.164 con "+" (lo exige la API de YCloud). */
-  constructor(private from: string) {}
+  /**
+   * `from` = número del negocio en E.164 con "+" (lo exige la API de YCloud).
+   * `apiKey` = credencial de ESA cuenta de YCloud. Null para las integraciones
+   * viejas, que siguen usando la de la plataforma.
+   */
+  constructor(
+    private from: string,
+    private apiKey: string | null,
+  ) {}
 
   async sendText(to: string, text: string, opts?: { replyToId?: string }): Promise<SendResult> {
     try {
@@ -145,7 +152,7 @@ class YCloudProvider implements WhatsAppProvider {
       // Cita al mensaje anterior (mismo concepto que context.message_id en Meta)
       if (opts?.replyToId) body.context = { message_id: opts.replyToId }
 
-      const data = await sendYCloudMessage(body)
+      const data = await sendYCloudMessage(body, this.apiKey)
       return { success: true, messageId: data?.id }
     } catch (e: any) {
       return { success: false, error: e?.message || 'YCloud error' }
@@ -154,16 +161,19 @@ class YCloudProvider implements WhatsAppProvider {
 
   async sendMedia(to: string, media: MediaInput): Promise<SendResult> {
     try {
-      const data = await sendYCloudMessage({
-        from: this.from,
-        to: toE164(to),
-        type: media.kind,
-        [media.kind]: {
-          link: media.url,
-          ...(media.caption && media.kind !== 'audio' ? { caption: media.caption } : {}),
-          ...(media.kind === 'document' && media.filename ? { filename: media.filename } : {}),
+      const data = await sendYCloudMessage(
+        {
+          from: this.from,
+          to: toE164(to),
+          type: media.kind,
+          [media.kind]: {
+            link: media.url,
+            ...(media.caption && media.kind !== 'audio' ? { caption: media.caption } : {}),
+            ...(media.kind === 'document' && media.filename ? { filename: media.filename } : {}),
+          },
         },
-      })
+        this.apiKey,
+      )
       return { success: true, messageId: data?.id }
     } catch (e: any) {
       return { success: false, error: e?.message || 'YCloud error' }
@@ -264,8 +274,10 @@ export function getWhatsAppProvider(integration: IntegrationLike): WhatsAppProvi
   if (cfg.provider === 'ycloud') {
     // `ycloud_from` se guarda al vincular el número (E.164 con "+").
     const from = cfg.ycloud_from || (cfg.phone_number_id ? `+${cfg.phone_number_id}` : null)
-    if (!from || !isYCloudConfigured()) return null
-    return new YCloudProvider(from)
+    // Credencial propia de la cuenta; si no tiene, la de la plataforma.
+    const apiKey = getIntegrationKey(integration)
+    if (!from || !apiKey) return null
+    return new YCloudProvider(from, apiKey)
   }
 
   if (cfg.provider === 'evolution') {

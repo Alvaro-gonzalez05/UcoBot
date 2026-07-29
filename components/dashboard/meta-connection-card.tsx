@@ -411,17 +411,32 @@ function YCloudConnectDialog({
   const [linking, setLinking] = useState<string | null>(null)
   const [checked, setChecked] = useState(false)
   const [onboardingUrl, setOnboardingUrl] = useState<string | null>(null)
+  // Cada cliente conecta SU cuenta de YCloud, así que lo primero que hace falta es
+  // su API key: sin ella no hay números que listar.
+  const [needsApiKey, setNeedsApiKey] = useState(false)
+  const [apiKey, setApiKey] = useState("")
 
   const loadNumbers = async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/integrations/whatsapp/ycloud")
+      // Con una key recién pegada hay que probarla POR POST: todavía no está
+      // guardada, y una credencial no se manda por la URL.
+      const typedKey = apiKey.trim()
+      const res = typedKey
+        ? await fetch("/api/integrations/whatsapp/ycloud/numbers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ api_key: typedKey }),
+          })
+        : await fetch("/api/integrations/whatsapp/ycloud")
       const json = await res.json()
       if (!res.ok) {
         toast.error(json.error || "No se pudieron listar los números")
         return
       }
-      setOnboardingUrl(json.onboarding_url)
+      // El endpoint de prueba no devuelve estos dos: se conservan los que ya había.
+      if (json.onboarding_url) setOnboardingUrl(json.onboarding_url)
+      if ("needs_api_key" in json) setNeedsApiKey(!!json.needs_api_key)
       setNumbers(json.numbers || [])
       setChecked(true)
     } catch {
@@ -435,6 +450,7 @@ function YCloudConnectDialog({
     if (!open) {
       setNumbers([])
       setChecked(false)
+      setApiKey("")
       return
     }
     loadNumbers()
@@ -462,13 +478,28 @@ function YCloudConnectDialog({
       const res = await fetch("/api/integrations/whatsapp/ycloud", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: phone }),
+        body: JSON.stringify({ phone_number: phone, api_key: apiKey || undefined }),
       })
       const json = await res.json()
       if (!res.ok) {
         toast.error(json.error || "No se pudo vincular el número")
         return
       }
+
+      // El webhook se configura solo con la API key. Cuando no se puede, hay que
+      // decirlo: sin webhook el número envía pero no recibe NADA, que es el
+      // síntoma más confuso de todos.
+      if (json.webhook_error) {
+        toast.warning("Número conectado, pero el webhook quedó sin configurar", {
+          description: json.webhook_error,
+        })
+      } else if (json.webhook_secret_missing) {
+        toast.warning("Webhook ya existente", {
+          description:
+            "No pudimos leer su clave de firma. Copiala de YCloud o rotala para validar los mensajes.",
+        })
+      }
+
       toast.success(`Número ${json.integration?.display_phone_number || phone} conectado`)
       onSaved()
       onOpenChange(false)
@@ -495,12 +526,50 @@ function YCloudConnectDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Paso 1: la credencial de la cuenta de YCloud del cliente. Va primero
+              porque sin ella no hay números que mostrar. */}
+          {needsApiKey && (
+            <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
+              <div>
+                <label htmlFor="ycloud-key" className="text-sm font-semibold">
+                  API key de tu cuenta de YCloud
+                </label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Está en la consola de YCloud, en Developers → API keys.
+                </p>
+              </div>
+              <Input
+                id="ycloud-key"
+                type="password"
+                autoComplete="off"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Pegá acá tu API key"
+              />
+              <Button
+                size="sm"
+                className="w-full"
+                disabled={!apiKey.trim() || loading}
+                onClick={loadNumbers}
+              >
+                Buscar mis números
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Queda guardada en tu cuenta y se usa para enviar y recibir tus mensajes.
+                También configuramos el webhook por vos.
+              </p>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               Consultando números…
             </div>
           ) : selectable.length === 0 ? (
+            // Sin key todavía no se buscó nada: el vacío lo explica el bloque de
+            // arriba, no hace falta repetirlo acá.
+            needsApiKey && !checked ? null : (
             <div className="rounded-lg border border-border/50 bg-muted/40 p-4 text-center space-y-2">
               <p className="text-sm text-muted-foreground">
                 {checked
@@ -512,6 +581,7 @@ function YCloudConnectDialog({
                 Buscar de nuevo
               </Button>
             </div>
+            )
           ) : (
             <div className="space-y-2">
               {selectable.map((n) => (
