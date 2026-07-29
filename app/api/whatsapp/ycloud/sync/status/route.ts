@@ -43,18 +43,23 @@ export async function GET(_request: NextRequest) {
     const accountId = ctx?.ownerId || user.id
 
     const admin = createAdminClient()
+
+    // SOLO 'history'. `app_state_sync` NO es un evento de carga inicial: llega
+    // cada vez que el dueño agrega, borra o renombra un contacto en la agenda de
+    // su celular. Contarlo acá hacía que el cartel "Trayendo tus chats…"
+    // apareciera por un contacto tocado, como si se estuviera reimportando todo.
+    // Esos chunks se procesan igual, en silencio.
     const base = () =>
       admin
         .from('whatsapp_sync_chunks')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', accountId)
+        .eq('event_type', 'history')
 
-    const [total, remaining, done, chats, contacts] = await Promise.all([
+    const [total, remaining, done] = await Promise.all([
       base(),
       base().in('status', IN_FLIGHT),
       base().eq('status', 'done'),
-      base().eq('event_type', 'history'),
-      base().eq('event_type', 'app_state_sync'),
     ])
 
     const totalCount = total.count ?? 0
@@ -73,6 +78,7 @@ export async function GET(_request: NextRequest) {
         .from('whatsapp_sync_chunks')
         .select('processed_at')
         .eq('user_id', accountId)
+        .eq('event_type', 'history')
         .not('processed_at', 'is', null)
         .order('processed_at', { ascending: false })
         .limit(1)
@@ -97,6 +103,7 @@ export async function GET(_request: NextRequest) {
         .from('whatsapp_sync_chunks')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', accountId)
+        .eq('event_type', 'history')
         .eq('status', 'done')
         .gte('processed_at', since)
 
@@ -116,8 +123,6 @@ export async function GET(_request: NextRequest) {
       done: doneCount,
       total: totalCount,
       remaining: remainingCount,
-      chats: chats.count ?? 0,
-      contacts: contacts.count ?? 0,
     })
   } catch (error) {
     console.error('[YCloud sync status] error:', error)
