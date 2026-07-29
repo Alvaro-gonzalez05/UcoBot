@@ -2512,7 +2512,7 @@ export function ChatView({ userId }: ChatViewProps) {
 
             {/* Messages Area */}
             <div 
-              className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-slate-50 dark:bg-slate-950/50"
+              className="chat-wallpaper flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4"
               ref={scrollRef}
               onScroll={handleScroll}
             >
@@ -2534,7 +2534,9 @@ export function ChatView({ userId }: ChatViewProps) {
                   <section key={group.key} className="space-y-4">
                     {/* La fecha se pega arriba solo mientras dura SU día */}
                     <div className="sticky top-2 z-20 flex justify-center select-none pointer-events-none">
-                      <span className="bg-white dark:bg-slate-800 text-muted-foreground text-xs font-medium px-3 py-1 rounded-lg shadow-sm border">
+                      {/* Sin borde: sobre el fondo con patrón, el pill lee mejor
+                          como etiqueta flotante que como caja. */}
+                      <span className="bg-white/90 dark:bg-slate-800/90 text-slate-600 dark:text-slate-300 text-xs font-medium px-3 py-1 rounded-lg shadow-sm">
                         {formatDateSeparator(group.items[0].msg.created_at)}
                       </span>
                     </div>
