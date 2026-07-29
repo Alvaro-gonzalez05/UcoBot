@@ -637,7 +637,30 @@ async function handleStatusUpdate(msg: any) {
     console.warn(
       `[YCloud status] "${status}" sin mensaje que actualizar. ids probados: ${ids.join(', ')}`,
     )
-  } else {
-    console.log(`[YCloud status] ${status} aplicado (${applied} mensaje/s)`)
+    return
+  }
+
+  console.log(`[YCloud status] ${status} aplicado (${applied} mensaje/s)`)
+
+  // GUARDAR EL WAMID de lo que enviamos por API.
+  //
+  // Lo que mandamos queda con el id INTERNO de YCloud (ej: 6a6987e3ad8c...), pero
+  // cuando el cliente responde, WhatsApp cita el WAMID (wamid.HBgN...). Sin
+  // guardarlo, la respuesta citada no encuentra el original y en el chat aparece
+  // "Mensaje no disponible". El evento de estado es la única vez que YCloud nos
+  // da los dos identificadores juntos, así que se aprovecha para vincularlos.
+  if (msg?.wamid && msg?.id && msg.wamid !== msg.id) {
+    const { data: row } = await admin
+      .from('messages')
+      .select('id, metadata')
+      .eq('wa_message_id', msg.id)
+      .maybeSingle()
+
+    if (row && !(row.metadata as any)?.whatsapp_wamid) {
+      await admin
+        .from('messages')
+        .update({ metadata: { ...(row.metadata as any), whatsapp_wamid: msg.wamid } })
+        .eq('id', row.id)
+    }
   }
 }

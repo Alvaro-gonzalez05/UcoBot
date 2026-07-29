@@ -362,13 +362,27 @@ function ReplyMessage({
       if (data?.[0]) {
         setMessage(data[0])
       } else if (!isUuid) {
-        // Instagram: el id del mensaje citado vive en otra clave del metadata.
-        const { data: ig } = await supabase
+        // Lo que MANDAMOS por API queda con el id interno de YCloud, pero quien
+        // responde cita el WAMID. El webhook de estados vincula los dos en
+        // `metadata.whatsapp_wamid`: sin este intento, toda respuesta a un mensaje
+        // nuestro salía como "Mensaje no disponible".
+        const { data: byWamid } = await supabase
           .from('messages')
           .select('*')
-          .eq('metadata->>platform_message_id', replyId)
+          .eq('metadata->>whatsapp_wamid', replyId)
           .limit(1)
-        if (ig?.[0]) setMessage(ig[0])
+
+        if (byWamid?.[0]) {
+          setMessage(byWamid[0])
+        } else {
+          // Instagram: el id del mensaje citado vive en otra clave del metadata.
+          const { data: ig } = await supabase
+            .from('messages')
+            .select('*')
+            .eq('metadata->>platform_message_id', replyId)
+            .limit(1)
+          if (ig?.[0]) setMessage(ig[0])
+        }
       }
       setLoading(false)
     }
