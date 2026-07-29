@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy, MessageSquarePlus, Image as ImageIcon, Video, User, Heart, Ban, Clock, type LucideIcon } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy, MessageSquarePlus, Image as ImageIcon, Video, User, Heart, Ban, Clock, MessageCircle, Sparkles, type LucideIcon } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -152,6 +152,72 @@ interface Message {
 }
 
 /**
+ * De dónde salió un mensaje nuestro.
+ *
+ * Los tres caminos se ven iguales en el chat pero no lo son, y saber cuál fue
+ * cambia lo que el operador hace después:
+ *  - 'phone'      lo escribió el dueño desde la app de WhatsApp del celular
+ *                 (coexistencia). Nosotros solo lo vimos pasar.
+ *  - 'agent'      lo escribió una persona desde este panel.
+ *  - 'automation' lo disparó una automatización.
+ *  - sin marca    lo contestó la IA.
+ */
+type MessageOrigin = 'phone' | 'agent' | 'automation' | 'ai'
+
+function originOf(msg: Message): MessageOrigin {
+  const sentBy = msg.metadata?.sent_by
+  if (sentBy === 'phone' || msg.metadata?.imported || sentBy === 'business_history') return 'phone'
+  if (sentBy === 'agent') return 'agent'
+  if (sentBy === 'automation') return 'automation'
+  return 'ai'
+}
+
+/** Firma sobre la burbuja: quién mandó este mensaje. */
+function MessageAuthor({
+  origin,
+  profile,
+}: {
+  origin: MessageOrigin
+  profile?: { full_name: string | null; avatar_url: string | null } | null
+}) {
+  if (origin === 'phone') {
+    return (
+      <div className="flex items-center gap-1.5 mb-1 pr-1 text-[11px] text-muted-foreground">
+        <span>Desde WhatsApp</span>
+        {/* El logo va como marca de canal, no como ícono de acción. */}
+        <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#25D366]/15">
+          <MessageCircle className="h-2.5 w-2.5 text-[#128C7E]" aria-hidden />
+        </span>
+      </div>
+    )
+  }
+
+  if (origin === 'agent') {
+    const name = profile?.full_name || 'Vos'
+    return (
+      <div className="flex items-center gap-1.5 mb-1 pr-1 text-[11px] text-muted-foreground">
+        <span className="truncate max-w-[140px]">{name}</span>
+        <Avatar className="h-4 w-4">
+          {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt="" />}
+          <AvatarFallback className="text-[8px] bg-primary/15 text-primary">
+            {getInitials(name)}
+          </AvatarFallback>
+        </Avatar>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 mb-1 pr-1 text-[11px] text-muted-foreground">
+      <span>{origin === 'automation' ? 'Automatización' : 'Asistente'}</span>
+      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-primary/15">
+        <Sparkles className="h-2.5 w-2.5 text-primary" aria-hidden />
+      </span>
+    </div>
+  )
+}
+
+/**
  * Tilde de estado de un mensaje saliente, como en WhatsApp.
  *
  * Reloj = todavía sin confirmación, un tilde = llegó a WhatsApp, doble = llegó al
@@ -164,12 +230,21 @@ interface Message {
 function DeliveryTick({
   status,
   createdAt,
+  origin,
   className,
 }: {
   status?: string | null
   createdAt?: string
+  origin?: MessageOrigin
   className?: string
 }) {
+  // Lo que sale del CELULAR no pasa por la API, así que WhatsApp nunca nos va a
+  // reportar su estado: medido sobre 5.653 mensajes de coexistencia, cero
+  // recibieron uno. Mostrarles el reloj de "enviando" era prometer una
+  // confirmación que no existe, y por eso se quedaban así para siempre. El origen
+  // ya se ve en la firma de arriba; acá no va ningún indicador.
+  if (origin === 'phone' && !status) return null
+
   if (status === 'failed') {
     return (
       <CircleAlert
@@ -779,6 +854,12 @@ export function ChatView({ userId }: ChatViewProps) {
   const [newChatOpen, setNewChatOpen] = useState(false)
   // Etiquetas de lead configuradas por el dueño en el bot (allowed_tags)
   const [availableTags, setAvailableTags] = useState<string[]>([])
+  // Perfil del dueño de la cuenta: se usa para firmar los mensajes que se
+  // mandaron desde el panel, igual que en la barra lateral.
+  const [ownerProfile, setOwnerProfile] = useState<{
+    full_name: string | null
+    avatar_url: string | null
+  } | null>(null)
   // Filtros de la lista de conversaciones
   const [filterTags, setFilterTags] = useState<string[]>([])
   const [filterPaused, setFilterPaused] = useState(false)
@@ -967,6 +1048,17 @@ export function ChatView({ userId }: ChatViewProps) {
       document.removeEventListener("visibilitychange", onVisible)
     }
   }, [syncConversations])
+
+  // Perfil del dueño, para firmar los mensajes salidos del panel.
+  useEffect(() => {
+    if (!userId) return
+    supabase
+      .from("user_profiles")
+      .select("full_name, avatar_url")
+      .eq("id", userId)
+      .maybeSingle()
+      .then(({ data }) => { if (data) setOwnerProfile(data as any) })
+  }, [userId])
 
   // Traemos las etiquetas de lead que configuró el dueño en el bot (allowed_tags).
   // Sirven para asignarlas manualmente y para filtrar la lista de conversaciones.
@@ -2765,7 +2857,13 @@ export function ChatView({ userId }: ChatViewProps) {
                       onReply={() => setReplyingTo(msg)}
                       isClient={isClient}
                     >
-                      <div id={`msg-${msg.id}`} className="relative group flex items-end gap-2">
+                      <div id={`msg-${msg.id}`} className="relative group">
+                        {!isClient && (
+                          <div className="flex justify-end">
+                            <MessageAuthor origin={originOf(msg)} profile={ownerProfile} />
+                          </div>
+                        )}
+                        <div className="flex items-end gap-2">
                         {!isClient && (
                           <div className="flex items-center gap-0.5">
                             {!!msg.content && <CopyMessageButton text={msg.content} />}
@@ -2923,7 +3021,11 @@ export function ChatView({ userId }: ChatViewProps) {
                         )}>
                           {format(new Date(msg.created_at), "HH:mm")}
                           {!isClient && (
-                            <DeliveryTick status={msg.delivery_status} createdAt={msg.created_at} />
+                            <DeliveryTick
+                              status={msg.delivery_status}
+                              createdAt={msg.created_at}
+                              origin={originOf(msg)}
+                            />
                           )}
                         </div>
                       </div>
@@ -2942,6 +3044,7 @@ export function ChatView({ userId }: ChatViewProps) {
                           {!!msg.content && <CopyMessageButton text={msg.content} />}
                         </div>
                       )}
+                      </div>
                     </div>
                     </SwipeableMessage>
                     </motion.div>

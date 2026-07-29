@@ -736,6 +736,17 @@ async function generateAndSendAIResponse(
         const cleanPart = sanitizeOutgoingText(parts[i])
         const result = await provider.sendText(senderPhone, cleanPart)
         sent = sent || result.success
+
+        // El id que devuelve WhatsApp hay que pegarlo al mensaje que /api/chat/webhook
+        // ya guardó ANTES de este envío. Sin él no se puede aparear el evento de
+        // estado (whatsapp.message.updated) y la respuesta de la IA nunca muestra
+        // tildes de entregado ni de leído.
+        // Se busca por el texto SIN sanear: es el que quedó guardado. El saneado
+        // recorta espacios y cambia los NBSP, así que buscar por `cleanPart`
+        // fallaría justo en los mensajes donde la IA metió esos caracteres.
+        if (result.success && result.messageId) {
+          await attachWhatsAppId(conversationId, parts[i], result.messageId, cleanPart)
+        }
         // Pequeña pausa entre mensajes para que se sienta natural
         if (i < parts.length - 1) {
           await new Promise((r) => setTimeout(r, 1200))
@@ -763,6 +774,61 @@ async function generateAndSendAIResponse(
 
   } catch (error) {
     console.error('Error generating AI response:', error)
+  }
+}
+
+/**
+ * Pega el id de WhatsApp al mensaje de la IA que ya estaba guardado.
+ *
+ * POR QUÉ HACE FALTA: el mensaje se persiste en /api/chat/webhook, que es quien
+ * genera la respuesta, y recién después vuelve acá para enviarse. Cuando WhatsApp
+ * devuelve el id, la fila ya existe y nadie la volvía a tocar — 1.188 respuestas
+ * de IA quedaron sin id, y sin id el webhook de estados no encuentra a quién
+ * aplicarle el "entregado" o el "leído".
+ *
+ * El apareo es por contenido porque no hay otra referencia compartida entre los
+ * dos endpoints. Para que no enganche un mensaje viejo de texto idéntico ("hola",
+ * "dale") se exige que sea reciente y que todavía no tenga id.
+ */
+async function attachWhatsAppId(
+  conversationId: string,
+  content: string,
+  messageId: string,
+  fallbackContent?: string
+): Promise<void> {
+  try {
+    const admin = createAdminClient()
+    const since = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+
+    const findRow = async (text: string) => {
+      const { data } = await admin
+        .from('messages')
+        .select('id, metadata')
+        .eq('conversation_id', conversationId)
+        .eq('sender_type', 'bot')
+        .eq('content', text)
+        .is('wa_message_id', null)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      return data
+    }
+
+    let row = await findRow(content)
+    // Por si alguna vez lo que se guarda pasa a ser el texto ya saneado.
+    if (!row && fallbackContent && fallbackContent !== content) {
+      row = await findRow(fallbackContent)
+    }
+    if (!row) return
+
+    await admin
+      .from('messages')
+      .update({ metadata: { ...(row.metadata as any || {}), whatsapp_message_id: messageId } })
+      .eq('id', row.id)
+  } catch (e) {
+    // No es crítico: si falla, el mensaje se mandó igual y solo pierde los tildes.
+    console.error('[WA] no se pudo guardar el id del mensaje de la IA:', e)
   }
 }
 
