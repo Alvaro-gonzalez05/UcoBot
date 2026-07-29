@@ -167,6 +167,21 @@ async function processHistoryBatch(admin: any, userId: string, chunks: any[]) {
   // Crear de una sola vez las conversaciones que faltan.
   const missing = [...byClient.keys()].filter((k) => !convByKey.has(k))
   if (missing.length > 0) {
+    // Nombre de la agenda, si el contacto ya se importó. Sin esto la charla queda
+    // titulada con el número pelado aunque el contacto esté agendado, porque los
+    // eventos de contactos y los de historial llegan en cualquier orden.
+    const { data: known } = await admin
+      .from('clients')
+      .select('name, phone')
+      .eq('user_id', userId)
+      .in('phone', missing.flatMap((k) => phoneVariants(k)))
+
+    const nameByKey = new Map<string, string>()
+    for (const c of known || []) {
+      // Un cliente cuyo "nombre" es el propio teléfono no aporta nada.
+      if (c.name && digitsOnly(c.name) !== c.name) nameByKey.set(phoneKey(c.phone || ''), c.name)
+    }
+
     const { data: created } = await admin
       .from('conversations')
       .insert(
@@ -178,7 +193,7 @@ async function processHistoryBatch(admin: any, userId: string, chunks: any[]) {
             user_id: userId,
             bot_id: bot.id,
             client_phone: phone,
-            client_name: phone,
+            client_name: nameByKey.get(key) || phone,
             platform: 'whatsapp',
             // ACTIVA a propósito: es una charla vieja, pero si el cliente escribe
             // de nuevo el bot tiene que poder responder con normalidad.
@@ -239,6 +254,10 @@ async function processHistoryBatch(admin: any, userId: string, chunks: any[]) {
         sender_type: m.outgoing ? 'bot' : 'client',
         message_type: internalType,
         created_at: m.ts, // fecha REAL del mensaje, no la de la importación
+        // LEÍDO: es historial que el dueño ya vio en su celular. Sin esto cada
+        // charla importada aparecía con decenas de "no leídos" y el borde azul de
+        // mensaje nuevo, y volvían a aparecer cada vez que se recalculaba.
+        is_read: true,
         metadata: {
           whatsapp_message_id: m.wamid,
           original_type: m.type,
@@ -331,6 +350,16 @@ async function processContactsBatch(admin: any, userId: string, chunks: any[]) {
   for (let i = 0; i < toInsert.length; i += 500) {
     await admin.from('clients').insert(toInsert.slice(i, i + 500))
   }
+
+  // Los contactos y el historial llegan en cualquier orden: si la charla se creó
+  // antes de conocerse el nombre, quedó titulada con el número. Se completa en una
+  // sola sentencia (ver apply_contact_names_to_conversations); un update por
+  // contacto sobre una agenda de miles sería el mismo N+1 de antes.
+  const { error } = await admin.rpc('apply_contact_names_to_conversations', {
+    p_user_id: userId,
+    p_contacts: [...wanted].map(([phone, name]) => ({ phone, name })),
+  })
+  if (error) console.error('[YCloud sync] no se pudieron aplicar los nombres:', error.message)
 }
 
 export async function POST(_request: NextRequest) {

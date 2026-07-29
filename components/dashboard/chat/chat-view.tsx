@@ -702,49 +702,25 @@ export function ChatView({ userId }: ChatViewProps) {
     
     try {
       const from = pageNumber * PAGE_SIZE
-      const to = from + PAGE_SIZE - 1
 
-      // Get conversations for user's bots
-      // Note: Fetching all messages for each conversation is heavy, but needed for last_message and unread_count
-      // Ideally this should be optimized with a DB view or function
-      let query = supabase
-        .from("conversations")
-        .select(`
-          *,
-          messages:messages(content, created_at, sender_type, is_read)
-        `)
-        .eq("user_id", userId)
-        .order("last_message_at", { ascending: false })
-        .range(from, to)
-      
-      // If search term exists, we might need to adjust query or handle it differently
-      // For now, let's assume search is client-side or we reset pagination on search
-      // Implementing server-side search would require more changes
-      
-      const { data, error } = await query
+      // El último mensaje y los no leídos los calcula la base (ver
+      // list_conversations_with_preview). Antes se traían TODOS los mensajes de
+      // cada conversación embebidos para hacerlo acá: con el historial importado
+      // eso son decenas de miles de filas por página, PostgREST corta la respuesta
+      // y la lista terminaba mostrando "Sin mensajes" con contadores inventados.
+      const { data, error } = await supabase.rpc("list_conversations_with_preview", {
+        p_user_id: userId,
+        p_limit: PAGE_SIZE,
+        p_offset: from,
+      })
 
       if (error) throw error
 
-      // Process conversations to get last message
-      const processedConversations = data.map((conv: any) => {
-        // Sort messages to get the last one
-        const sortedMessages = conv.messages?.sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )
-        
-        const lastMsg = sortedMessages?.[0]
-        
-        // Calculate unread count
-        const unreadCount = conv.messages?.filter((m: any) => 
-          m.sender_type === 'client' && m.is_read === false
-        ).length || 0
-        
-        return {
-          ...conv,
-          last_message: lastMsg?.content || "Sin mensajes",
-          unread_count: unreadCount
-        }
-      })
+      const processedConversations = ((data as any[]) || []).map((conv: any) => ({
+        ...conv,
+        last_message: conv.last_message || "Sin mensajes",
+        unread_count: conv.unread_count ?? 0,
+      }))
 
       setConversations(prev => {
         if (pageNumber === 0) return processedConversations
@@ -780,25 +756,18 @@ export function ChatView({ userId }: ChatViewProps) {
   const syncConversations = useCallback(async () => {
     if (!userId) return
     try {
-      const { data, error } = await supabase
-        .from("conversations")
-        .select(`*, messages:messages(content, created_at, sender_type, is_read)`)
-        .eq("user_id", userId)
-        .order("last_message_at", { ascending: false })
-        .range(0, PAGE_SIZE - 1)
+      const { data, error } = await supabase.rpc("list_conversations_with_preview", {
+        p_user_id: userId,
+        p_limit: PAGE_SIZE,
+        p_offset: 0,
+      })
       if (error || !data) return
 
-      const processed = data.map((conv: any) => {
-        const sorted = conv.messages?.sort(
-          (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        )
-        return {
-          ...conv,
-          last_message: sorted?.[0]?.content || "Sin mensajes",
-          unread_count:
-            conv.messages?.filter((m: any) => m.sender_type === "client" && m.is_read === false).length || 0,
-        }
-      })
+      const processed = ((data as any[]) || []).map((conv: any) => ({
+        ...conv,
+        last_message: conv.last_message || "Sin mensajes",
+        unread_count: conv.unread_count ?? 0,
+      }))
 
       setConversations((prev) => {
         const byId = new Map(prev.map((c) => [c.id, c]))
