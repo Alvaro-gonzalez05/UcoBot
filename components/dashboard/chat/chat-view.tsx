@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy, MessageSquarePlus } from "lucide-react"
+import { Search, Send, Phone, MoreVertical, Paperclip, Smile, CheckCheck, PauseCircle, PlayCircle, RefreshCw, Loader2, MapPin, Reply, X, ArrowLeft, Star, ShoppingBag, StickyNote, Upload, Sticker, FileText, Link2, Bookmark, Download, Play, Pause, Mic, Trash2, Mail, CircleAlert, Filter, Tag, Check, Eye, Copy, MessageSquarePlus, Image as ImageIcon, Video, User, Heart, Ban, type LucideIcon } from "lucide-react"
 import { ChatImportWizard } from "./chat-import-wizard"
 import { ChatReactivateDialog } from "./chat-reactivate-dialog"
 import { ChatTemplatePopover } from "./chat-template-popover"
@@ -125,6 +125,10 @@ interface Conversation {
   client_id?: string
   unread_count?: number // Virtual field
   last_message?: string // Virtual field
+  // Tipo del último mensaje ('image', 'audio', 'sticker'…), para dibujar la
+  // vista previa con ícono en vez del placeholder entre corchetes.
+  last_message_kind?: string // Virtual field
+  last_message_from?: string // Virtual field
   paused_until?: string | null
   needs_attention?: boolean
   in_review?: boolean
@@ -140,6 +144,57 @@ interface Message {
   message_type: string
   metadata?: any
   is_read?: boolean
+}
+
+/**
+ * Vista previa del último mensaje de un chat, al estilo de WhatsApp: un ícono y
+ * una etiqueta en vez del texto crudo.
+ *
+ * Para lo que no es texto, `content` guarda un placeholder escrito por quien lo
+ * insertó, y con los años se acumularon variantes de todas las grafías:
+ * "[audio]", "[Audio message]", "[Audio]", "[image]", "[Image]", "[document]"…
+ * Acá se decide por el TIPO (que manda la base en `last_message_kind`) y solo se
+ * cae al texto cuando el mensaje es realmente texto.
+ */
+const PREVIEW_KINDS: Record<string, { icon: LucideIcon; label: string }> = {
+  image: { icon: ImageIcon, label: "Foto" },
+  video: { icon: Video, label: "Video" },
+  audio: { icon: Mic, label: "Mensaje de voz" },
+  voice: { icon: Mic, label: "Mensaje de voz" },
+  document: { icon: FileText, label: "Documento" },
+  sticker: { icon: Sticker, label: "Sticker" },
+  location: { icon: MapPin, label: "Ubicación" },
+  contacts: { icon: User, label: "Contacto" },
+  reaction: { icon: Heart, label: "Reacción" },
+  unsupported: { icon: Ban, label: "Mensaje no compatible" },
+}
+
+function ConversationPreview({
+  content,
+  kind,
+  fromMe,
+  className,
+}: {
+  content?: string
+  kind?: string
+  fromMe?: boolean
+  className?: string
+}) {
+  const entry = kind ? PREVIEW_KINDS[kind] : undefined
+
+  // Los medios llevan epígrafe muy seguido; cuando lo hay, WhatsApp muestra el
+  // ícono y el epígrafe, no la etiqueta genérica.
+  const caption = content && !/^\[.*\]$/.test(content.trim()) ? content : null
+  const text = entry ? caption || entry.label : content || "Sin mensajes"
+  const Icon = entry?.icon
+
+  return (
+    <p className={cn("flex items-center gap-1 truncate", className)}>
+      {fromMe && <Check className="h-3 w-3 shrink-0 opacity-60" aria-hidden />}
+      {Icon && <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" aria-hidden />}
+      <span className="truncate">{text}</span>
+    </p>
+  )
 }
 
 /**
@@ -220,15 +275,31 @@ function ReplyMessage({
 
     const fetchMessage = async () => {
       setLoading(true)
-      // Try to find by whatsapp_message_id, platform_message_id or internal id
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .or(`metadata->>whatsapp_message_id.eq.${replyId},metadata->>platform_message_id.eq.${replyId},id.eq.${replyId}`)
-        .maybeSingle()
-      
-      if (data) {
-        setMessage(data)
+
+      // OJO con el `.or()` de PostgREST: usa el punto como separador de operador,
+      // y los wamids de WhatsApp EMPIEZAN con "wamid." — así que
+      // `whatsapp_message_id.eq.wamid.HBgN…` se parseaba mal y la búsqueda no
+      // encontraba nada nunca. Por eso todas las respuestas salían como "Mensaje
+      // no disponible". Se busca por columnas concretas con `.eq()`, que escapa
+      // el valor, en vez de armar el filtro a mano.
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(replyId)
+
+      // wa_message_id es columna generada desde metadata (ver migración 121), así
+      // que se puede filtrar directo y usa índice.
+      const { data } = isUuid
+        ? await supabase.from('messages').select('*').eq('id', replyId).limit(1)
+        : await supabase.from('messages').select('*').eq('wa_message_id', replyId).limit(1)
+
+      if (data?.[0]) {
+        setMessage(data[0])
+      } else if (!isUuid) {
+        // Instagram: el id del mensaje citado vive en otra clave del metadata.
+        const { data: ig } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('metadata->>platform_message_id', replyId)
+          .limit(1)
+        if (ig?.[0]) setMessage(ig[0])
       }
       setLoading(false)
     }
@@ -876,11 +947,19 @@ export function ChatView({ userId }: ChatViewProps) {
             // no-leído no sube y el chat pausado no se pone azul hasta refrescar.
             const { data: lastMsgRows } = await supabase
               .from("messages")
-              .select("content, created_at")
+              .select("content, created_at, message_type, sender_type, metadata")
               .eq("conversation_id", payload.new.id)
               .order("created_at", { ascending: false })
               .limit(1)
-            const lastContent = lastMsgRows?.[0]?.content
+            const lastMsg = lastMsgRows?.[0]
+            const lastContent = lastMsg?.content
+            // Mismo criterio que list_conversations_with_preview, para que la
+            // vista previa no cambie de forma entre el realtime y una recarga.
+            const lastKind = lastMsg
+              ? (lastMsg.metadata as any)?.is_sticker
+                ? 'sticker'
+                : (lastMsg.metadata as any)?.original_type || lastMsg.message_type
+              : undefined
 
             // No-leídos: mensajes de cliente sin leer. Si el chat está abierto,
             // lo dejamos en 0 (abrirlo ya los marca como leídos).
@@ -899,7 +978,14 @@ export function ChatView({ userId }: ChatViewProps) {
             setConversations(prev => {
               const updatedList = prev.map(c =>
                 c.id === payload.new.id
-                  ? { ...c, ...payload.new, last_message: lastContent ?? c.last_message, unread_count: unreadCount }
+                  ? {
+                      ...c,
+                      ...payload.new,
+                      last_message: lastContent ?? c.last_message,
+                      last_message_kind: lastKind ?? c.last_message_kind,
+                      last_message_from: lastMsg?.sender_type ?? c.last_message_from,
+                      unread_count: unreadCount,
+                    }
                   : c
               )
 
@@ -1839,7 +1925,17 @@ export function ChatView({ userId }: ChatViewProps) {
   // Guarda un sticker recibido para reenviarlo luego
   const handleSaveSticker = async (msg: Message) => {
     if (!selectedConversation) return
-    const mediaId = msg.metadata?.sticker?.id
+
+    // Con YCloud NO existe el media-id de Meta: el sticker llega como link y el
+    // webhook ya lo bajó a nuestro bucket, así que lo que se manda es la URL. El
+    // endpoint acepta las dos formas. Pedir siempre `sticker.id` era la razón por
+    // la que guardar un sticker fallaba con "No se pudo identificar el sticker".
+    const mediaId =
+      msg.metadata?.stored_url ||
+      msg.metadata?.sticker?.stored_url ||
+      msg.metadata?.image?.stored_url ||
+      msg.metadata?.sticker?.id
+
     if (!mediaId) {
       toast.error("No se pudo identificar el sticker")
       return
@@ -2330,9 +2426,15 @@ export function ChatView({ userId }: ChatViewProps) {
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <p className={cn("text-sm truncate max-w-[180px]", (showUnread || needsAttention) ? "font-medium text-foreground" : "text-muted-foreground")}>
-                        {conv.last_message}
-                      </p>
+                      <ConversationPreview
+                        content={conv.last_message}
+                        kind={conv.last_message_kind}
+                        fromMe={conv.last_message_from === 'bot'}
+                        className={cn(
+                          "text-sm max-w-[180px]",
+                          (showUnread || needsAttention) ? "font-medium text-foreground" : "text-muted-foreground"
+                        )}
+                      />
                       {showUnread ? (
                         <Badge variant="default" className={cn("h-5 w-5 rounded-full p-0 flex items-center justify-center text-[10px]", needsAttention ? "bg-red-500 hover:bg-red-600" : "")}>
                           {conv.unread_count}

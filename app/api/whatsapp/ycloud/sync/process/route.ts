@@ -273,9 +273,18 @@ async function processHistoryBatch(admin: any, userId: string, chunks: any[]) {
   }
 
   // Inserts de a 500: es el tamaño que PostgREST maneja cómodo en un request.
+  //
+  // upsert + ignoreDuplicates apoyado en messages_conversation_wa_message_id_key:
+  // el Set de arriba filtra lo que YA estaba, pero no alcanza. YCloud REENVÍA el
+  // historial (durante la carga inicial la base se saturó y reintentó las tandas
+  // fallidas media hora después, con los mismos wamids), y encima dos corridas del
+  // cron procesan lotes en paralelo sin verse entre sí. La única garantía real es
+  // la de la base: acá los repetidos se descartan sin romper el lote.
   for (let i = 0; i < rows.length; i += 500) {
     const slice = rows.slice(i, i + 500)
-    const { error } = await admin.from('messages').insert(slice)
+    const { error } = await admin
+      .from('messages')
+      .upsert(slice, { onConflict: 'conversation_id,wa_message_id', ignoreDuplicates: true })
     if (error) throw new Error(`insert de mensajes: ${error.message}`)
   }
 
