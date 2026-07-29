@@ -391,10 +391,21 @@ function ReplyMessage({
   }, [replyId, initialMessage]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) return <div className="text-xs opacity-50 mb-2">Cargando mensaje original...</div>
-  
-  const senderName = message 
+
+  // NO SIEMPRE SE PUEDE RESOLVER LA CITA, y no es un error.
+  //
+  // En coexistencia, Meta emite el wamid de la cita con OTRA codificación: usa un
+  // id de usuario (wamid.HBgS…"AR.927567817029319") mientras que los mensajes que
+  // guardamos vienen con el wamid basado en el teléfono (wamid.HBgN…"549261…").
+  // Son dos representaciones del mismo mensaje y no hay forma de convertir una en
+  // la otra desde afuera: esa correspondencia solo la conoce Meta.
+  //
+  // Antes se mostraba "Mensaje no disponible / No se pudo cargar el mensaje
+  // original", que parecía una falla del sistema. Se cambia por una etiqueta
+  // neutra: se sigue viendo que es una respuesta, sin simular un error.
+  const senderName = message
     ? (message.sender_type === 'client' ? clientName : 'Nosotros')
-    : 'Mensaje no disponible'
+    : 'En respuesta a'
 
   return (
     <div className={cn(
@@ -420,7 +431,7 @@ function ReplyMessage({
         "line-clamp-2 max-w-[300px]",
         isClient ? "text-muted-foreground" : "text-white/80"
       )}>
-        {message?.content || "No se pudo cargar el mensaje original"}
+        {message?.content || "un mensaje anterior de esta conversación"}
       </p>
     </div>
   )
