@@ -35,6 +35,54 @@ const MEDIA_TYPES = ['image', 'video', 'audio', 'document', 'sticker'] as const
  * Y `limit(1)` evita que un número que quedó en dos filas (histórico de otra
  * cuenta) haga fallar el `maybeSingle` y se pierda el mensaje.
  */
+/**
+ * Cliente admin compartido entre invocaciones tibias de la misma lambda.
+ *
+ * Crear uno por evento era gratis con tráfico normal, pero la importación inicial
+ * de coexistencia manda MILES de eventos por minuto (medido: 2.083 en un minuto).
+ * Ahí cada objeto nuevo se paga.
+ */
+let sharedAdmin: ReturnType<typeof createAdminClient> | null = null
+function getSharedAdmin() {
+  if (!sharedAdmin) sharedAdmin = createAdminClient()
+  return sharedAdmin
+}
+
+/**
+ * Resolución de integración cacheada en memoria.
+ *
+ * POR QUÉ: cada evento de historial hacía DOS viajes a la base — resolver la
+ * integración (con un filtro sobre un campo JSON, sin índice) y recién después el
+ * insert. En la ráfaga eso duplicaba la carga y las entregas empezaron a fallar
+ * (se vio en los registros de YCloud: todas las tandas en rojo).
+ *
+ * El número del negocio no cambia entre eventos, así que se resuelve una vez y se
+ * reusa. TTL corto para que una reconexión se note sin reiniciar nada.
+ */
+type ResolvedIntegration = { userId: string; storedPhone: string }
+const INTEGRATION_TTL_MS = 5 * 60 * 1000
+const integrationCache = new Map<string, { value: ResolvedIntegration | null; at: number }>()
+
+async function resolveIntegrationCached(
+  admin: any,
+  businessPhone: string,
+): Promise<ResolvedIntegration | null> {
+  const hit = integrationCache.get(businessPhone)
+  if (hit && Date.now() - hit.at < INTEGRATION_TTL_MS) return hit.value
+
+  const integration = await findIntegrationByBusinessPhone(admin, businessPhone)
+  const value: ResolvedIntegration | null = integration
+    ? {
+        userId: integration.user_id,
+        storedPhone:
+          String((integration.config as any)?.phone_number_id || '') || businessPhone,
+      }
+    : null
+
+  integrationCache.set(businessPhone, { value, at: Date.now() })
+  return value
+}
+
 async function findIntegrationByBusinessPhone(admin: any, businessPhone: string) {
   const variants = businessPhoneVariants(businessPhone)
   if (variants.length === 0) return null
@@ -131,9 +179,15 @@ export async function POST(request: NextRequest) {
     // viene en tandas grandes. Acá solo se estacionan y se responde 200 al toque:
     // procesarlos en línea haría que YCloud reintente por timeout.
     if (type === 'whatsapp.smb.history' || type === 'whatsapp.smb.app.state.sync') {
-      await stageSyncChunk(type, body).catch((e) =>
-        console.error('[YCloud sync] no se pudo estacionar el chunk:', e),
-      )
+      try {
+        await stageSyncChunk(type, body)
+      } catch (e) {
+        // 500 A PROPÓSITO: el historial llega UNA sola vez. Si respondemos 200 sin
+        // haber guardado, YCloud lo da por entregado y ese mensaje se pierde sin
+        // vuelta atrás. Con el 500 lo reintenta.
+        console.error('[YCloud sync] no se pudo estacionar el chunk:', e)
+        return NextResponse.json({ error: 'staging failed' }, { status: 500 })
+      }
       return NextResponse.json({ ok: true })
     }
 
@@ -307,18 +361,18 @@ async function stageSyncChunk(type: string, body: any) {
     businessPhone = digitsOnly(data?.phoneNumber || data?.metadata?.display_phone_number || '')
   }
 
-  const admin = createAdminClient()
+  const admin = getSharedAdmin()
 
   // Sin número no podemos saber de qué cuenta es: guardamos igual con el payload
   // completo para no perderlo, pero queda en error para revisarlo a mano.
   let userId: string | null = null
   let storedPhone = businessPhone
   if (businessPhone) {
-    const integration = await findIntegrationByBusinessPhone(admin, businessPhone)
-    userId = integration?.user_id ?? null
+    const resolved = await resolveIntegrationCached(admin, businessPhone)
+    userId = resolved?.userId ?? null
     // Se estaciona con el número tal como está en la integración, así el cron que
     // procesa las tandas lo resuelve igual que el resto del pipeline.
-    storedPhone = String((integration?.config as any)?.phone_number_id || '') || businessPhone
+    storedPhone = resolved?.storedPhone || businessPhone
   }
 
   if (!userId) {
@@ -331,7 +385,7 @@ async function stageSyncChunk(type: string, body: any) {
   // por tandas procesadas.
   const meta = { ...(data || {}), ...(data?.metadata || {}) } as any
 
-  await admin.from('whatsapp_sync_chunks').insert({
+  const { error } = await admin.from('whatsapp_sync_chunks').insert({
     user_id: userId,
     phone_number_id: storedPhone,
     event_type: isHistory ? 'history' : 'app_state_sync',
@@ -341,10 +395,15 @@ async function stageSyncChunk(type: string, body: any) {
     progress: meta.progress ?? null,
   })
 
-  console.log(
-    `[YCloud sync] chunk estacionado (${isHistory ? 'history' : 'contactos'})` +
-      (meta.progress != null ? ` progreso ${meta.progress}%` : ''),
-  )
+  // Si el insert falla hay que propagarlo: devolver 200 haría que YCloud dé el
+  // evento por entregado y ese mensaje del historial se pierde para siempre.
+  if (error) throw new Error(`insert de chunk falló: ${error.message}`)
+
+  // El historial NO se loguea por evento: en la ráfaga eran miles de líneas por
+  // minuto, y escribir logs a ese ritmo es parte de lo que hacía fallar la entrega.
+  if (!isHistory) {
+    console.log('[YCloud sync] tanda de contactos estacionada')
+  }
 }
 
 /**

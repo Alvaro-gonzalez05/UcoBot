@@ -157,6 +157,39 @@ export async function listYCloudWebhookEndpoints(): Promise<any[]> {
   return unwrapList(data)
 }
 
+/**
+ * Registra el número contra la Cloud API.
+ *
+ * Es el paso que causa el error 133010 ("Account not registered") cuando falta:
+ * el número aparece "Conectado" en YCloud y recibe mensajes sin problema, pero
+ * NO puede enviar, porque enviar exige que el número esté registrado del lado de
+ * Meta. En el alta por coexistencia debería hacerse solo; cuando no ocurre, hay
+ * que forzarlo con esta llamada.
+ *
+ * El identificador del número que espera YCloud varía (su id interno o el E.164),
+ * así que se prueban los dos y se devuelve cuál funcionó.
+ */
+export async function registerYCloudPhoneNumber(
+  wabaId: string,
+  candidates: string[],
+): Promise<{ ok: boolean; usedId?: string; error?: string }> {
+  let lastError = 'Sin identificadores para registrar'
+
+  for (const id of candidates.filter(Boolean)) {
+    try {
+      await ycloudFetch(
+        `/whatsapp/phoneNumbers/${encodeURIComponent(wabaId)}/${encodeURIComponent(id)}/register`,
+        { method: 'POST', body: JSON.stringify({}) },
+      )
+      return { ok: true, usedId: id }
+    } catch (e: any) {
+      lastError = e?.message || 'Error desconocido'
+    }
+  }
+
+  return { ok: false, error: lastError }
+}
+
 export async function createYCloudTemplate(payload: Record<string, any>): Promise<any> {
   return await ycloudFetch('/whatsapp/templates', {
     method: 'POST',

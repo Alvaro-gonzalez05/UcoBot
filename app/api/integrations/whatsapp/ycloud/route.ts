@@ -4,6 +4,7 @@ import {
   listYCloudPhoneNumbers,
   isYCloudConfigured,
   getYCloudOnboardingUrl,
+  registerYCloudPhoneNumber,
   digitsOnly,
 } from '@/lib/whatsapp/ycloud'
 
@@ -162,8 +163,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No se pudo guardar la integración' }, { status: 500 })
     }
 
+    // REGISTRO contra la Cloud API. Sin este paso el número recibe pero NO envía:
+    // Meta responde `133010 - Account not registered`. En el alta por coexistencia
+    // debería pasar solo, pero no siempre ocurre, así que lo forzamos al vincular.
+    // Es idempotente y no bloquea: si falla, la integración queda igual y se puede
+    // reintentar desde /api/integrations/whatsapp/ycloud/register.
+    const registration = await registerYCloudPhoneNumber(match.wabaId, [
+      match.id,
+      match.phoneNumber,
+      requested,
+    ])
+    if (!registration.ok) {
+      console.warn('[YCloud] número vinculado pero SIN registrar:', registration.error)
+    }
+
     return NextResponse.json({
       success: true,
+      registered: registration.ok,
+      registration_error: registration.ok ? undefined : registration.error,
       integration: {
         platform: 'whatsapp',
         provider: 'ycloud',
