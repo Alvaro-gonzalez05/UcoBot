@@ -9,6 +9,7 @@ import {
   TrendingUp,
   ArrowRight,
   Zap,
+  HeartPulse,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -175,7 +176,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Quick nav cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Link
           href="/dashboard/admin/users"
           className="group bg-card rounded-3xl p-6 shadow-sm border border-border hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between"
@@ -224,6 +225,24 @@ export default async function AdminDashboard() {
               <p className="font-bold">Demos / Leads</p>
               <p className="text-xs text-muted-foreground">
                 Activar cuentas
+              </p>
+            </div>
+          </div>
+          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
+        </Link>
+
+        <Link
+          href="/dashboard/admin/salud"
+          className="group bg-card rounded-3xl p-6 shadow-sm border border-border hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-11 h-11 bg-rose-50 dark:bg-rose-900/30 text-rose-500 rounded-2xl flex items-center justify-center">
+              <HeartPulse className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="font-bold">Salud</p>
+              <p className="text-xs text-muted-foreground">
+                Base, tareas y colas
               </p>
             </div>
           </div>
