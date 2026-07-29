@@ -60,9 +60,29 @@ async function ycloudFetch(path: string, init?: RequestInit): Promise<any> {
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const msg = data?.message || data?.error?.message || `YCloud HTTP ${res.status}`
+
+    // Caso frecuente y confuso: la WABA figura en la consola pero NO está vinculada
+    // a la cuenta (el alta por coexistencia quedó a medias o la WABA se desprendió).
+    // El mensaje crudo de YCloud sugiere que el ID está mal escrito, cuando en
+    // realidad el ID es correcto y lo que falta es el vínculo. Se traduce para que
+    // el operador no salga a buscar el problema donde no está.
+    if (/hasn'?t bound WABA|not bound/i.test(msg)) {
+      throw new YCloudUnboundWabaError(
+        'La cuenta de WhatsApp no está vinculada a YCloud. Volvé a conectar el número desde Integraciones.',
+      )
+    }
+
     throw new Error(msg)
   }
   return data
+}
+
+/** La WABA existe pero no está vinculada a la cuenta: no es un ID mal cargado. */
+export class YCloudUnboundWabaError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'YCloudUnboundWabaError'
+  }
 }
 
 /**

@@ -155,8 +155,14 @@ async function fetchWhatsAppTemplates(supabase: any, userId: string, botId?: str
             last_synced: new Date().toISOString(),
           })),
         )
-      } catch (error) {
-        console.error('Error fetching WhatsApp templates from YCloud:', error)
+      } catch (error: any) {
+        // WABA desvinculada: es un problema de la conexión, no de las plantillas.
+        // Se avisa una sola línea en vez de volcar un stacktrace en cada request.
+        if (error?.name === 'YCloudUnboundWabaError') {
+          console.warn(`[templates] WhatsApp sin vincular (WABA ${wabaId}): no hay plantillas que traer`)
+        } else {
+          console.error('Error fetching WhatsApp templates from YCloud:', error)
+        }
         return []
       }
     }
