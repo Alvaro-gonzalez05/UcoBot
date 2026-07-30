@@ -17,6 +17,7 @@ import { toast } from "sonner"
 import { paymentLabel } from "@/lib/payment-methods"
 import {
   printCashCloseTicket,
+  type TicketBranding,
   type CashCloseTicketData,
   type TicketWidth,
 } from "@/lib/print-ticket"
@@ -153,6 +154,7 @@ export function CashSessionDialog({
   userId,
   businessName,
   ticketWidth,
+  ticketBranding,
   activeSession,
   onSessionChange,
 }: {
@@ -161,6 +163,8 @@ export function CashSessionDialog({
   userId: string
   businessName: string
   ticketWidth: TicketWidth
+  /** Logo y encabezado del local, para que el arqueo salga con la misma identidad. */
+  ticketBranding?: TicketBranding
   activeSession: CashSession | null
   onSessionChange: (session: CashSession | null) => void
 }) {
@@ -292,7 +296,10 @@ export function CashSessionDialog({
 
       const closed = data as CashSession
       onSessionChange(null)
-      printCashCloseTicket(buildCloseTicket(businessName, closed, totals, countedNum), ticketWidth)
+      printCashCloseTicket(
+        { ...buildCloseTicket(businessName, closed, totals, countedNum), branding: ticketBranding },
+        ticketWidth
+      )
       toast.success("Caja cerrada. Se generó el ticket de cierre.")
       setCountedCash("")
       setCloseNotes("")
@@ -329,7 +336,10 @@ export function CashSessionDialog({
     try {
       const sessionTotals = await loadSessionTotals(supabase, session, userId)
       printCashCloseTicket(
-        buildCloseTicket(businessName, session, sessionTotals, session.counted_totals?.cash),
+        {
+          ...buildCloseTicket(businessName, session, sessionTotals, session.counted_totals?.cash),
+          branding: ticketBranding,
+        },
         ticketWidth
       )
     } catch {

@@ -5,6 +5,11 @@ import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { paymentLabel } from "@/lib/payment-methods"
 import { printCashCloseTicket, type TicketWidth } from "@/lib/print-ticket"
+import {
+  brandingIdentityFrom,
+  TICKET_SETTINGS_COLUMNS,
+  type TicketSettingsRow,
+} from "@/lib/ticket-branding"
 import { cn } from "@/lib/utils"
 
 interface Closure {
@@ -84,6 +89,20 @@ export function StoresTile({
   const [panel, setPanel] = useState<PanelId>("finanzas")
   const supabase = createClient()
 
+  // Identidad del ticket del negocio (logo y encabezado), para que el arqueo
+  // reimpreso desde acá salga igual que el que emite el punto de venta. Se toma
+  // la del dueño: la marca es del negocio, no de cada sucursal.
+  const [ticketSettings, setTicketSettings] = useState<TicketSettingsRow | null>(null)
+  useEffect(() => {
+    if (!ownerId) return
+    supabase
+      .from("pos_settings")
+      .select(TICKET_SETTINGS_COLUMNS)
+      .eq("user_id", ownerId)
+      .maybeSingle()
+      .then(({ data }) => setTicketSettings((data as TicketSettingsRow) || null))
+  }, [ownerId])
+
   const load = useCallback(async () => {
     try {
       const from = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
@@ -148,6 +167,7 @@ export function StoresTile({
         countedCash: c.closingAmount ?? undefined,
         difference: c.difference ?? undefined,
         notes: c.notes || undefined,
+        branding: brandingIdentityFrom(ticketSettings),
       },
       80 as TicketWidth
     )

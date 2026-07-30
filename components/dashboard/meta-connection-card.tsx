@@ -415,6 +415,51 @@ function YCloudConnectDialog({
   // su API key: sin ella no hay números que listar.
   const [needsApiKey, setNeedsApiKey] = useState(false)
   const [apiKey, setApiKey] = useState("")
+  const [savingKey, setSavingKey] = useState(false)
+
+  /**
+   * Guarda la credencial y recién después lista los números.
+   *
+   * Son dos pasos separados a propósito: si la cuenta de YCloud es nueva y todavía
+   * no tiene ningún número, la lista sale vacía — pero la clave ya quedó guardada,
+   * que es lo que antes se perdía al cerrar el diálogo.
+   */
+  const saveKeyAndLoad = async () => {
+    const typedKey = apiKey.trim()
+    if (!typedKey) return
+
+    setSavingKey(true)
+    try {
+      const res = await fetch("/api/integrations/whatsapp/ycloud/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ api_key: typedKey }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        toast.error(json.error || "No se pudo guardar la API key")
+        return
+      }
+
+      if (json.webhook_error) {
+        toast.warning("Clave guardada, pero el webhook quedó sin configurar", {
+          description: json.webhook_error,
+        })
+      } else if (json.numbers_found === 0) {
+        toast.success("API key guardada", {
+          description: "Todavía no hay números en esa cuenta. Dalos de alta y volvé acá.",
+        })
+      } else {
+        toast.success("API key guardada")
+      }
+
+      await loadNumbers()
+    } catch {
+      toast.error("Error de red al guardar la API key")
+    } finally {
+      setSavingKey(false)
+    }
+  }
 
   const loadNumbers = async () => {
     setLoading(true)
@@ -550,10 +595,10 @@ function YCloudConnectDialog({
               <Button
                 size="sm"
                 className="w-full"
-                disabled={!apiKey.trim() || loading}
-                onClick={loadNumbers}
+                disabled={!apiKey.trim() || loading || savingKey}
+                onClick={saveKeyAndLoad}
               >
-                Buscar mis números
+                {savingKey ? "Guardando…" : "Guardar y buscar mis números"}
               </Button>
               <p className="text-xs text-muted-foreground">
                 Queda guardada en tu cuenta y se usa para enviar y recibir tus mensajes.

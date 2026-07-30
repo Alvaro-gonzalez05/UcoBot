@@ -25,6 +25,31 @@ export interface TicketData {
   tipLabel?: string
   payments?: { label?: string; method: string; amount: number }[]
   notes?: string
+  /** Personalización del local (logo, encabezado, cierre, QR). */
+  branding?: TicketBranding
+}
+
+/**
+ * Personalización del ticket, configurada por el negocio en los ajustes del punto
+ * de venta. Todo es opcional: sin nada, el ticket sale como salía siempre.
+ */
+export interface TicketBranding {
+  /** Encabezado. Si falta se usa el nombre del negocio del pedido. */
+  businessName?: string | null
+  /** Logo del local (URL de imagen). Va arriba de todo. */
+  logoUrl?: string | null
+  /** Cierre. Si falta, "¡Gracias por su compra!". */
+  footerText?: string | null
+  /** Link del QR al pie. Vacío = sin QR. */
+  qrUrl?: string | null
+  /** Texto sobre el QR ("¡Calificanos!", "Seguinos"…). */
+  qrLabel?: string | null
+  /**
+   * SVG del QR ya renderizado. Lo arma quien imprime (ver buildTicketQr): acá no
+   * se puede, porque este archivo no monta React y el ticket tiene que poder
+   * imprimirse sin conexión, así que el QR va embebido y no como imagen remota.
+   */
+  qrSvg?: string | null
 }
 
 export interface PrintTicketOptions {
@@ -89,8 +114,17 @@ export function buildTicketInner(t: TicketData): string {
 
   const cleanedNotes = cleanTicketNotes(t.notes)
 
+  const b = t.branding || {}
+
+  // El logo se imprime en escala de grises: las térmicas son monocromas y una
+  // imagen a color sale como una mancha.
+  const logoBlock = b.logoUrl
+    ? `<div class="center"><img class="logo" src="${esc(b.logoUrl)}" alt="" /></div>`
+    : ""
+
   return `
-    <div class="center biz">${esc(t.businessName)}</div>
+    ${logoBlock}
+    <div class="center biz">${esc(b.businessName || t.businessName)}</div>
     <div class="center muted">${fechaStr}</div>
     <div class="sep"></div>
     <div class="row"><span>Pedido</span><span>#${esc(t.orderId.slice(0, 8).toUpperCase())}</span></div>
@@ -106,7 +140,15 @@ export function buildTicketInner(t: TicketData): string {
     <div class="row total"><span>TOTAL</span><span>${money(t.total)}</span></div>
     ${paymentRows}
     ${cleanedNotes ? `<div class="notes">Nota: ${esc(cleanedNotes)}</div>` : ""}
-    <div class="center muted footer">¡Gracias por su compra!</div>
+    <div class="center muted footer">${esc(b.footerText || "¡Gracias por su compra!")}</div>
+    ${
+      b.qrSvg
+        ? `<div class="center qrbox">
+             ${b.qrLabel ? `<div class="muted bold qrlabel">${esc(b.qrLabel)}</div>` : ""}
+             <div class="qr">${b.qrSvg}</div>
+           </div>`
+        : ""
+    }
     <div class="center muted">No válido como factura</div>
     <div class="center muted bold" style="margin-top:4px;">UCOBOT - CODEA DESARROLLOS</div>`
 }
@@ -132,6 +174,12 @@ export interface CashCloseTicketData {
   /** contado - esperado */
   difference?: number
   notes?: string
+  /**
+   * Identidad del local: logo y encabezado. El QR y el texto de cierre NO se usan
+   * acá — este es un documento interno de control, no algo que se le entrega al
+   * cliente, así que no lleva ni "gracias por su compra" ni códigos para escanear.
+   */
+  branding?: TicketBranding
 }
 
 /** Contenido interno del ticket de cierre de caja (mismos estilos que el de venta). */
@@ -151,8 +199,14 @@ export function buildCashCloseTicketInner(d: CashCloseTicketData): string {
 
   const salesTotal = d.totalsByMethod.reduce((acc, m) => acc + m.amount, 0)
 
+  const b = d.branding || {}
+  const logoBlock = b.logoUrl
+    ? `<div class="center"><img class="logo" src="${esc(b.logoUrl)}" alt="" /></div>`
+    : ""
+
   return `
-    <div class="center biz">${esc(d.businessName)}</div>
+    ${logoBlock}
+    <div class="center biz">${esc(b.businessName || d.businessName)}</div>
     <div class="center bold" style="margin-top:2px;">CIERRE DE CAJA</div>
     <div class="center muted">Caja #${esc(d.sessionId.slice(0, 8).toUpperCase())}</div>
     <div class="sep"></div>
@@ -252,6 +306,17 @@ function buildDocumentShell(inner: string, widthMm: TicketWidth, autoPrint = fal
   .total { font-size: ${bigFont}px; font-weight: 700; }
   .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
   .footer { margin-top: 10px; }
+  .logo {
+    max-width: 70%;
+    max-height: 22mm;
+    margin: 0 auto 6px;
+    display: block;
+    /* Monocromo y con contraste alto: es lo que mejor sale en papel térmico. */
+    filter: grayscale(100%) contrast(1.35);
+  }
+  .qrbox { margin-top: 10px; }
+  .qrlabel { margin-bottom: 4px; }
+  .qr svg { width: 28mm; height: 28mm; }
   .actions { display: none; }
   ${autoPrint ? `
   .actions {

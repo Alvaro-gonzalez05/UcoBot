@@ -24,6 +24,13 @@ import { playNewOrderSound, primeSounds } from "@/lib/sounds"
 import { ProductEditForm } from "./product-edit-form"
 import { OrderCheckoutDialog, OrderCheckoutPanel, type PaymentRecord } from "./order-checkout-dialog"
 import { printTicket, cleanTicketNotes } from "@/lib/print-ticket"
+import {
+  resolveTicketBranding,
+  TICKET_SETTINGS_COLUMNS,
+  DEFAULT_TICKET_FOOTER,
+  type TicketSettingsRow,
+} from "@/lib/ticket-branding"
+import QRCode from "react-qr-code"
 import { SheetGrabBar } from "@/components/ui/sheet-grab-bar"
 import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator } from "@/components/ui/dropdown-menu"
@@ -188,14 +195,18 @@ export function PedidosClient({
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Ancho del ticket configurado por el negocio (58/80mm) para imprimir bien
+  // Ancho y personalización del ticket. Es la MISMA config que usa el punto de
+  // venta: el comprobante tiene que salir igual se imprima desde donde se imprima.
+  const [ticketSettings, setTicketSettings] = useState<TicketSettingsRow | null>(null)
   useEffect(() => {
     supabase
       .from("pos_settings")
-      .select("ticket_width")
+      .select(`ticket_width, ${TICKET_SETTINGS_COLUMNS}`)
       .maybeSingle()
       .then(({ data }) => {
-        if (data?.ticket_width === 58 || data?.ticket_width === 80) setTicketWidth(data.ticket_width)
+        if (!data) return
+        if (data.ticket_width === 58 || data.ticket_width === 80) setTicketWidth(data.ticket_width)
+        setTicketSettings(data as TicketSettingsRow)
       })
   }, [])
 
@@ -1116,21 +1127,26 @@ export function PedidosClient({
     // El check queda fijo hasta que el usuario vuelva al pedido o cierre el modal.
     setPrintPhase("printing")
     window.setTimeout(() => setPrintPhase((p) => (p === "printing" ? "done" : p)), 1500)
-    printTicket({
-      businessName,
-      orderId: selectedOrder.id,
-      clientName: getOrderClientName(selectedOrder),
-      orderType: getOrderModalityLabel(selectedOrder),
-      items: editItems.filter((i) => !i.removed).map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, options: optionNames(i.options) })),
-      total: editTotal + printTip,
-      tipAmount: printTip || undefined,
-      payments: selectedOrder.payments,
-      notes: editNotes || undefined,
-    }, ticketWidth, {
-      onComplete: () => {
-        setIsPrintingTicket(false)
-        setDetailMode("print")
-      },
+    // El QR se arma antes de abrir la ventana: va embebido como SVG para que el
+    // ticket no dependa de la red al imprimir.
+    resolveTicketBranding(ticketSettings).then((branding) => {
+      printTicket({
+        businessName,
+        orderId: selectedOrder.id,
+        clientName: getOrderClientName(selectedOrder),
+        orderType: getOrderModalityLabel(selectedOrder),
+        items: editItems.filter((i) => !i.removed).map((i) => ({ name: i.name, quantity: i.quantity, price: i.price, options: optionNames(i.options) })),
+        total: editTotal + printTip,
+        tipAmount: printTip || undefined,
+        payments: selectedOrder.payments,
+        notes: editNotes || undefined,
+        branding,
+      }, ticketWidth, {
+        onComplete: () => {
+          setIsPrintingTicket(false)
+          setDetailMode("print")
+        },
+      })
     })
   }
 
@@ -2450,7 +2466,16 @@ export function PedidosClient({
                         <motion.div
                           className={cn("w-full rounded-lg bg-white text-black shadow-lg border border-border/50 px-4 py-5 font-mono text-[12px] leading-snug h-fit", ticketWidth === 58 ? "max-w-[210px]" : "max-w-[280px]")}
                         >
-                          <p className="text-center text-[14px] font-bold uppercase">{businessName}</p>
+                          {ticketSettings?.ticket_logo_url && (
+                            <img
+                              src={ticketSettings.ticket_logo_url}
+                              alt=""
+                              className="mx-auto mb-1 max-h-10 object-contain grayscale"
+                            />
+                          )}
+                          <p className="text-center text-[14px] font-bold uppercase">
+                            {ticketSettings?.ticket_business_name || businessName}
+                          </p>
                         <p className="text-center text-[10px] text-neutral-500">
                           {format(new Date(), "dd/MM/yyyy HH:mm", { locale: es })} · se imprime con la hora exacta
                         </p>
@@ -2491,8 +2516,24 @@ export function PedidosClient({
                           </>
                         )}
                         {cleanTicketNotes(editNotes) && <p className="mt-2 text-[10px] text-neutral-600 break-words">Nota: {cleanTicketNotes(editNotes)}</p>}
-                        <p className="mt-3 text-center text-[10px] text-neutral-500">¡Gracias por su compra!</p>
-                        <p className="text-center text-[10px] text-neutral-500">No válido como factura</p>
+                        {/* Mismo texto que se imprime: si el negocio lo personalizó,
+                            la vista previa tiene que mostrar eso y no el default. */}
+                        <p className="mt-3 text-center text-[10px] text-neutral-500">
+                          {ticketSettings?.ticket_footer_text || DEFAULT_TICKET_FOOTER}
+                        </p>
+                        {ticketSettings?.ticket_qr_url && (
+                          <div className="mt-2 flex flex-col items-center gap-1">
+                            {ticketSettings.ticket_qr_label && (
+                              <span className="text-[9px] font-bold text-neutral-600">
+                                {ticketSettings.ticket_qr_label}
+                              </span>
+                            )}
+                            <div className="rounded bg-white p-1">
+                              <QRCode value={ticketSettings.ticket_qr_url} size={56} />
+                            </div>
+                          </div>
+                        )}
+                        <p className="mt-1 text-center text-[10px] text-neutral-500">No válido como factura</p>
                         <p className="mt-1 text-center text-[9px] font-bold text-neutral-500">UCOBOT - CODEA DESARROLLOS</p>
                         </motion.div>
                       </div>

@@ -98,6 +98,52 @@ async function callGeminiWithFallback(
 }
 
 /** "HH:MM" + minutos → "HH:MM" (para calcular el fin de un turno según su duración). */
+/**
+ * Deja en los items solo opciones que existen de verdad, con el nombre y el
+ * precio que están en la base.
+ *
+ * Las opciones vienen de un texto generado por la IA: una inventada o un delta
+ * mal copiado terminaría impreso en la comanda y cobrado al cliente. Acá se
+ * descarta lo que no matchea y se reescribe el resto con los datos reales.
+ *
+ * El formato de salida es el MISMO que usa el punto de venta
+ * ({ group, name, delta }), así el ticket y la pantalla de pedidos muestran igual
+ * un pedido del bot que uno cargado a mano.
+ */
+async function sanitizeItemOptions(supabase: any, userId: string, items: any[]): Promise<any[]> {
+  const hasOptions = items.some((i: any) => Array.isArray(i?.options) && i.options.length > 0)
+  if (!hasOptions) return items
+
+  const { data: realOptions } = await supabase
+    .from('product_option_items')
+    .select('name, price_delta, product_option_groups(name)')
+    .eq('user_id', userId)
+
+  const norm = (v: any) => String(v ?? '').toLowerCase().trim()
+  const byName = new Map<string, { group: string; name: string; delta: number }>()
+  for (const o of realOptions || []) {
+    byName.set(norm(o.name), {
+      group: (o as any).product_option_groups?.name || '',
+      name: o.name,
+      delta: Number(o.price_delta) || 0,
+    })
+  }
+
+  return items.map((item: any) => {
+    if (!Array.isArray(item?.options) || item.options.length === 0) return item
+
+    const clean = item.options
+      .map((o: any) => byName.get(norm(typeof o === 'string' ? o : o?.name)))
+      .filter(Boolean) as { group: string; name: string; delta: number }[]
+
+    if (clean.length === 0) {
+      const { options, ...rest } = item
+      return rest
+    }
+    return { ...item, options: clean }
+  })
+}
+
 function addMinutesToTime(time: string, mins: number): string {
   const [h, m] = (time || "00:00").split(":").map(Number)
   const total = (h || 0) * 60 + (m || 0) + (mins || 0)
@@ -856,6 +902,47 @@ ${finalDeliverySettings.delivery_enabled ? 'Para envío propio: pedir dirección
           .order("name", { ascending: true })
 
         if (products && products.length > 0) {
+          // OPCIONES DE PRODUCTO (punto de cocción, agregados, tamaño…).
+          // Sin esto el bot no sabe que existen: no pregunta las obligatorias, no
+          // conoce los agregados ni lo que suman, y el pedido llega a la comanda
+          // sin el detalle que el local necesita para prepararlo.
+          const optionsByProduct = new Map<string, string[]>()
+          try {
+            const [{ data: optLinks }, { data: optGroups }, { data: optItems }] = await Promise.all([
+              supabase.from('product_option_links').select('product_id, group_id').eq('user_id', bot.user_id),
+              supabase.from('product_option_groups').select('id, name, required, multi').eq('user_id', bot.user_id),
+              supabase.from('product_option_items').select('group_id, name, price_delta').eq('user_id', bot.user_id).order('sort_order'),
+            ])
+
+            const groupById = new Map((optGroups || []).map((g: any) => [g.id, g]))
+            const itemsByGroup = new Map<string, any[]>()
+            for (const it of optItems || []) {
+              const list = itemsByGroup.get(it.group_id)
+              if (list) list.push(it)
+              else itemsByGroup.set(it.group_id, [it])
+            }
+
+            for (const link of optLinks || []) {
+              const g: any = groupById.get(link.group_id)
+              if (!g) continue
+              const choices = (itemsByGroup.get(link.group_id) || [])
+                .map((it: any) => {
+                  const delta = Number(it.price_delta) || 0
+                  return delta ? `${it.name} +$${delta}` : it.name
+                })
+                .join(', ')
+              if (!choices) continue
+
+              const rule = `${g.required ? 'OBLIGATORIO' : 'opcional'}, ${g.multi ? 'puede elegir varias' : 'elegir 1'}`
+              const line = `    · ${g.name} (${rule}): ${choices}`
+              const acc = optionsByProduct.get(link.product_id)
+              if (acc) acc.push(line)
+              else optionsByProduct.set(link.product_id, [line])
+            }
+          } catch (optErr) {
+            console.error('Error cargando opciones de producto:', optErr)
+          }
+
           const productsByCategory = products.reduce((acc: Record<string, any[]>, product: any) => {
             const category = product.category || 'Sin categoría'
             if (!acc[category]) acc[category] = []
@@ -865,9 +952,11 @@ ${finalDeliverySettings.delivery_enabled ? 'Para envío propio: pedir dirección
 
           const catalogText = Object.entries(productsByCategory)
             .map(([category, items]: [string, any]) => {
-              const itemList = items.map((item: any) => 
-                `- ${item.name}: $${item.price}${item.description ? ` - ${item.description}` : ''}`
-              ).join('\n')
+              const itemList = items.map((item: any) => {
+                const base = `- ${item.name}: $${item.price}${item.description ? ` - ${item.description}` : ''}`
+                const opts = optionsByProduct.get(item.id)
+                return opts && opts.length ? `${base}\n${opts.join('\n')}` : base
+              }).join('\n')
               return `**${category}:**\n${itemList}`
             }).join('\n\n')
 
@@ -876,6 +965,12 @@ CATÁLOGO DE PRODUCTOS DISPONIBLES:
 ${catalogText}
 
 INFORMACIÓN ADICIONAL PARA RESPUESTAS SOBRE MENÚ:
+- OPCIONES: los renglones con "·" debajo de un producto son sus opciones.
+  Las marcadas OBLIGATORIO hay que PREGUNTARLAS SIEMPRE antes de dar por cerrado
+  el pedido de ese producto (ej: el punto de cocción de una hamburguesa). Sin esa
+  respuesta la cocina no lo puede preparar.
+- Las opciones "opcional" se ofrecen, no se exigen. Las que suman precio se avisan
+  con el monto y se agregan al total.
 - Si el cliente pregunta por la carta/menú, muestra el catálogo de productos disponibles
 - Menciona los platos destacados según la descripción: ${userProfile.business_description || fallbackInfo.description || ''}
 - El enlace del menú completo es: ${menuLink || 'No disponible'}
@@ -1547,6 +1642,11 @@ TAREA:
    - Si el usuario está pidiendo algo nuevo (ej: "ahora quiero X"), ignora lo anterior.
    - Si el precio no se menciona explícitamente, BÚSCALO en el CATÁLOGO DE PRODUCTOS.
    - Si el precio no está en el catálogo ni en el chat, usa 0.
+   - OPCIONES: si el producto tiene opciones listadas debajo en el catálogo (·),
+     poné en "options" las que el cliente eligió, con su grupo, nombre y delta
+     EXACTOS del catálogo. Si no eligió ninguna de un grupo opcional, no la incluyas.
+   - El "price" de cada item es el precio del producto MÁS la suma de los delta de
+     sus opciones (precio unitario final).
    - Calcula el total sumando (precio * cantidad).
 3. Si es una RESERVA:
    - Extrae fecha, hora y personas del historial.
@@ -1561,7 +1661,7 @@ FORMATO DE RESPUESTA (JSON):
 Si es un PEDIDO CONFIRMADO (${canTakeOrders ? 'SI' : 'NO'} habilitado):
 {
   "type": "order",
-  "items": [{"name": "Nombre exacto del producto", "quantity": 1, "price": 1000}],
+  "items": [{"name": "Nombre exacto del producto", "quantity": 1, "price": 1000, "options": [{"group": "Punto de cocción", "name": "Jugosa", "delta": 0}]}],
   "total": 1000,
   "orderType": "delivery" | "pickup",
   "deliveryAddress": "...",
@@ -1715,7 +1815,7 @@ async function updateOrderFromAI(
 El Bot acaba de confirmar la MODIFICACIÓN de un pedido existente. Extraé cómo queda el pedido FINAL COMPLETO.
 
 PEDIDO ORIGINAL:
-${JSON.stringify((order.items || []).map((i: any) => ({ name: i.name, quantity: i.quantity, price: i.price })))}
+${JSON.stringify((order.items || []).map((i: any) => ({ name: i.name, quantity: i.quantity, price: i.price, options: i.options })))}
 
 CONTEXTO (historial reciente):
 ${historyText}
@@ -1728,7 +1828,11 @@ CATÁLOGO DE PRODUCTOS (para precios y nombres exactos):
 ${productsInfo || 'No hay catálogo disponible.'}
 
 Respondé SOLO con este JSON (el pedido final completo tras la modificación; si un precio no aparece en el chat, buscalo en el catálogo, y si tampoco está usá el del pedido original o 0):
-{ "items": [{ "name": "...", "quantity": 1, "price": 0 }], "total": 0 }
+{ "items": [{ "name": "...", "quantity": 1, "price": 0, "options": [{ "group": "...", "name": "...", "delta": 0 }] }], "total": 0 }
+
+IMPORTANTE con las opciones: si un item del pedido original ya traía "options" y el
+cliente no pidió cambiarlas, DEVOLVELAS TAL CUAL. Perderlas deja al local sin saber
+cómo preparar ese producto.
 `
     const response = await callGeminiWithFallback(geminiApiKey, {
       contents: [{ parts: [{ text: extractionPrompt }] }],
@@ -1764,6 +1868,7 @@ Respondé SOLO con este JSON (el pedido final completo tras la modificación; si
           return product ? { ...item, product_id: product.id } : item
         })
       }
+      newItems = await sanitizeItemOptions(supabase, bot.user_id, newItems)
     } catch (enrichErr) {
       console.error('Error enriching modified order items:', enrichErr)
     }
@@ -1896,6 +2001,8 @@ async function saveOrderFromAI(
           return product ? { ...item, product_id: product.id } : item;
         });
       }
+
+      enrichedItems = await sanitizeItemOptions(supabase, bot.user_id, enrichedItems)
     } catch (enrichErr) {
       console.error('Error enriching order items with product ids:', enrichErr);
     }

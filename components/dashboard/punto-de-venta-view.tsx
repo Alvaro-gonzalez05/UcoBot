@@ -21,6 +21,7 @@ import { broadcastLoyaltyUpdate } from "@/lib/loyalty-realtime"
 import { PosSettingsDialog, DEFAULT_POS_SETTINGS, POS_SETTINGS_COLUMNS, type PosSettings } from "@/components/dashboard/pos-settings-dialog"
 import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
 import { printTicket, type TicketData, type TicketWidth } from "@/lib/print-ticket"
+import { resolveTicketBranding, brandingIdentityFrom } from "@/lib/ticket-branding"
 import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
 import type { PaymentRecord } from "./order-checkout-dialog"
 import { CashSessionDialog, type CashSession } from "@/components/dashboard/cash-session-dialog"
@@ -260,6 +261,11 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
             cash_auto_close_mode: data.cash_auto_close_mode || "off",
             cash_auto_close_hours: Number(data.cash_auto_close_hours) || 12,
             cash_auto_close_time: data.cash_auto_close_time || "23:59",
+            ticket_business_name: data.ticket_business_name ?? null,
+            ticket_logo_url: data.ticket_logo_url ?? null,
+            ticket_footer_text: data.ticket_footer_text ?? null,
+            ticket_qr_url: data.ticket_qr_url ?? null,
+            ticket_qr_label: data.ticket_qr_label ?? null,
           })
           // No se auto-selecciona método: el usuario decide si cobra (y con qué) o pasa el pedido
         }
@@ -892,7 +898,14 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
   const handlePosPrint = () => {
     if (!lastTicket) return
     setPosPrintPhase("printing")
-    printTicket(lastTicket, (posSettings.ticket_width as TicketWidth) || 80)
+    // El QR se resuelve antes de abrir la ventana de impresión: va embebido como
+    // SVG para que el ticket no dependa de la red al momento de imprimir.
+    resolveTicketBranding(posSettings).then((branding) => {
+      printTicket(
+        { ...lastTicket, branding },
+        (posSettings.ticket_width as TicketWidth) || 80
+      )
+    })
     window.setTimeout(() => setPosPrintPhase("done"), 1500)
   }
 
@@ -1095,10 +1108,31 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
                   <Wallet className="h-5 w-5" />
                   Abrir caja
                 </button>
+
+                {/* La configuración se llega igual con la caja cerrada: es
+                    justamente el momento en que se deja lista la impresora, los
+                    medios de pago y el ticket, antes de empezar a vender. */}
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(true)}
+                  className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-full border border-border/70 px-8 py-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                >
+                  <Settings className="h-4 w-4" />
+                  Configurar punto de venta
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
         </motion.div>
+
+        {/* Montado también acá: esta rama retorna antes del diálogo del final. */}
+        <PosSettingsDialog
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          userId={userId}
+          settings={posSettings}
+          onSaved={(s) => setPosSettings(s)}
+        />
 
         <CashSessionDialog
           open={cashDialogOpen}
@@ -1106,6 +1140,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           userId={userId}
           businessName={businessName}
           ticketWidth={(posSettings.ticket_width as TicketWidth) || 80}
+          ticketBranding={brandingIdentityFrom(posSettings)}
           activeSession={cashSession}
           onSessionChange={(session) => {
             if (session) {
@@ -2165,6 +2200,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         userId={userId}
         businessName={businessName}
         ticketWidth={(posSettings.ticket_width as TicketWidth) || 80}
+        ticketBranding={brandingIdentityFrom(posSettings)}
         activeSession={cashSession}
         onSessionChange={setCashSession}
       />

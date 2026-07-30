@@ -17,6 +17,7 @@ import { Banknote, CreditCard, Landmark, QrCode, Smartphone, Loader2 } from "luc
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { PAYMENT_METHOD_LABELS } from "@/lib/payment-methods"
+import { TICKET_SETTINGS_COLUMNS, DEFAULT_TICKET_FOOTER } from "@/lib/ticket-branding"
 
 export interface PosSettings {
   payment_methods: string[]
@@ -27,6 +28,12 @@ export interface PosSettings {
   cash_auto_close_mode: "off" | "hours" | "daily"
   cash_auto_close_hours: number
   cash_auto_close_time: string
+  /** Personalización del ticket impreso (ver lib/ticket-branding.ts). */
+  ticket_business_name: string | null
+  ticket_logo_url: string | null
+  ticket_footer_text: string | null
+  ticket_qr_url: string | null
+  ticket_qr_label: string | null
 }
 
 export const DEFAULT_POS_SETTINGS: PosSettings = {
@@ -37,11 +44,17 @@ export const DEFAULT_POS_SETTINGS: PosSettings = {
   cash_auto_close_mode: "off",
   cash_auto_close_hours: 12,
   cash_auto_close_time: "23:59",
+  ticket_business_name: null,
+  ticket_logo_url: null,
+  ticket_footer_text: null,
+  ticket_qr_url: null,
+  ticket_qr_label: null,
 }
 
 /** Columnas de pos_settings que necesita el POS (evita repetir el select en cada pantalla). */
 export const POS_SETTINGS_COLUMNS =
-  "payment_methods, tip_enabled, tip_percent, ticket_width, cash_auto_close_mode, cash_auto_close_hours, cash_auto_close_time"
+  "payment_methods, tip_enabled, tip_percent, ticket_width, cash_auto_close_mode, cash_auto_close_hours, cash_auto_close_time, " +
+  TICKET_SETTINGS_COLUMNS
 
 const PAYMENT_METHODS = [
   { id: "cash", label: PAYMENT_METHOD_LABELS.cash, icon: Banknote },
@@ -74,6 +87,15 @@ export function PosSettingsDialog({
   const [autoCloseTime, setAutoCloseTime] = useState((settings.cash_auto_close_time || "23:59").slice(0, 5))
   const [saving, setSaving] = useState(false)
 
+  // ── Ticket impreso ──
+  const [ticketName, setTicketName] = useState(settings.ticket_business_name || "")
+  const [ticketFooter, setTicketFooter] = useState(settings.ticket_footer_text || "")
+  const [ticketQrUrl, setTicketQrUrl] = useState(settings.ticket_qr_url || "")
+  const [ticketQrLabel, setTicketQrLabel] = useState(settings.ticket_qr_label || "")
+  const [logoUrl, setLogoUrl] = useState(settings.ticket_logo_url || "")
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [logoPreview, setLogoPreview] = useState<string | null>(null)
+
   // La config del POS llega async (arranca en los valores por defecto). Al abrir el
   // diálogo resincronizamos desde settings para no mostrar un estado viejo (ej: la
   // propina apareciendo apagada cuando en realidad está activada).
@@ -86,7 +108,29 @@ export function PosSettingsDialog({
     setAutoCloseMode(settings.cash_auto_close_mode || "off")
     setAutoCloseHours(String(settings.cash_auto_close_hours ?? 12))
     setAutoCloseTime((settings.cash_auto_close_time || "23:59").slice(0, 5))
+    setTicketName(settings.ticket_business_name || "")
+    setTicketFooter(settings.ticket_footer_text || "")
+    setTicketQrUrl(settings.ticket_qr_url || "")
+    setTicketQrLabel(settings.ticket_qr_label || "")
+    setLogoUrl(settings.ticket_logo_url || "")
+    setLogoFile(null)
+    setLogoPreview(null)
   }, [open, settings])
+
+  const pickLogo = (file: File | null) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      toast.error("El logo tiene que ser una imagen (PNG o JPG)")
+      return
+    }
+    // 2 MB alcanza de sobra para un logo y evita subidas eternas desde el celular.
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("La imagen es muy pesada (máximo 2 MB)")
+      return
+    }
+    setLogoFile(file)
+    setLogoPreview(URL.createObjectURL(file))
+  }
 
   const toggleMethod = (id: string) => {
     setMethods((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]))
@@ -108,6 +152,27 @@ export function PosSettingsDialog({
       // Ordenar según el orden canónico para que se vean consistentes
       const ordered = PAYMENT_METHODS.filter((p) => methods.includes(p.id)).map((p) => p.id)
       const hours = Math.min(72, Math.max(1, parseInt(autoCloseHours) || 12))
+
+      // El logo se sube recién al guardar, no al elegirlo: si el usuario cierra el
+      // diálogo sin confirmar no queda un archivo huérfano en el bucket.
+      let finalLogoUrl = logoUrl
+      if (logoFile) {
+        const ext = (logoFile.name.split(".").pop() || "png").toLowerCase()
+        // OJO con el orden: la policy del bucket exige que la PRIMERA carpeta del
+        // path sea el uid del usuario ((storage.foldername(name))[1] = auth.uid()).
+        // Con `ticket-logos/<uid>.png` la subida se rechaza.
+        const path = `${userId}/ticket-logo.${ext}`
+        const { error: uploadError } = await supabase.storage
+          .from("product-images")
+          .upload(path, logoFile, { upsert: true, contentType: logoFile.type })
+        if (uploadError) throw uploadError
+
+        const { data: pub } = supabase.storage.from("product-images").getPublicUrl(path)
+        // El sufijo evita que la impresión siga mostrando el logo viejo cacheado
+        // cuando lo reemplazan (mismo nombre de archivo).
+        finalLogoUrl = `${pub.publicUrl}?v=${Date.now()}`
+      }
+
       const payload: PosSettings = {
         payment_methods: ordered,
         tip_enabled: tipEnabled,
@@ -116,6 +181,13 @@ export function PosSettingsDialog({
         cash_auto_close_mode: autoCloseMode,
         cash_auto_close_hours: hours,
         cash_auto_close_time: `${autoCloseTime}:00`,
+        // Vacío = sin personalizar; se guarda NULL para que el ticket use el
+        // valor por defecto en vez de imprimir una línea en blanco.
+        ticket_business_name: ticketName.trim() || null,
+        ticket_logo_url: finalLogoUrl || null,
+        ticket_footer_text: ticketFooter.trim() || null,
+        ticket_qr_url: ticketQrUrl.trim() || null,
+        ticket_qr_label: ticketQrLabel.trim() || null,
       }
       const { error } = await supabase.from("pos_settings").upsert({
         user_id: userId,
@@ -235,6 +307,111 @@ export function PosSettingsDialog({
                   {w}mm
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* Personalización del ticket */}
+          <div className="space-y-3 rounded-xl border border-border/60 p-3">
+            <div>
+              <Label className="text-sm font-semibold">Ticket impreso</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Cómo sale el comprobante. Aplica al punto de venta y a los pedidos.
+              </p>
+            </div>
+
+            {/* Logo */}
+            <div className="space-y-1.5">
+              <Label htmlFor="ticket-logo" className="text-xs font-medium">
+                Logo del local
+              </Label>
+              <div className="flex items-center gap-3">
+                {(logoPreview || logoUrl) && (
+                  // Se muestra en gris como va a salir impreso, no en color.
+                  <img
+                    src={logoPreview || logoUrl}
+                    alt="Logo del ticket"
+                    className="h-12 w-12 rounded-lg border border-border/60 bg-white object-contain p-1 grayscale"
+                  />
+                )}
+                <div className="flex-1 space-y-1">
+                  <Input
+                    id="ticket-logo"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(e) => pickLogo(e.target.files?.[0] || null)}
+                    className="text-xs"
+                  />
+                  {(logoPreview || logoUrl) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLogoFile(null)
+                        setLogoPreview(null)
+                        setLogoUrl("")
+                      }}
+                      className="text-[11px] text-muted-foreground underline hover:text-foreground"
+                    >
+                      Quitar logo
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Se imprime en blanco y negro. Un PNG con fondo transparente sale mejor.
+              </p>
+            </div>
+
+            {/* Encabezado */}
+            <div className="space-y-1.5">
+              <Label htmlFor="ticket-name" className="text-xs font-medium">
+                Nombre en el ticket
+              </Label>
+              <Input
+                id="ticket-name"
+                value={ticketName}
+                onChange={(e) => setTicketName(e.target.value)}
+                placeholder="El nombre de tu negocio"
+                maxLength={60}
+              />
+            </div>
+
+            {/* Cierre */}
+            <div className="space-y-1.5">
+              <Label htmlFor="ticket-footer" className="text-xs font-medium">
+                Texto final
+              </Label>
+              <Input
+                id="ticket-footer"
+                value={ticketFooter}
+                onChange={(e) => setTicketFooter(e.target.value)}
+                placeholder={DEFAULT_TICKET_FOOTER}
+                maxLength={120}
+              />
+            </div>
+
+            {/* QR */}
+            <div className="space-y-1.5">
+              <Label htmlFor="ticket-qr" className="text-xs font-medium">
+                QR al pie
+              </Label>
+              <Input
+                id="ticket-qr"
+                type="url"
+                inputMode="url"
+                value={ticketQrUrl}
+                onChange={(e) => setTicketQrUrl(e.target.value)}
+                placeholder="https://..."
+              />
+              <Input
+                value={ticketQrLabel}
+                onChange={(e) => setTicketQrLabel(e.target.value)}
+                placeholder="¡Calificanos!"
+                maxLength={40}
+                disabled={!ticketQrUrl.trim()}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Dejalo vacío para no imprimir ningún QR.
+              </p>
             </div>
           </div>
 
