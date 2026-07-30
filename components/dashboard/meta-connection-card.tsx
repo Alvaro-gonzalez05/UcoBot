@@ -411,77 +411,17 @@ function YCloudConnectDialog({
   const [linking, setLinking] = useState<string | null>(null)
   const [checked, setChecked] = useState(false)
   const [onboardingUrl, setOnboardingUrl] = useState<string | null>(null)
-  // Cada cliente conecta SU cuenta de YCloud, así que lo primero que hace falta es
-  // su API key: sin ella no hay números que listar.
-  const [needsApiKey, setNeedsApiKey] = useState(false)
-  const [apiKey, setApiKey] = useState("")
-  const [savingKey, setSavingKey] = useState(false)
-
-  /**
-   * Guarda la credencial y recién después lista los números.
-   *
-   * Son dos pasos separados a propósito: si la cuenta de YCloud es nueva y todavía
-   * no tiene ningún número, la lista sale vacía — pero la clave ya quedó guardada,
-   * que es lo que antes se perdía al cerrar el diálogo.
-   */
-  const saveKeyAndLoad = async () => {
-    const typedKey = apiKey.trim()
-    if (!typedKey) return
-
-    setSavingKey(true)
-    try {
-      const res = await fetch("/api/integrations/whatsapp/ycloud/credentials", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ api_key: typedKey }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        toast.error(json.error || "No se pudo guardar la API key")
-        return
-      }
-
-      if (json.webhook_error) {
-        toast.warning("Clave guardada, pero el webhook quedó sin configurar", {
-          description: json.webhook_error,
-        })
-      } else if (json.numbers_found === 0) {
-        toast.success("API key guardada", {
-          description: "Todavía no hay números en esa cuenta. Dalos de alta y volvé acá.",
-        })
-      } else {
-        toast.success("API key guardada")
-      }
-
-      await loadNumbers()
-    } catch {
-      toast.error("Error de red al guardar la API key")
-    } finally {
-      setSavingKey(false)
-    }
-  }
 
   const loadNumbers = async () => {
     setLoading(true)
     try {
-      // Con una key recién pegada hay que probarla POR POST: todavía no está
-      // guardada, y una credencial no se manda por la URL.
-      const typedKey = apiKey.trim()
-      const res = typedKey
-        ? await fetch("/api/integrations/whatsapp/ycloud/numbers", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ api_key: typedKey }),
-          })
-        : await fetch("/api/integrations/whatsapp/ycloud")
+      const res = await fetch("/api/integrations/whatsapp/ycloud")
       const json = await res.json()
       if (!res.ok) {
         toast.error(json.error || "No se pudieron listar los números")
         return
       }
-      // El endpoint de prueba no devuelve estos dos: se conservan los que ya había.
-      if (json.onboarding_url) setOnboardingUrl(json.onboarding_url)
-      if ("needs_api_key" in json) setNeedsApiKey(!!json.needs_api_key)
+      setOnboardingUrl(json.onboarding_url)
       setNumbers(json.numbers || [])
       setChecked(true)
     } catch {
@@ -495,7 +435,6 @@ function YCloudConnectDialog({
     if (!open) {
       setNumbers([])
       setChecked(false)
-      setApiKey("")
       return
     }
     loadNumbers()
@@ -523,7 +462,7 @@ function YCloudConnectDialog({
       const res = await fetch("/api/integrations/whatsapp/ycloud", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone_number: phone, api_key: apiKey || undefined }),
+        body: JSON.stringify({ phone_number: phone }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -571,52 +510,12 @@ function YCloudConnectDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Paso 1: la credencial de la cuenta de YCloud del cliente. Va primero
-              porque sin ella no hay números que mostrar. */}
-          {needsApiKey && (
-            <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
-              <div>
-                <label htmlFor="ycloud-key" className="text-sm font-semibold">
-                  Conectar con tu propia cuenta de YCloud
-                </label>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Pegá la API key de tu cuenta. Está en la consola de YCloud, en
-                  Developers → API keys.
-                </p>
-              </div>
-              <Input
-                id="ycloud-key"
-                type="password"
-                autoComplete="off"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Pegá acá tu API key"
-              />
-              <Button
-                size="sm"
-                className="w-full"
-                disabled={!apiKey.trim() || loading || savingKey}
-                onClick={saveKeyAndLoad}
-              >
-                {savingKey ? "Guardando…" : "Guardar y buscar mis números"}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                Queda guardada en tu cuenta y se usa para enviar y recibir tus mensajes.
-                El webhook lo configuramos nosotros. Si dejás el campo vacío, se usa la
-                cuenta de la plataforma.
-              </p>
-            </div>
-          )}
-
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               Consultando números…
             </div>
           ) : selectable.length === 0 ? (
-            // Sin key todavía no se buscó nada: el vacío lo explica el bloque de
-            // arriba, no hace falta repetirlo acá.
-            needsApiKey && !checked ? null : (
             <div className="rounded-lg border border-border/50 bg-muted/40 p-4 text-center space-y-2">
               <p className="text-sm text-muted-foreground">
                 {checked
@@ -628,7 +527,6 @@ function YCloudConnectDialog({
                 Buscar de nuevo
               </Button>
             </div>
-            )
           ) : (
             <div className="space-y-2">
               {selectable.map((n) => (

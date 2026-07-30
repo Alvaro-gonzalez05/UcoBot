@@ -5,7 +5,6 @@ import {
   getYCloudOnboardingUrl,
   registerYCloudPhoneNumber,
   ensureYCloudWebhook,
-  getIntegrationKey,
   getYCloudKey,
   digitsOnly,
 } from '@/lib/whatsapp/ycloud'
@@ -29,39 +28,6 @@ import {
  * no perder el historial de conversaciones). Sin este filtro el número seguía
  * figurando como reclamado y no se podía volver a vincular nunca más.
  */
-/**
- * API key de YCloud de la cuenta, ya guardada de una vinculación anterior.
- *
- * Cae a la credencial de plataforma (YCLOUD_API_KEY) para no romper las
- * integraciones que se hicieron cuando todos los números colgaban de una sola
- * cuenta de YCloud.
- */
-async function getUserYCloudKey(userId: string): Promise<string | null> {
-  const admin = createAdminClient()
-  const { data } = await admin
-    .from('integrations')
-    .select('config')
-    .eq('user_id', userId)
-    .eq('platform', 'whatsapp')
-    .maybeSingle()
-
-  return getIntegrationKey(data)
-}
-
-/** Igual que la anterior pero SIN caer a la credencial de plataforma. */
-async function getUserOwnYCloudKey(userId: string): Promise<string | null> {
-  const admin = createAdminClient()
-  const { data } = await admin
-    .from('integrations')
-    .select('config')
-    .eq('user_id', userId)
-    .eq('platform', 'whatsapp')
-    .maybeSingle()
-
-  const own = (data?.config as any)?.ycloud_api_key
-  return typeof own === 'string' && own.trim() ? own.trim() : null
-}
-
 async function claimedNumbers(): Promise<Map<string, string>> {
   const admin = createAdminClient()
   const { data } = await admin
@@ -85,20 +51,15 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    // El pedido de la API key se decide por la credencial PROPIA de la cuenta, no
-    // por la que termine usándose. Mirar la resuelta era el bug: como en producción
-    // existe YCLOUD_API_KEY, el fallback siempre devolvía algo y el campo para
-    // pegar la clave no aparecía nunca.
-    const ownKey = await getUserOwnYCloudKey(user.id)
-    const apiKey = ownKey || getYCloudKey()
+    // Credencial única de la plataforma (ver getIntegrationKey): se volvió a este
+    // modelo porque con una key por cliente el listado de números venía vacío.
+    const apiKey = getYCloudKey()
 
-    // Sin ninguna credencial no hay nada que consultar.
     if (!apiKey) {
-      return NextResponse.json({
-        needs_api_key: true,
-        onboarding_url: getYCloudOnboardingUrl(),
-        numbers: [],
-      })
+      return NextResponse.json(
+        { error: 'YCloud no está configurado en el servidor (YCLOUD_API_KEY)' },
+        { status: 500 },
+      )
     }
 
     // Con la de plataforma se listan igual sus números (las conexiones viejas
@@ -126,9 +87,6 @@ export async function GET(request: NextRequest) {
       .filter((n) => n.state !== 'taken')
 
     return NextResponse.json({
-      // Mientras no tenga credencial propia se sigue mostrando el campo, aunque
-      // haya números listados con la cuenta de la plataforma.
-      needs_api_key: !ownKey,
       onboarding_url: getYCloudOnboardingUrl(),
       numbers: available,
     })
@@ -153,14 +111,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Falta el número a vincular' }, { status: 400 })
     }
 
-    // La key puede venir en este mismo pedido (alta nueva) o estar ya guardada
-    // de una vinculación anterior.
-    const provided = typeof body.api_key === 'string' ? body.api_key.trim() : ''
-    const apiKey = provided || (await getUserYCloudKey(user.id))
+    const apiKey = getYCloudKey()
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'Falta la API key de tu cuenta de YCloud' },
-        { status: 400 },
+        { error: 'YCloud no está configurado en el servidor (YCLOUD_API_KEY)' },
+        { status: 500 },
       )
     }
 
@@ -208,10 +163,6 @@ export async function POST(request: NextRequest) {
       verified_name: match.verifiedName,
       connection_method: 'ycloud',
       connected_at: new Date().toISOString(),
-      // Credenciales de la cuenta de YCloud de este cliente. Sin esto habría que
-      // volver al modelo de una sola cuenta para toda la plataforma.
-      ycloud_api_key: apiKey,
-      ...(webhook.secret ? { ycloud_webhook_secret: webhook.secret } : {}),
     }
 
     const { error: upsertError } = await admin

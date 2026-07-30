@@ -83,50 +83,6 @@ async function resolveIntegrationCached(
   return value
 }
 
-/**
- * Número del negocio dueño del evento, sea cual sea el tipo.
- *
- * En un entrante el negocio es el destinatario; en un saliente (echo, cambio de
- * estado) es el remitente. Solo se usa para saber con qué secreto validar.
- */
-function businessPhoneOfEvent(body: any): string {
-  const inbound = body?.whatsappInboundMessage
-  if (inbound?.to) return digitsOnly(inbound.to)
-
-  const outbound = body?.whatsappMessage
-  if (outbound?.from) return digitsOnly(outbound.from)
-
-  const sync = body?.whatsappSmbAppStateSync ?? body?.appStateSync
-  if (sync?.phoneNumber) return digitsOnly(sync.phoneNumber)
-
-  return ''
-}
-
-/**
- * Secreto de firma de la cuenta a la que pertenece el evento.
- *
- * Cada cliente tiene su propia cuenta de YCloud, así que cada uno firma con un
- * secreto distinto aunque todos peguen contra este mismo endpoint. Se cae al
- * secreto de plataforma para las integraciones viejas, de cuando había una sola
- * cuenta para todos.
- */
-async function resolveWebhookSecret(body: any): Promise<string | null> {
-  const platformSecret = process.env.YCLOUD_WEBHOOK_SECRET?.trim() || null
-
-  const businessPhone = businessPhoneOfEvent(body)
-  if (!businessPhone) return platformSecret
-
-  try {
-    const integration = await findIntegrationByBusinessPhone(getSharedAdmin(), businessPhone)
-    const own = (integration?.config as any)?.ycloud_webhook_secret
-    if (typeof own === 'string' && own.trim()) return own.trim()
-  } catch (e) {
-    console.error('[YCloud webhook] no se pudo resolver el secreto:', e)
-  }
-
-  return platformSecret
-}
-
 async function findIntegrationByBusinessPhone(admin: any, businessPhone: string) {
   const variants = businessPhoneVariants(businessPhone)
   if (variants.length === 0) return null
@@ -210,7 +166,9 @@ export async function POST(request: NextRequest) {
     const body = JSON.parse(rawBody || '{}')
     const type: string = body?.type || ''
 
-    const secret = await resolveWebhookSecret(body)
+    // Un solo secreto, el del entorno: se volvió al modelo de cuenta única de
+    // YCloud para toda la plataforma (ver getIntegrationWebhookSecret).
+    const secret = process.env.YCLOUD_WEBHOOK_SECRET?.trim() || null
     if (secret) {
       const ok = verifyYCloudSignature(rawBody, request.headers.get('ycloud-signature'), secret)
       if (!ok) {

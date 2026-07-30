@@ -37,29 +37,30 @@ export function isYCloudConfigured(): boolean {
 }
 
 /**
- * Credencial de YCloud de una integración concreta.
+ * Credencial de YCloud a usar.
  *
- * MODELO (29/07/2026): se pasó de "una sola cuenta de YCloud para toda la
- * plataforma" a "cada cliente con la suya". Motivo comercial: el plan que hace
- * falta para tener varios canales en una cuenta cuesta bastante más que aprovechar
- * la cuota gratis de cada cuenta por separado.
+ * HISTORIA (30/07/2026): se probó el modelo "una cuenta de YCloud por cliente",
+ * con la key guardada en `integration.config.ycloud_api_key`. Se volvió atrás: con
+ * una credencial de cuenta propia el listado de números venía vacío aunque la
+ * cuenta tuviera WhatsApp dado de alta, y no valía la pena tener el envío de todos
+ * los clientes dependiendo de eso mientras se investiga.
  *
- * El `?? getYCloudKey()` es lo que mantiene vivas las integraciones viejas, que
- * no tienen credencial propia y siguen apoyándose en la de la plataforma. Cuando
- * no quede ninguna, la variable de entorno se puede borrar.
+ * Ahora manda SIEMPRE la variable de entorno, que es el modelo que venía
+ * funcionando. El parámetro se conserva para no tocar los ~8 llamadores y poder
+ * reactivar la credencial por cliente cambiando solo esta función.
  */
-export function getIntegrationKey(integration?: { config?: any } | null): string | null {
-  const own = integration?.config?.ycloud_api_key
-  if (typeof own === 'string' && own.trim()) return own.trim()
+export function getIntegrationKey(_integration?: { config?: any } | null): string | null {
   return getYCloudKey()
 }
 
-/** Secreto para validar la firma del webhook de ESA cuenta. */
+/**
+ * Secreto para validar la firma del webhook.
+ *
+ * Mismo criterio que getIntegrationKey: uno solo, el del entorno.
+ */
 export function getIntegrationWebhookSecret(
-  integration?: { config?: any } | null,
+  _integration?: { config?: any } | null,
 ): string | null {
-  const own = integration?.config?.ycloud_webhook_secret
-  if (typeof own === 'string' && own.trim()) return own.trim()
   return process.env.YCLOUD_WEBHOOK_SECRET?.trim() || null
 }
 
