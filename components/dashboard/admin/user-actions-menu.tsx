@@ -71,15 +71,19 @@ export function UserActionsMenu({ userId, currentPlan, currentStatus, userName }
   const handleUpdateSubscription = async () => {
     setIsLoading(true)
     try {
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
+      // Va por el servidor: `user_profiles` no tiene política de UPDATE para
+      // admin, así que hacerlo desde acá no cambiaba nada y encima avisaba que sí.
+      const res = await fetch("/api/admin/user-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
           plan_type: formData.plan_type,
-          subscription_status: formData.subscription_status
-        })
-        .eq("id", userId)
-
-      if (error) throw error
+          subscription_status: formData.subscription_status,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "No se pudo actualizar")
 
       toast.success("Suscripción actualizada", {
         description: `El usuario ahora es ${formData.plan_type} (${formData.subscription_status})`
@@ -89,7 +93,7 @@ export function UserActionsMenu({ userId, currentPlan, currentStatus, userName }
     } catch (error) {
       console.error(error)
       toast.error("Error al actualizar", {
-        description: "No se pudo actualizar la suscripción"
+        description: error instanceof Error ? error.message : "No se pudo actualizar la suscripción"
       })
     } finally {
       setIsLoading(false)
@@ -102,14 +106,13 @@ export function UserActionsMenu({ userId, currentPlan, currentStatus, userName }
       // Toggle suspension
       const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended'
       
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          subscription_status: newStatus
-        })
-        .eq("id", userId)
-
-      if (error) throw error
+      const res = await fetch("/api/admin/user-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, subscription_status: newStatus }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "No se pudo cambiar el estado")
 
       toast.success(newStatus === 'suspended' ? "Usuario suspendido" : "Usuario reactivado", {
         description: newStatus === 'suspended' 

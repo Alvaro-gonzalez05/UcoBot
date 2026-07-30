@@ -125,9 +125,12 @@ export function UserDetailActions({
         website: formData.website
       }
 
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
+      // Por el servidor: sin política de UPDATE para admin, esto no cambiaba nada.
+      const res = await fetch("/api/admin/user-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: userId,
           business_name: formData.business_name,
           business_description: formData.business_description,
           location: formData.location,
@@ -136,11 +139,11 @@ export function UserDetailActions({
           business_hours: parsedHours,
           social_links: parsedSocial,
           plan_type: formData.plan_type,
-          subscription_status: formData.subscription_status
-        })
-        .eq("id", userId)
-
-      if (error) throw error
+          subscription_status: formData.subscription_status,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "No se pudo actualizar el perfil")
 
       toast.success("Perfil actualizado", {
         description: "Los datos del usuario han sido actualizados correctamente."
@@ -162,14 +165,13 @@ export function UserDetailActions({
     try {
       const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended'
       
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          subscription_status: newStatus
-        })
-        .eq("id", userId)
-
-      if (error) throw error
+      const res = await fetch("/api/admin/user-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, subscription_status: newStatus }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "No se pudo cambiar el estado")
 
       toast.success(newStatus === 'suspended' ? "Usuario suspendido" : "Usuario reactivado", {
         description: newStatus === 'suspended' 

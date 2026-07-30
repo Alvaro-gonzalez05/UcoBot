@@ -6,6 +6,7 @@ import {
   registerYCloudPhoneNumber,
   ensureYCloudWebhook,
   getIntegrationKey,
+  getYCloudKey,
   digitsOnly,
 } from '@/lib/whatsapp/ycloud'
 
@@ -47,6 +48,20 @@ async function getUserYCloudKey(userId: string): Promise<string | null> {
   return getIntegrationKey(data)
 }
 
+/** Igual que la anterior pero SIN caer a la credencial de plataforma. */
+async function getUserOwnYCloudKey(userId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('integrations')
+    .select('config')
+    .eq('user_id', userId)
+    .eq('platform', 'whatsapp')
+    .maybeSingle()
+
+  const own = (data?.config as any)?.ycloud_api_key
+  return typeof own === 'string' && own.trim() ? own.trim() : null
+}
+
 async function claimedNumbers(): Promise<Map<string, string>> {
   const admin = createAdminClient()
   const { data } = await admin
@@ -70,9 +85,14 @@ export async function GET(request: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
-    // Credencial de ESTE cliente. Sin ella no hay nada que listar: el front
-    // muestra el campo para pegarla y el instructivo de dónde sacarla.
-    const apiKey = await getUserYCloudKey(user.id)
+    // El pedido de la API key se decide por la credencial PROPIA de la cuenta, no
+    // por la que termine usándose. Mirar la resuelta era el bug: como en producción
+    // existe YCLOUD_API_KEY, el fallback siempre devolvía algo y el campo para
+    // pegar la clave no aparecía nunca.
+    const ownKey = await getUserOwnYCloudKey(user.id)
+    const apiKey = ownKey || getYCloudKey()
+
+    // Sin ninguna credencial no hay nada que consultar.
     if (!apiKey) {
       return NextResponse.json({
         needs_api_key: true,
@@ -81,8 +101,10 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Con la de plataforma se listan igual sus números (las conexiones viejas
+    // siguen saliendo de ahí), pero se sigue ofreciendo cargar una propia.
     const [numbers, claimed] = await Promise.all([
-      listYCloudPhoneNumbers(apiKey),
+      listYCloudPhoneNumbers(apiKey).catch(() => [] as any[]),
       claimedNumbers(),
     ])
 
@@ -104,6 +126,9 @@ export async function GET(request: NextRequest) {
       .filter((n) => n.state !== 'taken')
 
     return NextResponse.json({
+      // Mientras no tenga credencial propia se sigue mostrando el campo, aunque
+      // haya números listados con la cuenta de la plataforma.
+      needs_api_key: !ownKey,
       onboarding_url: getYCloudOnboardingUrl(),
       numbers: available,
     })

@@ -34,14 +34,15 @@ export function UserSuspendButton({ userId, currentStatus, userName }: UserSuspe
     try {
       const newStatus = currentStatus === 'suspended' ? 'active' : 'suspended'
       
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
-          subscription_status: newStatus
-        })
-        .eq("id", userId)
-
-      if (error) throw error
+      // Mismo motivo que en el menú de acciones: sin política de UPDATE para
+      // admin, el cambio desde el navegador no tocaba ninguna fila.
+      const res = await fetch("/api/admin/user-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId, subscription_status: newStatus }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "No se pudo cambiar el estado")
 
       toast.success(newStatus === 'suspended' ? "Usuario suspendido" : "Usuario reactivado", {
         description: newStatus === 'suspended' 

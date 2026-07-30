@@ -10,7 +10,6 @@ import {
   ArrowRight,
   Zap,
   HeartPulse,
-  CircleDollarSign,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -177,7 +176,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Quick nav cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link
           href="/dashboard/admin/users"
           className="group bg-card rounded-3xl p-6 shadow-sm border border-border hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between"
@@ -197,7 +196,7 @@ export default async function AdminDashboard() {
         </Link>
 
         <Link
-          href="/dashboard/admin/payments"
+          href="/dashboard/admin/cobros"
           className="group bg-card rounded-3xl p-6 shadow-sm border border-border hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between"
         >
           <div className="flex items-center gap-4">
@@ -205,9 +204,9 @@ export default async function AdminDashboard() {
               <CreditCard className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-bold">Pagos</p>
+              <p className="font-bold">Cobros</p>
               <p className="text-xs text-muted-foreground">
-                Facturación y planes
+                Mercado Pago y manual
               </p>
             </div>
           </div>
@@ -226,24 +225,6 @@ export default async function AdminDashboard() {
               <p className="font-bold">Demos / Leads</p>
               <p className="text-xs text-muted-foreground">
                 Activar cuentas
-              </p>
-            </div>
-          </div>
-          <ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground group-hover:translate-x-1 transition-all" />
-        </Link>
-
-        <Link
-          href="/dashboard/admin/cobranza"
-          className="group bg-card rounded-3xl p-6 shadow-sm border border-border hover:shadow-md hover:-translate-y-0.5 transition-all flex items-center justify-between"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500 rounded-2xl flex items-center justify-center">
-              <CircleDollarSign className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="font-bold">Cobranza</p>
-              <p className="text-xs text-muted-foreground">
-                Clientes manuales
               </p>
             </div>
           </div>

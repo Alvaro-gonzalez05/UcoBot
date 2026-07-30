@@ -152,6 +152,18 @@ interface Message {
 }
 
 /**
+ * Iniciales para el avatar. A nivel de módulo porque la usan tanto el componente
+ * principal como los helpers de acá arriba: estaba declarada adentro de ChatView
+ * y eso rompía el chat con "getInitials is not defined" apenas se renderizaba la
+ * firma de un mensaje.
+ */
+function getInitials(name: string | undefined | null): string {
+  if (!name) return "??"
+  const cleanName = name.startsWith('@') ? name.substring(1) : name
+  return cleanName.substring(0, 2).toUpperCase()
+}
+
+/**
  * De dónde salió un mensaje nuestro.
  *
  * Los tres caminos se ven iguales en el chat pero no lo son, y saber cuál fue
@@ -2019,12 +2031,6 @@ export function ChatView({ userId }: ChatViewProps) {
     if (isToday(date)) return "Hoy"
     if (isYesterday(date)) return "Ayer"
     return format(date, "d 'de' MMMM 'de' yyyy", { locale: es })
-  }
-
-  const getInitials = (name: string | undefined | null) => {
-    if (!name) return "??"
-    const cleanName = name.startsWith('@') ? name.substring(1) : name
-    return cleanName.substring(0, 2).toUpperCase()
   }
 
   const getMediaUrl = (msg: Message) => {

@@ -26,6 +26,7 @@ import { BusinessDetailsCard } from "@/components/dashboard/admin/business-detai
 import { UserSuspendButton } from "@/components/dashboard/admin/user-suspend-button"
 import { UserActionsMenu } from "@/components/dashboard/admin/user-actions-menu"
 import { AiUsageChart } from "@/components/dashboard/admin/ai-usage-chart"
+import { UserMenusCard } from "@/components/dashboard/admin/user-menus-card"
 import { buildDailyUsage } from "@/lib/ai-usage"
 
 function getInitials(name: string) {
@@ -107,6 +108,21 @@ export default async function AdminUserDetailsPage({
     .select("cost_usd, total_tokens, created_at, user_id")
     .eq("user_id", params.id)
     .gte("created_at", thirtyDaysAgo.toISOString())
+  // Sucursales y cuentas conectadas: es lo que hay que mirar cuando el cliente
+  // dice "no me entra nada" o "no me aparece la caja".
+  // Las sucursales NO son una tabla propia: son cuentas hijas, `user_profiles`
+  // con `parent_user_id` apuntando al dueño (ver /api/team/branches).
+  const { data: stores } = await supabase
+    .from("user_profiles")
+    .select("id, business_name, full_name, created_at")
+    .eq("parent_user_id", params.id)
+    .order("created_at", { ascending: true })
+
+  const { data: integrations } = await supabase
+    .from("integrations")
+    .select("id, platform, is_active, is_verified, config, updated_at")
+    .eq("user_id", params.id)
+
   const aiDaily = buildDailyUsage(aiRows || [], 30)
   const aiTotalCalls = (aiRows || []).length
   const aiTotalCost = (aiRows || []).reduce((acc, r) => acc + Number(r.cost_usd || 0), 0)
@@ -265,9 +281,12 @@ export default async function AdminUserDetailsPage({
         {/* Tabs (left 1 col) */}
         <div className="lg:col-span-1">
           <Tabs defaultValue="bots" className="w-full">
-            <TabsList className="w-full grid grid-cols-3 rounded-2xl mb-4">
+            <TabsList className="w-full grid grid-cols-4 rounded-2xl mb-4">
               <TabsTrigger value="bots" className="rounded-xl text-xs">
                 Bots
+              </TabsTrigger>
+              <TabsTrigger value="cuenta" className="rounded-xl text-xs">
+                Cuenta
               </TabsTrigger>
               <TabsTrigger value="activity" className="rounded-xl text-xs">
                 Actividad
@@ -336,6 +355,105 @@ export default async function AdminUserDetailsPage({
             </TabsContent>
 
             {/* Activity tab */}
+            {/* Cuenta: lo que hay que tocar o mirar por el cliente. */}
+            <TabsContent value="cuenta" className="space-y-4 mt-0">
+              <UserMenusCard
+                userId={params.id}
+                savedConfig={
+                  Array.isArray(profile.sidebar_config) ? profile.sidebar_config : null
+                }
+              />
+
+              {/* Sucursales */}
+              <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
+                <div className="px-6 pt-5 pb-4 border-b border-border">
+                  <h3 className="font-bold text-base dark:text-white">Sucursales</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {stores?.length || 0} cargada{(stores?.length || 0) !== 1 ? "s" : ""}.
+                  </p>
+                </div>
+                <div className="divide-y divide-border">
+                  {stores && stores.length > 0 ? (
+                    stores.map((st) => (
+                      <Link
+                        key={st.id}
+                        href={`/dashboard/admin/users/${st.id}`}
+                        className="flex items-center gap-3 px-6 py-3.5 hover:bg-muted/20 transition-colors"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                          <Store className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold truncate dark:text-white">
+                            {st.business_name || st.full_name || "Sucursal"}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            Desde {new Date(st.created_at).toLocaleDateString("es-AR")}
+                          </p>
+                        </div>
+                      </Link>
+                    ))
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
+                      <Store className="h-7 w-7 opacity-20" />
+                      <p className="text-sm">Sin sucursales cargadas.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Cuentas vinculadas */}
+              <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
+                <div className="px-6 pt-5 pb-4 border-b border-border">
+                  <h3 className="font-bold text-base dark:text-white">Cuentas vinculadas</h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Canales conectados y por qué proveedor sale cada uno.
+                  </p>
+                </div>
+                <div className="divide-y divide-border">
+                  {integrations && integrations.length > 0 ? (
+                    integrations.map((it) => {
+                      const cfg = (it.config as any) || {}
+                      const provider = cfg.provider || cfg.connection_method || "cloud"
+                      const label =
+                        cfg.display_phone_number ||
+                        cfg.verified_name ||
+                        cfg.phone_number_id ||
+                        "Sin número"
+                      return (
+                        <div key={it.id} className="flex items-center gap-3 px-6 py-3.5">
+                          <div className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
+                            <Globe className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold truncate dark:text-white capitalize">
+                              {it.platform} · {provider}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">{label}</p>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] flex-shrink-0 ${
+                              it.is_active
+                                ? "border-green-200 text-green-700 dark:text-green-400"
+                                : "border-red-200 text-red-700 dark:text-red-400"
+                            }`}
+                          >
+                            {it.is_active ? "Activa" : "Desconectada"}
+                          </Badge>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
+                      <Globe className="h-7 w-7 opacity-20" />
+                      <p className="text-sm">No tiene ninguna cuenta conectada.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+
             <TabsContent value="activity" className="mt-0">
               <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
                 <div className="divide-y divide-border">

@@ -119,9 +119,12 @@ export function UserEditDialog({ profile, children }: UserEditDialogProps) {
         }
       })
 
-      const { error } = await supabase
-        .from("user_profiles")
-        .update({
+      // Por el servidor: sin política de UPDATE para admin, esto no cambiaba nada.
+      const res = await fetch("/api/admin/user-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: profile.id,
           business_name: generalData.business_name,
           business_description: generalData.business_description,
           location: generalData.location,
@@ -130,9 +133,11 @@ export function UserEditDialog({ profile, children }: UserEditDialogProps) {
           business_hours: hoursData,
           social_links: cleanSocials,
           plan_type: generalData.plan_type,
-          subscription_status: generalData.subscription_status
-        })
-        .eq("id", profile.id)
+          subscription_status: generalData.subscription_status,
+        }),
+      })
+      const json = await res.json()
+      const error = res.ok ? null : new Error(json.error || "No se pudo actualizar")
 
       if (error) throw error
 

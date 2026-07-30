@@ -532,10 +532,11 @@ function YCloudConnectDialog({
             <div className="rounded-xl border border-border/60 bg-muted/30 p-4 space-y-3">
               <div>
                 <label htmlFor="ycloud-key" className="text-sm font-semibold">
-                  API key de tu cuenta de YCloud
+                  Conectar con tu propia cuenta de YCloud
                 </label>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Está en la consola de YCloud, en Developers → API keys.
+                  Pegá la API key de tu cuenta. Está en la consola de YCloud, en
+                  Developers → API keys.
                 </p>
               </div>
               <Input
@@ -556,7 +557,8 @@ function YCloudConnectDialog({
               </Button>
               <p className="text-xs text-muted-foreground">
                 Queda guardada en tu cuenta y se usa para enviar y recibir tus mensajes.
-                También configuramos el webhook por vos.
+                El webhook lo configuramos nosotros. Si dejás el campo vacío, se usa la
+                cuenta de la plataforma.
               </p>
             </div>
           )}
