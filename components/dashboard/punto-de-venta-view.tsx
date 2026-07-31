@@ -22,6 +22,7 @@ import { PosSettingsDialog, DEFAULT_POS_SETTINGS, POS_SETTINGS_COLUMNS, type Pos
 import { bestProductPromotion, promotionLabel, totalCapAdjustment, type Promotion } from "@/lib/promotions"
 import { printTicket, type TicketData, type TicketWidth } from "@/lib/print-ticket"
 import { resolveTicketBranding, brandingIdentityFrom } from "@/lib/ticket-branding"
+import { useTerminal } from "@/hooks/use-terminal"
 import { PosOptionPickerDialog, type PosOptionGroup, type SelectedOption } from "./pos-option-picker-dialog"
 import type { PaymentRecord } from "./order-checkout-dialog"
 import { CashSessionDialog, type CashSession } from "@/components/dashboard/cash-session-dialog"
@@ -168,6 +169,8 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
 
   // Configuración del POS (medios de pago + propina) y cobro
   const [posSettings, setPosSettings] = useState<PosSettings>(DEFAULT_POS_SETTINGS)
+  // Qué computadora es esta: una sucursal puede tener varias operando a la vez.
+  const { terminal, renameTerminal, needsName: terminalNeedsName } = useTerminal(userId)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // Caja del turno: las ventas se estampan con la sesión abierta (null = sin caja).
   // El POS no opera hasta que haya una caja abierta (gate de apertura).
@@ -675,6 +678,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           customer_notes: noteParts.join(". "),
           source: "pos",
           cash_session_id: cashSession?.id ?? null,
+          terminal_id: terminal?.id ?? null,
         })
         .select("id")
         .single()
@@ -1141,6 +1145,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
           businessName={businessName}
           ticketWidth={(posSettings.ticket_width as TicketWidth) || 80}
           ticketBranding={brandingIdentityFrom(posSettings)}
+          terminalId={terminal?.id ?? null}
           activeSession={cashSession}
           onSessionChange={(session) => {
             if (session) {
@@ -2201,6 +2206,7 @@ export function PuntoDeVentaView({ userId, products: initialProducts, categories
         businessName={businessName}
         ticketWidth={(posSettings.ticket_width as TicketWidth) || 80}
         ticketBranding={brandingIdentityFrom(posSettings)}
+        terminalId={terminal?.id ?? null}
         activeSession={cashSession}
         onSessionChange={setCashSession}
       />

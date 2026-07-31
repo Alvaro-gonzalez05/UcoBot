@@ -27,74 +27,23 @@ function toMessagingFormatting(text: string): string {
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1: $2")
 }
 
-// Modelos de Gemini en orden de preferencia. Si uno está saturado (503), sin cupo (429),
-// o no está disponible para esta API key (404), probamos el siguiente automáticamente.
-// Cada modelo tiene su propio pool de capacidad en Google, así no dependemos de UNO solo.
-// Incluye familia 2.x y, como respaldo, familia 3.x.
-const GEMINI_MODELS = [
-  "gemini-2.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-3.1-flash-lite",
-  "gemini-3.5-flash",
-]
-
 /**
- * Llama a Gemini probando varios modelos en cascada. Para cada modelo reintenta una vez
- * ante errores transitorios (503/429/5xx o fallo de red). Ante CUALQUIER otra falla
- * (incluido 404 "modelo no disponible" o 4xx) pasa al siguiente modelo en vez de cortar.
- * Devuelve la primera Response OK, o la última Response fallida si ninguno funcionó.
+ * Gemini con cascada de modelos + registro de consumo.
+ *
+ * La cascada vive en lib/gemini.ts (la comparte la importación de catálogos); acá
+ * solo se le engancha el registro de tokens, que es propio del chat.
  */
 async function callGeminiWithFallback(
   apiKey: string,
   body: any,
   opts?: { userId?: string; purpose?: string }
 ): Promise<Response | null> {
-  const payload = JSON.stringify(body)
-  let lastResponse: Response | null = null
-
-  for (const model of GEMINI_MODELS) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          { method: "POST", headers: { "Content-Type": "application/json" }, body: payload }
-        )
-
-        if (res.ok) {
-          if (model !== GEMINI_MODELS[0]) console.log(`✅ Gemini respondió con modelo de respaldo: ${model}`)
-          // Registramos el uso (tokens + costo) sin bloquear la respuesta.
-          if (opts?.userId) recordAiUsage(res.clone(), model, opts.userId, opts.purpose)
-          return res
-        }
-
-        lastResponse = res
-        const errText = await res.text().catch(() => "")
-        console.error(`Gemini error [${model}] intento ${attempt}: ${res.status} ${errText.substring(0, 150)}`)
-
-        // 503 (saturado), 429 (sin cupo) o 5xx → reintentar este mismo modelo una vez.
-        const transient = res.status === 503 || res.status === 429 || res.status >= 500
-        if (transient && attempt < 2) {
-          await new Promise((r) => setTimeout(r, 1500 * attempt))
-          continue
-        }
-        // Agotados los reintentos (o error no transitorio como 404/400): probamos el SIGUIENTE modelo.
-        break
-      } catch (e) {
-        console.error(`Gemini fetch error [${model}] intento ${attempt}:`, e)
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 1500 * attempt))
-          continue
-        }
-        // fallo de red persistente con este modelo → probar el siguiente
-      }
-    }
-  }
-
-  if (!lastResponse || !lastResponse.ok) {
-    console.error(`❌ Gemini falló en TODOS los modelos: [${GEMINI_MODELS.join(", ")}]`)
-  }
-  return lastResponse
+  return callGemini(apiKey, body, {
+    label: "[chat]",
+    onSuccess: (res, model) => {
+      if (opts?.userId) recordAiUsage(res, model, opts.userId, opts.purpose)
+    },
+  })
 }
 
 /** "HH:MM" + minutos → "HH:MM" (para calcular el fin de un turno según su duración). */
@@ -1873,8 +1822,17 @@ cómo preparar ese producto.
       console.error('Error enriching modified order items:', enrichErr)
     }
 
-    const newTotal = Number(result.total) ||
-      newItems.reduce((s: number, i: any) => s + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0)
+    // Igual que al crear: el total lo calculamos nosotros. El de la IA se ignora
+    // porque los modelos suman mal y el cliente terminaba viendo un precio distinto
+    // al de la comanda.
+    const newTotal = Number(
+      newItems
+        .reduce((acc: number, i: any) => acc + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0)
+        .toFixed(2)
+    )
+    if (Math.abs(newTotal - (Number(result.total) || 0)) > 0.01) {
+      console.warn(`⚠️ Total de la IA corregido en modificación: decía $${result.total}, suma $${newTotal}`)
+    }
 
     // Stock: reponer con los items viejos → guardar los nuevos → volver a descontar
     await supabase.rpc('apply_order_stock', { p_order_id: order.id, p_direction: 1 })
@@ -1885,6 +1843,11 @@ cómo preparar ese producto.
         items: newItems,
         total_amount: newTotal,
         customer_notes: 'Pedido vía WhatsApp (modificado por el cliente)',
+        // Marca explícita: hasta ahora la única señal de que el cliente había
+        // cambiado el pedido era un texto en las notas, fácil de pasar por alto
+        // cuando el ticket ya se imprimió con los items viejos.
+        edited_at: new Date().toISOString(),
+        edited_by: 'client',
       })
       .eq('id', order.id)
       .eq('user_id', bot.user_id)
@@ -2007,6 +1970,52 @@ async function saveOrderFromAI(
       console.error('Error enriching order items with product ids:', enrichErr);
     }
 
+    // TOTAL: se calcula acá, NO se usa el que devolvió la IA.
+    // Los modelos de lenguaje son malos sumando y ya mandaron totales que no
+    // coincidían con los items, así que el cliente veía un precio y en la comanda
+    // figuraba otro. El precio unitario ya incluye los deltas de las opciones.
+    const computedTotal = Number(
+      enrichedItems
+        .reduce((acc: number, i: any) => acc + (Number(i.price) || 0) * (Number(i.quantity) || 1), 0)
+        .toFixed(2)
+    )
+    if (Math.abs(computedTotal - (Number(orderData.total) || 0)) > 0.01) {
+      console.warn(
+        `⚠️ Total de la IA corregido: decía $${orderData.total}, los items suman $${computedTotal}`
+      )
+    }
+
+    // ANTI-DUPLICADO: el análisis corre en CADA mensaje, y basta con que el cliente
+    // mande cualquier cosa después de confirmar (una foto, un "gracias") para que el
+    // modelo vuelva a leer el pedido en el historial y lo cree de nuevo. La regla del
+    // prompt ("ignorá pedidos anteriores") es una instrucción blanda; esto no.
+    const fingerprint = JSON.stringify(
+      enrichedItems
+        .map((i: any) => `${(i.name || '').toLowerCase().trim()}x${i.quantity}`)
+        .sort()
+    )
+    const { data: recentOrders } = await supabase
+      .from('orders')
+      .select('id, items, created_at')
+      .eq('conversation_id', conversation.id)
+      .gte('created_at', new Date(Date.now() - 15 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    const duplicate = (recentOrders || []).find((o: any) => {
+      const prev = JSON.stringify(
+        (o.items || [])
+          .map((i: any) => `${(i.name || '').toLowerCase().trim()}x${i.quantity}`)
+          .sort()
+      )
+      return prev === fingerprint
+    })
+
+    if (duplicate) {
+      console.log(`🚫 Pedido duplicado ignorado (ya existe ${duplicate.id} con los mismos items)`)
+      return
+    }
+
     const { data: createdOrder, error } = await supabase
       .from("orders")
       .insert({
@@ -2014,7 +2023,7 @@ async function saveOrderFromAI(
         client_id: clientId,
         conversation_id: conversation.id,
         items: enrichedItems,
-        total_amount: orderData.total,
+        total_amount: computedTotal,
         customer_notes: `Pedido vía WhatsApp`,
         delivery_address: orderData.deliveryAddress,
         delivery_phone: senderPhone || conversation.client_phone,

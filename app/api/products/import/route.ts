@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { callGeminiWithFallback, geminiText } from "@/lib/gemini"
 
 export const maxDuration = 60
 
@@ -42,9 +42,6 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer()
     const base64 = Buffer.from(bytes).toString("base64")
 
-    const genAI = new GoogleGenerativeAI(geminiApiKey)
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" })
-
     const prompt = `Sos un asistente que digitaliza el menú o catálogo de un negocio a partir del archivo adjunto (puede ser un PDF o una foto).
 
 Extraé TODOS los productos/ítems que encuentres. Para cada uno devolvé:
@@ -61,12 +58,45 @@ Reglas:
 [{"name":"Hamburguesa Clásica","description":"Carne, lechuga, tomate","price":3500,"category":"Hamburguesas"}]
 Si no encontrás ningún producto, devolvé [].`
 
-    const result = await model.generateContent([
-      { inlineData: { mimeType: file.type, data: base64 } },
-      { text: prompt },
-    ])
+    // Cascada de modelos en vez de uno fijo: con "gemini-2.5-flash" clavado, un 503
+    // por saturación (que Google devuelve seguido en horario pico) hacía fallar la
+    // importación entera aunque el resto de los modelos estuviera disponible.
+    const response = await callGeminiWithFallback(
+      geminiApiKey,
+      {
+        contents: [
+          {
+            parts: [
+              { inline_data: { mime_type: file.type, data: base64 } },
+              { text: prompt },
+            ],
+          },
+        ],
+        generationConfig: { temperature: 0.1 },
+      },
+      { label: "[import-catalogo]" },
+    )
 
-    const raw = result.response.text().trim()
+    if (!response || !response.ok) {
+      const status = response?.status
+      return NextResponse.json(
+        {
+          error:
+            status === 503 || status === 429
+              ? "El servicio de IA está saturado en este momento. Probá de nuevo en unos minutos."
+              : "No se pudo procesar el archivo con la IA. Probá de nuevo.",
+        },
+        { status: 503 },
+      )
+    }
+
+    const raw = geminiText(await response.json())
+    if (!raw) {
+      return NextResponse.json(
+        { error: "La IA no devolvió resultados. Probá con una imagen más nítida." },
+        { status: 422 },
+      )
+    }
     let products: any[] = []
     try {
       const match = raw.match(/\[[\s\S]*\]/)

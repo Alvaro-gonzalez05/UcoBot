@@ -167,6 +167,12 @@ export interface CashCloseTicketData {
   tipsTotal?: number
   salesCount: number
   cancelledCount?: number
+  /** Detalle de los cancelados, para que el arqueo diga CUÁLES y por cuánto. */
+  cancelledDetail?: { id: string; total: number; created_at: string }[]
+  /** Pedidos borrados a mano durante el turno. */
+  deletedCount?: number
+  deletedTotal?: number
+  deletedDetail?: { id: string; total: number; created_at: string }[]
   /** Efectivo esperado en caja (apertura + ventas en efectivo) */
   expectedCash: number
   /** Efectivo contado en el arqueo */
@@ -192,6 +198,8 @@ export function buildCashCloseTicketInner(d: CashCloseTicketData): string {
     return `${day} ${time}`
   }
   const nowrap = (s: string) => `<span style="white-space:nowrap">${s}</span>`
+  const fmtHour = (v: string) =>
+    new Date(v).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit", hour12: false })
 
   const methodRows = d.totalsByMethod
     .map((m) => `<div class="row"><span>${esc(m.label)}</span><span>${money(m.amount)}</span></div>`)
@@ -220,6 +228,30 @@ export function buildCashCloseTicketInner(d: CashCloseTicketData): string {
     <div class="row"><span>Ventas</span><span>${d.salesCount}</span></div>
     ${methodRows}
     ${d.cancelledCount ? `<div class="row"><span>Cancelados</span><span>${d.cancelledCount}</span></div>` : ""}
+    ${
+      d.cancelledDetail && d.cancelledDetail.length > 0
+        ? d.cancelledDetail
+            .map(
+              (c) =>
+                `<div class="row sub"><span>· #${esc(c.id.slice(0, 6).toUpperCase())} ${fmtHour(c.created_at)}</span><span>${money(c.total)}</span></div>`
+            )
+            .join("")
+        : ""
+    }
+    ${
+      d.deletedCount
+        ? `<div class="row"><span>Eliminados</span><span>${d.deletedCount}</span></div>` +
+          (d.deletedDetail || [])
+            .map(
+              (c) =>
+                `<div class="row sub"><span>· #${esc(c.id.slice(0, 6).toUpperCase())} ${fmtHour(c.created_at)}</span><span>${money(c.total)}</span></div>`
+            )
+            .join("") +
+          (d.deletedTotal
+            ? `<div class="row"><span>Total eliminado</span><span>${money(d.deletedTotal)}</span></div>`
+            : "")
+        : ""
+    }
     <div class="sep"></div>
     <div class="row total"><span>Total generado</span><span>${money(salesTotal)}</span></div>
     <div class="row"><span>Efectivo esperado</span><span>${money(d.expectedCash)}</span></div>
@@ -305,6 +337,15 @@ function buildDocumentShell(inner: string, widthMm: TicketWidth, autoPrint = fal
   }
   .total { font-size: ${bigFont}px; font-weight: 700; }
   .notes { font-size: ${smallFont}px; margin-top: 4px; word-break: break-word; }
+  /* Sublíneas del detalle de cancelados/eliminados: más chicas y sin separador,
+     para que se lean como hijas de la línea de arriba. */
+  .row.sub {
+    font-size: ${smallFont}px;
+    font-weight: 500;
+    margin: 0;
+    padding: 1px 0 1px 6px;
+    border-bottom: 0;
+  }
   .footer { margin-top: 10px; }
   .logo {
     max-width: 70%;
@@ -346,11 +387,27 @@ function buildDocumentShell(inner: string, widthMm: TicketWidth, autoPrint = fal
   <button type="button" class="btn-print" onclick="window.print()">Reimprimir</button>
 </div>
 <script>
-  // OJO: NADA de window.close() automático (ni siquiera con afterprint + delay).
-  // En Android, afterprint dispara apenas se abre el diálogo (no al terminar el
-  // trabajo), así que cualquier cierre automático mata al plugin de impresión
-  // ("se produjo un error al imprimir la página"). Ya se probó dos veces.
-  // Para volver a la app está el botón "✓ Listo, volver".
+  // CIERRE AUTOMÁTICO: SOLO fuera de Android.
+  //
+  // En Android NO se cierra nunca. Ahí afterprint dispara apenas se abre el
+  // diálogo (no al terminar el trabajo), así que cerrar la ventana mata al plugin
+  // de impresión del POSNET con "se produjo un error al imprimir la página". Ya se
+  // probó dos veces; para volver a la app está el botón "✓ Listo, volver".
+  //
+  // En escritorio el problema no existe: el trabajo ya quedó en la cola de
+  // Windows cuando afterprint dispara. Y con Chrome en modo --kiosk-printing, que
+  // es como corren las cajas, ni siquiera hay diálogo: la ventana quedaba abierta
+  // sin motivo después de cada ticket.
+  var esAndroid = /android/i.test(navigator.userAgent || "")
+
+  if (!esAndroid) {
+    window.addEventListener("afterprint", function () {
+      setTimeout(function () {
+        try { window.close() } catch (error) {}
+      }, 600)
+    })
+  }
+
   window.addEventListener("load", function () {
     setTimeout(function () {
       try {

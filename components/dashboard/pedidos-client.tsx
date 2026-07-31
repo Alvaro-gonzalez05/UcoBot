@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { NumberInput } from "@/components/ui/number-input"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
-import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2, StickyNote, RotateCcw, Check, Loader2 } from "lucide-react"
+import { ShoppingCart, Package, Edit, Trash2, Settings, MoreHorizontal, Filter, X, Search, MessageCircle, Camera, CreditCard, Building2, Banknote, Plus, Minus, ChevronRight, ChevronLeft, ShoppingBag, LayoutGrid, LayoutList, Tag, Printer, CheckCircle2, StickyNote, RotateCcw, Check, Loader2, CircleAlert } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { formatDistanceToNow, format } from "date-fns"
 import { es } from "date-fns/locale"
@@ -62,6 +62,9 @@ interface Order {
   tip_amount?: number
   payments?: PaymentRecord[]
   source?: string
+  /** Si el cliente modificó el pedido después de crearlo (ver migración 124). */
+  edited_at?: string | null
+  edited_by?: string | null
 }
 
 interface Product {
@@ -268,6 +271,7 @@ export function PedidosClient({
         .from("orders")
         .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
         .eq("user_id", userId)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE)
       if (error) throw error
@@ -355,6 +359,7 @@ export function PedidosClient({
         .from("orders")
         .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
         .eq("user_id", userId)
+        .is("deleted_at", null)
         .lt("created_at", cursor)
         .order("created_at", { ascending: false })
         .limit(PAGE_SIZE)
@@ -501,7 +506,13 @@ export function PedidosClient({
     try {
       // Reponer stock antes de borrar (no-op si nunca se descontó o ya se repuso)
       await supabase.rpc("apply_order_stock", { p_order_id: orderId, p_direction: 1 })
-      const { error } = await supabase.from("orders").delete().eq("id", orderId)
+      // Borrado LÓGICO: la fila se conserva para poder auditar el turno en el
+      // cierre de caja (un pedido borrado a mano es plata que salió del sistema).
+      // Para el operador el efecto es el mismo: desaparece de su lista.
+      const { error } = await supabase
+        .from("orders")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", orderId)
       if (error) throw error
       // Sin toast: la animación ya confirma la eliminación
     } catch (error) {
@@ -609,10 +620,10 @@ export function PedidosClient({
       // Dos consultas (agregados y quitados) porque `cs` no se puede OR-ear fácil.
       const baseSelect = `*, client:client_id(name, phone), conversation:conversation_id(platform)`
       const [added, removed] = await Promise.all([
-        supabase.from("orders").select(baseSelect).eq("user_id", userId)
+        supabase.from("orders").select(baseSelect).eq("user_id", userId).is("deleted_at", null)
           .filter("items", "cs", JSON.stringify([{ is_new: true }]))
           .order("created_at", { ascending: false }),
-        supabase.from("orders").select(baseSelect).eq("user_id", userId)
+        supabase.from("orders").select(baseSelect).eq("user_id", userId).is("deleted_at", null)
           .filter("items", "cs", JSON.stringify([{ removed: true }]))
           .order("created_at", { ascending: false }),
       ])
@@ -666,6 +677,7 @@ export function PedidosClient({
         .from("orders")
         .select(`*, client:client_id(name, phone), conversation:conversation_id(platform)`)
         .eq("user_id", userId)
+        .is("deleted_at", null)
         .lt("created_at", cursor)
         .gte("created_at", target.created_at)
         .order("created_at", { ascending: false })
@@ -1727,6 +1739,21 @@ export function PedidosClient({
                     </div>
                     <span className="font-bold whitespace-nowrap">${order.total_amount}</span>
                   </div>
+
+                  {/* El cliente cambió el pedido después de hacerlo: si ya se
+                      imprimió la comanda, lo que está en la cocina quedó viejo. */}
+                  {order.edited_at && (
+                    <div className="flex items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                      <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Modificado por el cliente ·{" "}
+                        {new Date(order.edited_at).toLocaleTimeString("es-AR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  )}
 
                   {cleanTicketNotes(order.customer_notes) && (
                     <div className="flex items-start gap-1.5 rounded-xl bg-white dark:bg-slate-900 px-2.5 py-1.5 text-xs">

@@ -70,12 +70,17 @@ export function PosSettingsDialog({
   userId,
   settings,
   onSaved,
+  terminalName,
+  onRenameTerminal,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   userId: string
   settings: PosSettings
   onSaved: (s: PosSettings) => void
+  /** Nombre de ESTA computadora (ver hooks/use-terminal). */
+  terminalName?: string
+  onRenameTerminal?: (name: string) => Promise<boolean>
 }) {
   const supabase = createClient()
   const [methods, setMethods] = useState<string[]>(settings.payment_methods)
@@ -86,6 +91,10 @@ export function PosSettingsDialog({
   const [autoCloseHours, setAutoCloseHours] = useState(String(settings.cash_auto_close_hours ?? 12))
   const [autoCloseTime, setAutoCloseTime] = useState((settings.cash_auto_close_time || "23:59").slice(0, 5))
   const [saving, setSaving] = useState(false)
+
+  // ── Esta computadora ──
+  const [deviceName, setDeviceName] = useState(terminalName || "")
+  const [savingDevice, setSavingDevice] = useState(false)
 
   // ── Ticket impreso ──
   const [ticketName, setTicketName] = useState(settings.ticket_business_name || "")
@@ -115,7 +124,18 @@ export function PosSettingsDialog({
     setLogoUrl(settings.ticket_logo_url || "")
     setLogoFile(null)
     setLogoPreview(null)
-  }, [open, settings])
+    setDeviceName(terminalName || "")
+  }, [open, settings, terminalName])
+
+  const saveDeviceName = async () => {
+    if (!onRenameTerminal || !deviceName.trim()) return
+    setSavingDevice(true)
+    const ok = await onRenameTerminal(deviceName)
+    setSavingDevice(false)
+    toast[ok ? "success" : "error"](
+      ok ? "Nombre de la computadora guardado" : "No se pudo guardar el nombre"
+    )
+  }
 
   const pickLogo = (file: File | null) => {
     if (!file) return
@@ -284,6 +304,41 @@ export function PosSettingsDialog({
               </div>
             )}
           </div>
+
+          {/* Identidad de esta computadora */}
+          {onRenameTerminal && (
+            <div className="space-y-2 rounded-xl border border-border/60 p-3">
+              <div>
+                <Label htmlFor="device-name" className="text-sm font-semibold">
+                  Nombre de esta computadora
+                </Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Si la sucursal tiene varias, así sabés desde cuál se hizo cada venta.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  id="device-name"
+                  value={deviceName}
+                  onChange={(e) => setDeviceName(e.target.value)}
+                  placeholder="Caja central"
+                  maxLength={60}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-shrink-0"
+                  disabled={!deviceName.trim() || savingDevice || deviceName === terminalName}
+                  onClick={saveDeviceName}
+                >
+                  {savingDevice ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar"}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                El nombre queda en esta computadora y este navegador.
+              </p>
+            </div>
+          )}
 
           {/* Ancho del ticket */}
           <div className="space-y-2 rounded-xl border border-border/60 p-3">

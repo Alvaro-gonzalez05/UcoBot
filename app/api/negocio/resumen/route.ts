@@ -101,6 +101,8 @@ export async function GET(request: NextRequest) {
       .select("id, user_id, total_amount, payments, tip_amount, status, created_at, source, items")
       .in("user_id", accountIds)
       .neq("status", "cancelled")
+      // Igual que en finanzas: un pedido borrado no factura.
+      .is("deleted_at", null)
       .gte("created_at", from)
       .lte("created_at", to),
     admin

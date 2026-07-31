@@ -395,6 +395,9 @@ export function FinanzasView({ userId, branchId = null }: FinanzasViewProps) {
             .select("id, total_amount, source, status, created_at")
             .eq("user_id", userId)
             .neq("status", "cancelled")
+            // Los borrados quedan en la tabla (borrado lógico) pero NO son plata:
+            // sin este filtro la facturación contaría pedidos que se eliminaron.
+            .is("deleted_at", null)
             .gte("created_at", sixMonthsAgo.toISOString()),
           supabase
             .from("financial_transactions")

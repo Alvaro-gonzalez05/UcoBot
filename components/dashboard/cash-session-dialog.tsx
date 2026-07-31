@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Loader2, Printer, History, Wallet, ChevronLeft, Ban } from "lucide-react"
+import { Loader2, Printer, History, Wallet, ChevronLeft, Ban, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { paymentLabel } from "@/lib/payment-methods"
 import {
@@ -55,6 +55,10 @@ interface SessionTotals {
   salesCount: number
   cancelledCount: number
   cancelled: CancelledOrder[]
+  /** Pedidos borrados a mano durante el turno (borrado lógico, ver migración 125). */
+  deletedCount: number
+  deleted: CancelledOrder[]
+  deletedTotal: number
 }
 
 async function loadSessionTotals(
@@ -66,6 +70,11 @@ async function loadSessionTotals(
     .from("orders")
     .select("status, payments, tip_amount")
     .eq("cash_session_id", session.id)
+    // Un pedido ELIMINADO no es una venta del turno, aunque se haya cobrado. Sin
+    // este filtro el cierre lo seguía sumando a los totales por método mientras
+    // finanzas ya lo excluía: los dos números no cerraban entre sí. Su importe se
+    // informa aparte, en la sección de eliminados.
+    .is("deleted_at", null)
   if (error) throw error
 
   // Cancelados del turno POR VENTANA HORARIA: incluye pedidos del bot cancelados
@@ -76,6 +85,7 @@ async function loadSessionTotals(
     .select("id, total_amount, source, created_at, items")
     .eq("user_id", userId)
     .eq("status", "cancelled")
+    .is("deleted_at", null)
     .gte("created_at", session.opened_at)
     .order("created_at", { ascending: false })
   if (session.closed_at) cancelledQuery = cancelledQuery.lte("created_at", session.closed_at)
@@ -88,7 +98,37 @@ async function loadSessionTotals(
     items: Array.isArray(o.items) ? o.items : [],
   }))
 
-  const totals: SessionTotals = { byMethod: {}, tips: 0, salesCount: 0, cancelledCount: cancelled.length, cancelled }
+  // ELIMINADOS del turno. Antes ni se podían consultar: borrar un pedido hacía un
+  // DELETE real. Ahora la fila queda marcada y se puede informar en el arqueo, que
+  // es donde el dueño necesita verlo — un pedido borrado a mano después de cobrado
+  // es plata que salió del sistema sin dejar rastro.
+  let deletedQuery = supabase
+    .from("orders")
+    .select("id, total_amount, source, created_at, items")
+    .eq("user_id", userId)
+    .not("deleted_at", "is", null)
+    .gte("created_at", session.opened_at)
+    .order("created_at", { ascending: false })
+  if (session.closed_at) deletedQuery = deletedQuery.lte("created_at", session.closed_at)
+  const { data: deletedRows } = await deletedQuery
+  const deleted: CancelledOrder[] = (deletedRows || []).map((o: any) => ({
+    id: o.id,
+    total: Number(o.total_amount) || 0,
+    source: o.source || "pos",
+    created_at: o.created_at,
+    items: Array.isArray(o.items) ? o.items : [],
+  }))
+
+  const totals: SessionTotals = {
+    byMethod: {},
+    tips: 0,
+    salesCount: 0,
+    cancelledCount: cancelled.length,
+    cancelled,
+    deletedCount: deleted.length,
+    deleted,
+    deletedTotal: deleted.reduce((acc, d) => acc + d.total, 0),
+  }
   for (const row of rows || []) {
     if (row.status === "cancelled") {
       continue
@@ -136,6 +176,18 @@ function buildCloseTicket(
     tipsTotal: totals.tips > 0 ? totals.tips : undefined,
     salesCount: totals.salesCount,
     cancelledCount: totals.cancelledCount || undefined,
+    cancelledDetail: totals.cancelled.map((c) => ({
+      id: c.id,
+      total: c.total,
+      created_at: c.created_at,
+    })),
+    deletedCount: totals.deletedCount || undefined,
+    deletedTotal: totals.deletedTotal || undefined,
+    deletedDetail: totals.deleted.map((c) => ({
+      id: c.id,
+      total: c.total,
+      created_at: c.created_at,
+    })),
     expectedCash,
     countedCash,
     difference: typeof countedCash === "number" ? countedCash - expectedCash : undefined,
@@ -155,6 +207,7 @@ export function CashSessionDialog({
   businessName,
   ticketWidth,
   ticketBranding,
+  terminalId,
   activeSession,
   onSessionChange,
 }: {
@@ -165,6 +218,8 @@ export function CashSessionDialog({
   ticketWidth: TicketWidth
   /** Logo y encabezado del local, para que el arqueo salga con la misma identidad. */
   ticketBranding?: TicketBranding
+  /** Computadora que abre el turno, para saber después de qué caja salió. */
+  terminalId?: string | null
   activeSession: CashSession | null
   onSessionChange: (session: CashSession | null) => void
 }) {
@@ -247,6 +302,7 @@ export function CashSessionDialog({
           previous_session_id: lastClosed?.id ?? null,
           opened_by: openedBy.trim(),
           opening_amount: Number(amount.toFixed(2)),
+          terminal_id: terminalId ?? null,
         })
         .select("*")
         .single()
@@ -460,6 +516,35 @@ export function CashSessionDialog({
                     </div>
                   </div>
                 )}
+                {/* Eliminados del turno: pedidos borrados a mano. Van aparte de los
+                    cancelados porque significan otra cosa — un cancelado quedó
+                    registrado como tal, un eliminado lo sacaron de la vista. */}
+                {totals.deleted.length > 0 && (
+                  <div className="rounded-xl border border-amber-300 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-900/10 p-3">
+                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-400">
+                      <Trash2 className="h-3.5 w-3.5" /> Eliminados del turno ({totals.deleted.length})
+                      <span className="ml-auto font-bold">{formatCurrency(totals.deletedTotal)}</span>
+                    </p>
+                    <div className="max-h-40 space-y-1.5 overflow-y-auto">
+                      {totals.deleted.map((o) => {
+                        const first = o.items?.[0]?.name || o.items?.[0]?.product_name || "Pedido"
+                        const more = (o.items?.length || 0) > 1 ? ` +${o.items.length - 1}` : ""
+                        return (
+                          <div key={o.id} className="flex items-center justify-between gap-2 text-xs">
+                            <div className="min-w-0 truncate">
+                              <span className="font-medium">{first}{more}</span>
+                              <span className="ml-1.5 text-muted-foreground">
+                                {o.source === "bot" ? "Bot" : "POS"} · {new Date(o.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                            <span className="flex-shrink-0 text-muted-foreground line-through">{formatCurrency(o.total)}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-1.5">
                   <Label htmlFor="counted-cash">Efectivo contado (arqueo)</Label>
                   <Input
