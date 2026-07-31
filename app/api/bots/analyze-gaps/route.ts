@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
 
     let analizados = 0
     let generadas = 0
+    // Detalle por bot: sin esto, un "generadas: 0" no dice si fue por falta de
+    // charlas, por la IA o porque ya había sugerencias pendientes.
+    const detalle: { bot: string; estado: string; charlas?: number }[] = []
 
     for (const bot of bots) {
       try {
@@ -66,15 +69,24 @@ export async function POST(request: NextRequest) {
           .eq("bot_id", bot.id)
           .eq("status", "pending")
 
-        if ((pendientes ?? 0) > 0) continue
+        if ((pendientes ?? 0) > 0) {
+          detalle.push({ bot: bot.name, estado: 'ya_tiene_pendientes' })
+          continue
+        }
 
         const problemas = await findProblemConversations(admin, bot.user_id, VENTANA_DIAS)
         analizados++
 
-        if (problemas.length < MIN_CONVERSACIONES) continue
+        if (problemas.length < MIN_CONVERSACIONES) {
+          detalle.push({ bot: bot.name, estado: 'pocas_charlas', charlas: problemas.length })
+          continue
+        }
 
         const apiKey = bot.gemini_api_key || process.env.GEMINI_DEMO_API_KEY
-        if (!apiKey) continue
+        if (!apiKey) {
+          detalle.push({ bot: bot.name, estado: 'sin_api_key', charlas: problemas.length })
+          continue
+        }
 
         const bloques = problemas
           .map(
@@ -133,7 +145,10 @@ Respondé SOLO con este JSON:
           { label: "[analisis-bot]" },
         )
 
-        if (!response || !response.ok) continue
+        if (!response || !response.ok) {
+          detalle.push({ bot: bot.name, estado: 'gemini_fallo', charlas: problemas.length })
+          continue
+        }
 
         const raw = geminiText(await response.json())
         if (!raw) continue
@@ -147,7 +162,10 @@ Respondé SOLO con este JSON:
         }
 
         const temas: any[] = Array.isArray(parsed?.temas) ? parsed.temas.slice(0, MAX_SUGERENCIAS) : []
-        if (temas.length === 0) continue
+        if (temas.length === 0) {
+          detalle.push({ bot: bot.name, estado: 'sin_patron_claro', charlas: problemas.length })
+          continue
+        }
 
         const idsValidos = new Set(problemas.map((p) => p.id))
         const desde = new Date(Date.now() - VENTANA_DIAS * 24 * 60 * 60 * 1000).toISOString()
@@ -182,6 +200,7 @@ Respondé SOLO con este JSON:
         }
 
         generadas += filas.length
+        detalle.push({ bot: bot.name, estado: `${filas.length}_sugerencias`, charlas: problemas.length })
 
         await createNotification({
           userId: bot.user_id,
@@ -198,7 +217,7 @@ Respondé SOLO con este JSON:
       }
     }
 
-    return NextResponse.json({ ok: true, analizados, generadas })
+    return NextResponse.json({ ok: true, analizados, generadas, detalle })
   } catch (error: any) {
     console.error("[analisis-bot] error general:", error)
     return NextResponse.json({ error: error?.message || "Error" }, { status: 500 })

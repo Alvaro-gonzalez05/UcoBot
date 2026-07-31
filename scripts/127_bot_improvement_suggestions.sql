@@ -59,3 +59,64 @@ SELECT cron.schedule(
   );
   $$
 );
+
+-- ---------------------------------------------------------------------------
+-- Detección de charlas problemáticas EN LA BASE.
+--
+-- POR QUÉ ACÁ Y NO EN LA APP (31/07/2026): la primera versión traía todos los
+-- mensajes de las últimas 200 charlas y filtraba en JavaScript. Con ~4.800
+-- mensajes en una semana eso choca contra el tope de filas de PostgREST: llegaban
+-- muchas menos, las conversaciones quedaban sin mensajes y se descartaban como si
+-- no tuvieran problema. El análisis devolvía cero sin ningún error a la vista.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION find_problem_conversations(
+  p_user_id UUID,
+  p_since TIMESTAMPTZ,
+  p_limit INTEGER DEFAULT 40
+)
+RETURNS TABLE (id UUID, client_name TEXT, created_at TIMESTAMPTZ, reason TEXT)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+  WITH live AS (
+    -- El historial importado NO cuenta: en coexistencia TODOS sus mensajes
+    -- salientes figuran como enviados desde el celular, así que cada charla vieja
+    -- parecería un handover.
+    SELECT m.conversation_id, m.sender_type, m.content, m.metadata
+    FROM messages m
+    JOIN conversations c ON c.id = m.conversation_id
+    WHERE c.user_id = p_user_id
+      AND c.created_at >= p_since
+      AND (m.metadata->>'imported') IS DISTINCT FROM 'true'
+  )
+  SELECT c.id, c.client_name, c.created_at,
+    CASE
+      WHEN EXISTS (SELECT 1 FROM live l WHERE l.conversation_id = c.id
+                   AND l.sender_type = 'bot' AND l.metadata->>'sent_by' = 'phone')
+        THEN 'humano_tomo_la_charla'
+      WHEN c.needs_attention THEN 'pidio_atencion'
+      WHEN EXISTS (SELECT 1 FROM live l WHERE l.conversation_id = c.id AND l.sender_type = 'bot'
+                   AND (l.content ILIKE '%no entiendo%' OR l.content ILIKE '%no puedo ayudar%'
+                        OR l.content ILIKE '%problema%interno%' OR l.content ILIKE '%no tengo esa%'))
+        THEN 'bot_no_supo'
+    END AS reason
+  FROM conversations c
+  WHERE c.user_id = p_user_id
+    AND c.created_at >= p_since
+    AND EXISTS (SELECT 1 FROM live l WHERE l.conversation_id = c.id AND l.sender_type = 'bot')
+    AND (
+      EXISTS (SELECT 1 FROM live l WHERE l.conversation_id = c.id AND l.sender_type = 'bot'
+              AND l.metadata->>'sent_by' = 'phone')
+      OR c.needs_attention
+      OR EXISTS (SELECT 1 FROM live l WHERE l.conversation_id = c.id AND l.sender_type = 'bot'
+                 AND (l.content ILIKE '%no entiendo%' OR l.content ILIKE '%no puedo ayudar%'
+                      OR l.content ILIKE '%problema%interno%' OR l.content ILIKE '%no tengo esa%'))
+    )
+  ORDER BY c.created_at DESC
+  LIMIT p_limit;
+$fn$;
+
+REVOKE ALL ON FUNCTION find_problem_conversations(UUID, TIMESTAMPTZ, INTEGER) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION find_problem_conversations(UUID, TIMESTAMPTZ, INTEGER) TO service_role, authenticated;
