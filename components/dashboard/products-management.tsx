@@ -89,6 +89,10 @@ export function ProductsManagement({ initialProducts, userId, botsWithOrders }: 
       category: "",
       is_available: true,
       image_url: "",
+      // Faltaban: sin esto el reset dejaba los campos de servicio con el valor
+      // del producto anterior (seguía marcado como servicio, con su duración).
+      is_service: false,
+      duration_min: "",
     })
   }
 

@@ -248,7 +248,7 @@ async function logMessageToConversation(supabase: any, message: any, bot: any, e
     
     // Sort by length descending to prioritize longer numbers (international format)
     // This ensures that if we have '261...' and '549261...', we pick '549261...'
-    const existingConv = existingConvs?.sort((a, b) => b.client_phone.length - a.client_phone.length)[0];
+    const existingConv = existingConvs?.sort((a: any, b: any) => b.client_phone.length - a.client_phone.length)[0];
       
     if (existingConv) {
       conversationId = existingConv.id;

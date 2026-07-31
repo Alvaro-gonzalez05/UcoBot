@@ -42,6 +42,9 @@ interface SidebarSectionConfig {
   id: string
   label: string
   visible: boolean
+  /** Nombre del símbolo de Material, para la vista previa. Viene del catálogo
+   *  DEFAULT_SIDEBAR_SECTIONS; lo guardado en la base puede no traerlo. */
+  icon?: string
 }
 
 /** Cada "tab" de configuración. Se abren como sheet desde el perfil. */

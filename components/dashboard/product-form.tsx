@@ -54,7 +54,11 @@ export function ProductForm({ onProductCreated, existingCategories }: ProductFor
       price: "",
       category: "",
       is_available: true,
-      image_url: ""
+      image_url: "",
+      // Faltaban: sin esto el reset dejaba los campos de servicio con el valor
+      // del producto anterior (seguía marcado como servicio, con su duración).
+      is_service: false,
+      duration_min: "",
     })
     setNewCategory("")
     setShowNewCategoryInput(false)

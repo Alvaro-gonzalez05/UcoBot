@@ -21,7 +21,10 @@ interface SendPushParams {
   requireInteraction?: boolean
 }
 
-export async function sendPushToUser({
+// Sin `export`: en un route handler Next solo admite los verbos HTTP y unas pocas
+// claves de config. Exportar cualquier otra cosa rompe el tipado generado de la
+// ruta. Solo se usa acá abajo, en el POST.
+async function sendPushToUser({
   userId,
   title,
   body,

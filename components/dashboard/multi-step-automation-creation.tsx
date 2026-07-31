@@ -83,7 +83,11 @@ interface MessageTemplate {
 interface Bot {
   id: string
   name: string
+  /** Campo legacy: un solo canal. Se conserva para los bots viejos. */
   platform: "whatsapp" | "instagram" | "email"
+  /** Canales que atiende el bot. Es el campo real de la base; `platform` es el
+   *  respaldo para los que se crearon antes de que fuera multicanal. */
+  platforms?: string[] | null
   is_active: boolean
 }
 

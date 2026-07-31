@@ -1,5 +1,6 @@
 "use client"
 
+import { BotSuggestionsCard } from "@/components/dashboard/bot-suggestions-card"
 import type React from "react"
 import { useEffect, useRef, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -471,6 +472,9 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   if (editingBot) {
     return (
       <div className="space-y-6">
+        {/* Sugerencias de mejora: se muestran solas cuando hay algo pendiente. */}
+        <BotSuggestionsCard />
+
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-1 pt-2">
           <div className="flex items-center gap-3">
@@ -978,6 +982,8 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
   if (bots.length > 0) {
     return (
       <div className="space-y-4">
+        <BotSuggestionsCard />
+
         <div className="px-1 pt-2">
           <h2 className="text-2xl font-bold dark:text-white">Bots ({bots.length})</h2>
           <p className="text-sm text-muted-foreground mt-0.5">Elegí un bot para configurar.</p>

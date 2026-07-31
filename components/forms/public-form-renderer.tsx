@@ -520,6 +520,11 @@ export function PublicFormRenderer({ form, promotions = [] }: { form: FormModel;
             textPrimary={textPrimary}
             bodyColor={bodyColor}
             isDark={isDark}
+            showPayment={showPayment}
+            values={values}
+            onChangeValue={handleChange}
+            inputOverride={inputOverride}
+            labelColor={labelColor}
           />
         </div>
       )}

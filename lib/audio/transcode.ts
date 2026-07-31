@@ -46,5 +46,11 @@ export async function transcodeToMp3(blob: Blob, inputExt = "webm"): Promise<Blo
   try { await ffmpeg.deleteFile(outName) } catch {}
 
   const uint8 = data as Uint8Array
-  return new Blob([uint8], { type: "audio/mpeg" })
+  // Se copia a un ArrayBuffer propio: un Uint8Array puede ser una vista parcial de
+  // un buffer compartido, y ese tipo no sirve como contenido de un Blob.
+  const buffer = uint8.buffer.slice(
+    uint8.byteOffset,
+    uint8.byteOffset + uint8.byteLength
+  ) as ArrayBuffer
+  return new Blob([buffer], { type: "audio/mpeg" })
 }

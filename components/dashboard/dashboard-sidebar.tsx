@@ -145,7 +145,7 @@ export function DashboardSidebar({ onLinkClick, mode = 'desktop', user, profile 
 
       if (!bots || bots.length === 0) {
         setNavigation(baseNavigation.map(item => {
-          let baseVisible = (!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin)
+          let baseVisible = !!((!item.requiresFeature && !item.requiresAdmin) || (item.requiresAdmin && isAdmin))
           if (item.requiresCompanyAdmin) baseVisible = isCompanyAdmin
           return applyConfig(item, baseVisible)
         }))
