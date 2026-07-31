@@ -406,12 +406,16 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
 
       if (client) {
         // Update existing client's last interaction (Fire and forget)
-        supabase
+        // El builder de Supabase devuelve un PromiseLike (sin .catch): si esta
+        // actualización fallaba, el rechazo quedaba sin manejar en vez de loguearse.
+        void supabase
           .from('clients')
           .update({ last_interaction_at: new Date().toISOString() })
           .eq('id', client.id)
-          .then(() => console.log('✅ Updated client last interaction:', client.id))
-          .catch(err => console.error('Error updating client:', err))
+          .then(({ error }) => {
+            if (error) console.error('Error updating client:', error.message)
+            else console.log('✅ Updated client last interaction:', client.id)
+          })
       } else {
         // Optional: Create new client if not exists? 
         // For now, we'll just log it. The user might want to create clients automatically later.

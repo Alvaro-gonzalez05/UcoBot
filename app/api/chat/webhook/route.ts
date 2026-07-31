@@ -7,6 +7,7 @@ import { isPromotionActive, promotionLabel, bestProductPromotion } from "@/lib/p
 import { isSubscriptionActive } from "@/lib/subscription"
 import { getValidSellerToken, createPreference } from "@/lib/mp-payments"
 import { computeCostUsd } from "@/lib/ai-pricing"
+import { callGeminiWithFallback as callGemini } from "@/lib/gemini"
 
 /**
  * Convierte Markdown estándar al formato de WhatsApp/Instagram/Messenger.
@@ -2306,6 +2307,13 @@ async function processOrderFromConversation(
       `${msg.sender_type}: ${msg.content}`
     ).join('\n') || ''
 
+    // Sin API key no hay nada que extraer: se corta acá en vez de llamar a Gemini
+    // con undefined, que es lo que hacían las demás funciones del archivo.
+    if (!geminiApiKey) {
+      console.log('⚠️ Sin API key de Gemini: no se puede extraer el pedido')
+      return
+    }
+
     // Use AI to extract structured order information
     const extractionPrompt = `
 Analiza esta conversación de un bot de restaurante y extrae la información del pedido si está completa.
@@ -2461,6 +2469,12 @@ Si hay una reserva completa, responde SOLO con JSON:
 
 Si NO hay reserva completa, responde: NO_RESERVATION
 `
+
+    // Mismo guard que en la extracción de pedidos.
+    if (!geminiApiKey) {
+      console.log('⚠️ Sin API key de Gemini: no se puede extraer la reserva')
+      return
+    }
 
     console.log('🤖 Calling Gemini AI for reservation extraction...')
     const response = await callGeminiWithFallback(geminiApiKey, {
