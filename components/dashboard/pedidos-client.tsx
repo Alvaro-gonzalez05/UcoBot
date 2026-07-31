@@ -202,16 +202,27 @@ export function PedidosClient({
   // venta: el comprobante tiene que salir igual se imprima desde donde se imprima.
   const [ticketSettings, setTicketSettings] = useState<TicketSettingsRow | null>(null)
   useEffect(() => {
+    if (!userId) return
     supabase
       .from("pos_settings")
       .select(`ticket_width, ${TICKET_SETTINGS_COLUMNS}`)
+      // EL FILTRO ES OBLIGATORIO: sin él, una cuenta que administra sucursales ve
+      // VARIAS filas (la policy pos_settings_company_write da acceso a todas las
+      // cuentas de la company), y entonces maybeSingle() devuelve error en vez de
+      // datos. El síntoma es silencioso y confuso: el ticket sale sin logo ni QR
+      // solo en las cuentas con sucursales, y anda bien en las que no las tienen.
+      .eq("user_id", userId)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("No se pudo leer la configuración del ticket:", error.message)
+          return
+        }
         if (!data) return
         if (data.ticket_width === 58 || data.ticket_width === 80) setTicketWidth(data.ticket_width)
         setTicketSettings(data as TicketSettingsRow)
       })
-  }, [])
+  }, [userId])
 
   // Extract unique tags from all orders
   const allTags = Array.from(new Set(orders.flatMap(o => o.tags || []))).sort()
