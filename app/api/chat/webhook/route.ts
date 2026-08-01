@@ -8,6 +8,13 @@ import { isSubscriptionActive } from "@/lib/subscription"
 import { getValidSellerToken, createPreference } from "@/lib/mp-payments"
 import { computeCostUsd } from "@/lib/ai-pricing"
 import { callGeminiWithFallback as callGemini } from "@/lib/gemini"
+import { formatBusinessHours, isOpenNow } from "@/lib/business-hours"
+import {
+  ACTIVE_ORDER_STATUSES,
+  applyDemandToEstimate,
+  describeDemand,
+  extraMinutesForDemand,
+} from "@/lib/delivery-time"
 
 /**
  * Convierte Markdown estándar al formato de WhatsApp/Instagram/Messenger.
@@ -750,13 +757,11 @@ async function generateBotResponse(
       console.log('🏢 User profile loaded:', userProfile)
       console.log('🤖 Bot features:', bot.features || [])
       
-      // Format business hours - simplified
-      let hoursText = 'No especificado'
-      if (userProfile.business_hours && typeof userProfile.business_hours === 'object') {
-        const openDays = Object.entries(userProfile.business_hours)
-          .filter(([_, dayInfo]: [string, any]) => dayInfo?.isOpen)
-        hoursText = openDays.length > 0 ? `${openDays.length} días abierto` : 'Cerrado'
-      }
+      // Horarios REALES, agrupados por día. Antes acá decía "5 días abierto", así
+      // que el asistente no tenía forma de responder a qué hora abre el negocio.
+      const hoursLines = formatBusinessHours(userProfile.business_hours as any)
+      const hoursText = hoursLines.length > 0 ? hoursLines.join(' | ') : 'No especificado'
+      const abiertoAhora = isOpenNow(userProfile.business_hours as any)
 
       // Format social media - simplified
       let socialText = 'No especificado'
@@ -777,8 +782,25 @@ DESCRIPCIÓN: ${userProfile.business_description || 'Restaurante'}
 📍 DIRECCIÓN: ${userProfile.location || 'No especificado'}
 📞 TELÉFONO: ${fallbackInfo.phone || 'No especificado'}
 🍴 MENÚ: ${menuText}
-⏰ HORARIOS: ${hoursText}
+⏰ HORARIOS DE ATENCIÓN:
+${hoursLines.length > 0 ? hoursLines.map((l) => `   • ${l}`).join(String.fromCharCode(10)) : '   No especificado'}
+${abiertoAhora === null ? '' : abiertoAhora ? '   → AHORA MISMO el negocio está ABIERTO' : '   → AHORA MISMO el negocio está CERRADO'}
 ${socialText ? '📱 ' + socialText : ''}
+
+CÓMO RESPONDER LOS HORARIOS:
+Si te preguntan por horarios, respondé con la lista COMPLETA de arriba, un día por
+renglón y con viñetas, no en un párrafo corrido. Los días que no figuran están
+cerrados; decilo si preguntan por uno de esos.
+${
+  abiertoAhora === false && !(bot.feature_config as any)?.operate_outside_hours
+    ? `
+FUERA DE HORARIO — IMPORTANTE:
+El negocio está CERRADO en este momento y NO toma pedidos ni reservas fuera de hora.
+Podés responder consultas, precios y dudas con total normalidad, pero NO confirmes
+pedidos ni reservas. Decile amablemente que ahora está cerrado, indicá cuándo vuelve
+a abrir según los horarios de arriba, y ofrecé dejarlo listo para ese momento.`
+    : ''
+}
       `.trim()
 
       // Get delivery settings if bot can take orders
@@ -821,23 +843,45 @@ ${socialText ? '📱 ' + socialText : ''}
         }
 
         if (finalDeliverySettings) {
+          // DEMANDA: los tiempos configurados son para la cocina vacía. Se cuentan
+          // los pedidos que todavía están en marcha y se estiran en consecuencia,
+          // así el bot no promete 20 minutos con quince pedidos por delante.
+          let extraMinutes = 0
+          let activeOrders = 0
+          try {
+            const { count } = await supabase
+              .from('orders')
+              .select('*', { count: 'exact', head: true })
+              .eq('user_id', bot.user_id)
+              .in('status', ACTIVE_ORDER_STATUSES)
+              .is('deleted_at', null)
+            activeOrders = count || 0
+            extraMinutes = extraMinutesForDemand(activeOrders, finalDeliverySettings)
+          } catch (e) {
+            console.error('No se pudo calcular la demanda:', e)
+          }
+
           const availableModes = []
           const modeOptions = []
-          
+
           if (finalDeliverySettings.pickup_enabled) {
-            availableModes.push(`• RETIRO: ${finalDeliverySettings.pickup_time_estimate}`)
+            const t = applyDemandToEstimate(finalDeliverySettings.pickup_time_estimate, extraMinutes)
+            availableModes.push(`• RETIRO: ${t}`)
             modeOptions.push('retiro')
           }
           if (finalDeliverySettings.delivery_enabled) {
-            availableModes.push(`• ENVÍO: ${finalDeliverySettings.delivery_time_estimate}`)
+            const t = applyDemandToEstimate(finalDeliverySettings.delivery_time_estimate, extraMinutes)
+            availableModes.push(`• ENVÍO: ${t}`)
             modeOptions.push('envío')
           }
-          
+
           if (availableModes.length > 0) {
+            const demandNote = describeDemand(activeOrders, extraMinutes)
             // Simplified mode info to let personality prompt take precedence if needed
             deliveryModesInfo = `
 MODALIDADES ACTIVAS EN SISTEMA: ${availableModes.join(', ')}
 ${finalDeliverySettings.delivery_enabled ? 'Para envío propio: pedir dirección completa' : ''}
+${demandNote}
             `.trim()
           }
         }
@@ -1894,6 +1938,24 @@ async function saveOrderFromAI(
   try {
     if (!orderData.items || orderData.items.length === 0) return;
 
+    // FUERA DE HORARIO: la instrucción del prompt es la primera línea de defensa,
+    // pero un modelo puede ignorarla. Acá se corta de verdad: un pedido que el
+    // negocio no puede cumplir es peor que no tomarlo.
+    if (!(bot.feature_config as any)?.operate_outside_hours) {
+      const { data: perfil } = await supabase
+        .from("user_profiles")
+        .select("business_hours")
+        .eq("id", bot.user_id)
+        .maybeSingle()
+
+      // null = sin horarios cargados. Eso NO es lo mismo que estar cerrado: a un
+      // negocio que nunca los configuró no se le puede bloquear la venta.
+      if (isOpenNow(perfil?.business_hours as any) === false) {
+        console.log("🌙 Pedido descartado: el negocio está cerrado y no opera fuera de horario")
+        return
+      }
+    }
+
     // Check for duplicate orders in the last 2 minutes to prevent double submission on follow-up questions
     const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
     const { data: existingOrders } = await supabase
@@ -2100,6 +2162,36 @@ async function saveReservationFromAI(
   tags: string[] = []
 ) {
   try {
+    // FUERA DE HORARIO: en una reserva lo que importa NO es la hora actual sino el
+    // momento reservado. Alguien puede escribir a las 23 para reservar mañana a las
+    // 21, y eso es perfectamente válido. Lo que no se acepta es reservar PARA un
+    // horario en que el negocio está cerrado.
+    if (
+      !(bot.feature_config as any)?.operate_outside_hours &&
+      reservationData.reservationDate &&
+      reservationData.reservationTime
+    ) {
+      const { data: perfil } = await supabase
+        .from("user_profiles")
+        .select("business_hours")
+        .eq("id", bot.user_id)
+        .maybeSingle()
+
+      const momento = new Date(
+        `${reservationData.reservationDate}T${reservationData.reservationTime}:00`
+      )
+      // Fecha inválida → no se bloquea: mejor dejar pasar que perder una reserva
+      // buena por un formato raro.
+      if (!isNaN(momento.getTime()) && isOpenNow(perfil?.business_hours as any, momento) === false) {
+        console.log(
+          "🌙 Reserva descartada: cae fuera del horario de atención",
+          reservationData.reservationDate,
+          reservationData.reservationTime
+        )
+        return
+      }
+    }
+
     // Check for duplicate reservations in the last 5 minutes
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: existingReservations } = await supabase

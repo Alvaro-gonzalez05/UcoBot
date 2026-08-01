@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     let generadas = 0
     // Detalle por bot: sin esto, un "generadas: 0" no dice si fue por falta de
     // charlas, por la IA o porque ya había sugerencias pendientes.
-    const detalle: { bot: string; estado: string; charlas?: number }[] = []
+    const detalle: { bot: string; estado: string; charlas?: number; muestra?: string }[] = []
 
     for (const bot of bots) {
       try {
@@ -151,13 +151,24 @@ Respondé SOLO con este JSON:
         }
 
         const raw = geminiText(await response.json())
-        if (!raw) continue
+        if (!raw) {
+          detalle.push({ bot: bot.name, estado: 'respuesta_vacia', charlas: problemas.length })
+          continue
+        }
 
         let parsed: any
         try {
           parsed = JSON.parse(raw.replace(/```json/g, "").replace(/```/g, "").trim())
         } catch {
-          console.error("[analisis-bot] JSON inválido para el bot", bot.id)
+          console.error("[analisis-bot] JSON inválido para el bot", bot.id, raw.slice(0, 500))
+          detalle.push({
+            bot: bot.name,
+            estado: 'json_invalido',
+            charlas: problemas.length,
+            // Un fragmento de lo que devolvió: sin esto no hay forma de saber si
+            // el modelo respondió en prosa, se cortó, o devolvió otra estructura.
+            muestra: raw.slice(0, 200),
+          })
           continue
         }
 
@@ -191,7 +202,15 @@ Respondé SOLO con este JSON:
             }
           })
 
-        if (filas.length === 0) continue
+        if (filas.length === 0) {
+          detalle.push({
+            bot: bot.name,
+            estado: 'temas_sin_campos',
+            charlas: problemas.length,
+            muestra: JSON.stringify(temas).slice(0, 200),
+          })
+          continue
+        }
 
         const { error } = await admin.from("bot_improvement_suggestions").insert(filas)
         if (error) {

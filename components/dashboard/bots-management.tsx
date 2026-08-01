@@ -163,6 +163,12 @@ type FormState = {
     debounce_seconds?: number
     split_long_messages?: boolean
     reservation_mode?: "table" | "appointment"
+    /**
+     * Si el bot puede cerrar pedidos y reservas con el negocio CERRADO.
+     * Un restaurante no puede vender cuando no hay cocina; una marca de ropa sí.
+     * Por defecto NO (el caso peligroso es vender sin poder cumplir).
+     */
+    operate_outside_hours?: boolean
   }
   allowed_tags: string[]
   automations: string[]
@@ -918,6 +924,28 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                 <option value={12}>12 horas</option>
                 <option value={24}>24 horas</option>
               </select>
+            </div>
+
+            {/* Operar fuera del horario de atención */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-3 border-t border-border/30">
+              <div className="min-w-0">
+                <Label className="font-medium">Tomar pedidos fuera de horario</Label>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                  Con el negocio cerrado, el bot igual cierra pedidos y reservas. Dejalo
+                  apagado si no podés cumplir fuera de hora (una cocina), encendelo si sí
+                  (una tienda que despacha al otro día).
+                </p>
+              </div>
+              <Switch
+                checked={formData.feature_config?.operate_outside_hours === true}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    feature_config: { ...prev.feature_config, operate_outside_hours: checked },
+                  }))
+                }
+                className="flex-shrink-0"
+              />
             </div>
 
             {/* Ventana de escucha (debounce) */}

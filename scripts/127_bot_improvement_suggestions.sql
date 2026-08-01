@@ -120,3 +120,21 @@ $fn$;
 
 REVOKE ALL ON FUNCTION find_problem_conversations(UUID, TIMESTAMPTZ, INTEGER) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION find_problem_conversations(UUID, TIMESTAMPTZ, INTEGER) TO service_role, authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- v2 de la detección: el handover solo cuenta si el BOT llegó a responder antes.
+--
+-- POR QUÉ (31/07/2026): con coexistencia el dueño usa el MISMO número para el bot
+-- y para sus charlas personales. Todo lo que escribe desde el celular queda como
+-- 'sent_by = phone', así que sus conversaciones privadas ("dale tranqui",
+-- "genial hermano") aparecían como si el bot hubiera fallado. Sobre 14 detectadas
+-- en una cuenta real, 4 eran charlas personales.
+--
+-- El handover es señal de falla SOLO cuando el bot ya había intentado responder y
+-- el humano tuvo que corregir. Si toda la charla salió del celular, el bot nunca
+-- participó y no hay nada que mejorarle.
+--
+-- (La definición vigente de find_problem_conversations es la de este bloque:
+--  reemplaza a la de más arriba.)
+-- ---------------------------------------------------------------------------

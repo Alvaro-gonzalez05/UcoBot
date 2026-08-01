@@ -88,6 +88,10 @@ interface DeliverySettings {
   minimum_order_delivery: number
   delivery_time_estimate: string
   pickup_time_estimate: string
+  /** Ajuste por demanda: los tiempos de arriba son con la cocina vacía. */
+  kitchen_capacity: number | null
+  batch_minutes: number | null
+  max_extra_minutes: number | null
 }
 
 interface PedidosClientProps {
@@ -459,6 +463,9 @@ export function PedidosClient({
       minimum_order_delivery: 0,
       delivery_time_estimate: '30-45 minutos',
       pickup_time_estimate: '15-20 minutos',
+      kitchen_capacity: null,
+      batch_minutes: null,
+      max_extra_minutes: null,
     }
   )
 
@@ -2196,6 +2203,64 @@ export function PedidosClient({
                       onChange={(e) => setDeliverySettings(p => ({ ...p, delivery_time_estimate: e.target.value }))} />
                   </div>
                 )}
+
+                {/* Ajuste por demanda. Los tiempos de arriba son con la cocina
+                    vacía; esto los estira solo cuando hay cola. */}
+                <div className="pt-4 border-t border-border/40 space-y-3">
+                  <div>
+                    <Label className="font-medium">Ajustar por demanda</Label>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Los tiempos de arriba son sin cola. Cuando hay pedidos en marcha, el
+                      bot los estira solo. Dejalo vacío para no ajustar nada.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="kitchen_capacity" className="text-xs">Pedidos a la vez</Label>
+                      <Input
+                        id="kitchen_capacity"
+                        type="number"
+                        min={1}
+                        className="rounded-xl"
+                        placeholder="4"
+                        value={deliverySettings.kitchen_capacity ?? ''}
+                        onChange={(e) => setDeliverySettings(p => ({ ...p, kitchen_capacity: e.target.value ? Number(e.target.value) : null }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="batch_minutes" className="text-xs">Minutos por tanda</Label>
+                      <Input
+                        id="batch_minutes"
+                        type="number"
+                        min={1}
+                        className="rounded-xl"
+                        placeholder="10"
+                        value={deliverySettings.batch_minutes ?? ''}
+                        onChange={(e) => setDeliverySettings(p => ({ ...p, batch_minutes: e.target.value ? Number(e.target.value) : null }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="max_extra" className="text-xs">Tope extra (min)</Label>
+                      <Input
+                        id="max_extra"
+                        type="number"
+                        min={0}
+                        className="rounded-xl"
+                        placeholder="45"
+                        value={deliverySettings.max_extra_minutes ?? ''}
+                        onChange={(e) => setDeliverySettings(p => ({ ...p, max_extra_minutes: e.target.value ? Number(e.target.value) : null }))}
+                      />
+                    </div>
+                  </div>
+                  {deliverySettings.kitchen_capacity && deliverySettings.batch_minutes ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Con {deliverySettings.kitchen_capacity} pedidos a la vez: hasta{' '}
+                      {deliverySettings.kitchen_capacity} sin cambios, de{' '}
+                      {Number(deliverySettings.kitchen_capacity) + 1} en adelante suma{' '}
+                      {deliverySettings.batch_minutes} min por cada tanda.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
