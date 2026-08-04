@@ -169,6 +169,15 @@ type FormState = {
      * Por defecto NO (el caso peligroso es vender sin poder cumplir).
      */
     operate_outside_hours?: boolean
+    /**
+     * Ajuste del tiempo de entrega por demanda. Vive acá y no en la configuración
+     * de envío porque es comportamiento del bot: es él quien dice el tiempo.
+     */
+    demand?: {
+      capacity?: number | null
+      batch_minutes?: number | null
+      max_extra?: number | null
+    }
   }
   allowed_tags: string[]
   automations: string[]
@@ -946,6 +955,82 @@ export function BotsManagement({ initialBots, userId, demo = false }: BotsManage
                 }
                 className="flex-shrink-0"
               />
+            </div>
+
+            {/* Tiempo de entrega según la demanda */}
+            <div className="pt-3 border-t border-border/30 space-y-3">
+              <div>
+                <Label className="font-medium">Estirar los tiempos con mucha demanda</Label>
+                <p className="text-[11px] text-muted-foreground/80 mt-0.5">
+                  El tiempo que digas en las instrucciones es sin cola. Con pedidos en
+                  marcha, el bot lo estira solo. Vacío = no ajusta nada.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px]">Pedidos a la vez</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="4"
+                    value={formData.feature_config?.demand?.capacity ?? ""}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        feature_config: {
+                          ...prev.feature_config,
+                          demand: {
+                            ...prev.feature_config?.demand,
+                            capacity: e.target.value ? Number(e.target.value) : null,
+                          },
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px]">Min. por tanda</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    placeholder="10"
+                    value={formData.feature_config?.demand?.batch_minutes ?? ""}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        feature_config: {
+                          ...prev.feature_config,
+                          demand: {
+                            ...prev.feature_config?.demand,
+                            batch_minutes: e.target.value ? Number(e.target.value) : null,
+                          },
+                        },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px]">Tope extra</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="45"
+                    value={formData.feature_config?.demand?.max_extra ?? ""}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        feature_config: {
+                          ...prev.feature_config,
+                          demand: {
+                            ...prev.feature_config?.demand,
+                            max_extra: e.target.value ? Number(e.target.value) : null,
+                          },
+                        },
+                      }))
+                    }
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Ventana de escucha (debounce) */}

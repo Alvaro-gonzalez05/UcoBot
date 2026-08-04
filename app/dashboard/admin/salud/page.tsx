@@ -51,6 +51,21 @@ export default async function SaludPage() {
 
   const { data: health, error } = await supabase.rpc("admin_system_health")
 
+  // Fallos del bot: es lo que antes había que ir a buscar a los logs de Vercel.
+  const { data: fallos } = await supabase
+    .from("bot_failures")
+    .select("id, reason, detail, user_message, created_at, user_id, conversation_id")
+    .gte("created_at", new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(30)
+
+  // Nombre del negocio de cada fallo, para no mostrar solo un UUID.
+  const userIds = Array.from(new Set((fallos || []).map((f: any) => f.user_id).filter(Boolean)))
+  const { data: perfiles } = userIds.length
+    ? await supabase.from("user_profiles").select("id, business_name").in("id", userIds)
+    : { data: [] as any[] }
+  const nombrePorUsuario = new Map((perfiles || []).map((p: any) => [p.id, p.business_name]))
+
   if (error) {
     return (
       <div className="flex flex-col gap-4">
@@ -258,6 +273,64 @@ export default async function SaludPage() {
               <p className="text-sm font-bold flex-shrink-0 dark:text-white">{t.peso}</p>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Fallos del bot: el motivo técnico, sin tener que entrar a Vercel. */}
+      <div className="bg-card rounded-3xl shadow-sm border border-border overflow-hidden">
+        <div className="px-6 pt-5 pb-4 border-b border-border flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-base dark:text-white">Fallos del bot (7 días)</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Cada vez que un cliente recibió &quot;tengo problemas técnicos&quot;, con el motivo.
+            </p>
+          </div>
+          {(fallos?.length || 0) > 0 && (
+            <span className="flex-shrink-0 rounded-full bg-red-100 dark:bg-red-900/30 px-2.5 py-1 text-xs font-bold text-red-700 dark:text-red-400">
+              {fallos!.length}
+            </span>
+          )}
+        </div>
+        <div className="divide-y divide-border">
+          {fallos && fallos.length > 0 ? (
+            fallos.map((f: any) => (
+              <div key={f.id} className="px-6 py-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold dark:text-white">
+                      {nombrePorUsuario.get(f.user_id) || "Cuenta desconocida"}
+                      <span className="ml-2 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-mono font-normal text-muted-foreground">
+                        {f.reason}
+                      </span>
+                    </p>
+                    {f.user_message && (
+                      <p className="text-xs text-muted-foreground mt-1 truncate">
+                        El cliente escribió: &quot;{f.user_message}&quot;
+                      </p>
+                    )}
+                  </div>
+                  <span className="text-[11px] text-muted-foreground flex-shrink-0 whitespace-nowrap">
+                    {new Date(f.created_at).toLocaleString("es-AR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                </div>
+                {f.detail && (
+                  <pre className="mt-2 max-h-24 overflow-auto rounded-lg bg-muted/60 p-2 text-[11px] whitespace-pre-wrap break-words text-muted-foreground">
+                    {f.detail}
+                  </pre>
+                )}
+              </div>
+            ))
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
+              <CheckCircle2 className="h-7 w-7 opacity-30" />
+              <p className="text-sm">Ningún fallo en los últimos 7 días.</p>
+            </div>
+          )}
         </div>
       </div>
 

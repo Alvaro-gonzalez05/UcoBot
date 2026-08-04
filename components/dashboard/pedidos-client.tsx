@@ -1560,10 +1560,6 @@ export function PedidosClient({
             <Package className="h-4 w-4" />
             Productos
           </TabsTrigger>
-          <TabsTrigger value="settings" className="rounded-xl flex items-center gap-1.5 sm:gap-2 data-[state=active]:bg-background data-[state=active]:shadow-sm px-3.5 sm:px-5 py-2 sm:py-2.5 font-semibold text-sm whitespace-nowrap shrink-0">
-            <Settings className="h-4 w-4" />
-            Configuración
-          </TabsTrigger>
         </TabsList>
 
         {/* ─── ORDERS TAB ─── */}
@@ -2102,169 +2098,11 @@ export function PedidosClient({
         </TabsContent>
 
         {/* ─── SETTINGS TAB ─── */}
-        <TabsContent value="settings" className="flex-1 overflow-y-auto space-y-4 pr-1 mt-0">
-          <div className="flex items-center justify-between px-1">
-            <div>
-              <h3 className="text-xl font-bold dark:text-white">Configuración de Modalidades</h3>
-              <p className="text-sm text-muted-foreground mt-0.5">Configura las opciones de entrega disponibles para tus clientes.</p>
-            </div>
-            <Button
-              onClick={saveDeliverySettings}
-              disabled={isLoading}
-              className="rounded-full bg-[#D1F366] text-[#1C1C28] font-bold hover:bg-[#B3D93C] shadow-sm"
-            >
-              {isLoading ? "Guardando..." : "Guardar Configuración"}
-            </Button>
-          </div>
-
-          <div className="grid gap-4">
-            {/* Modalidades */}
-            <div className="bg-card rounded-3xl border border-border p-6 shadow-sm">
-              <h4 className="font-bold text-base mb-1 dark:text-white">Modalidades Disponibles</h4>
-              <p className="text-sm text-muted-foreground mb-4">Selecciona qué modalidades de entrega quieres ofrecer.</p>
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id="pickup"
-                    checked={deliverySettings.pickup_enabled}
-                    onCheckedChange={(c) => setDeliverySettings(p => ({ ...p, pickup_enabled: !!c }))}
-                  />
-                  <Label htmlFor="pickup" className="font-medium cursor-pointer">Retiro en local</Label>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Checkbox
-                    id="delivery"
-                    checked={deliverySettings.delivery_enabled}
-                    onCheckedChange={(c) => setDeliverySettings(p => ({ ...p, delivery_enabled: !!c }))}
-                  />
-                  <Label htmlFor="delivery" className="font-medium cursor-pointer">Envío a domicilio</Label>
-                </div>
-              </div>
-            </div>
-
-            {/* Delivery config */}
-            {deliverySettings.delivery_enabled && (
-              <div className="bg-card rounded-3xl border border-border p-6 shadow-sm">
-                <h4 className="font-bold text-base mb-4 dark:text-white">Configuración de Delivery</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="delivery_fee">Costo de delivery ($)</Label>
-                    <NumberInput id="delivery_fee" value={deliverySettings.delivery_fee || null} className="rounded-xl"
-                      onValueChange={(v) => setDeliverySettings(p => ({ ...p, delivery_fee: v ?? 0 }))} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="minimum_order">Pedido mínimo ($)</Label>
-                    <NumberInput id="minimum_order" value={deliverySettings.minimum_order_delivery || null} className="rounded-xl"
-                      onValueChange={(v) => setDeliverySettings(p => ({ ...p, minimum_order_delivery: v ?? 0 }))} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Instrucciones */}
-            <div className="bg-card rounded-3xl border border-border p-6 shadow-sm">
-              <h4 className="font-bold text-base mb-1 dark:text-white">Instrucciones Personalizadas</h4>
-              <p className="text-sm text-muted-foreground mb-4">Mensajes que el bot enviará para cada modalidad.</p>
-              <div className="space-y-4">
-                {deliverySettings.pickup_enabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="pickup_instructions">Mensaje para retiro en local</Label>
-                    <Textarea id="pickup_instructions" value={deliverySettings.pickup_instructions} className="rounded-xl"
-                      placeholder="Ej: Te esperamos en nuestro local en..."
-                      onChange={(e) => setDeliverySettings(p => ({ ...p, pickup_instructions: e.target.value }))} />
-                  </div>
-                )}
-                {deliverySettings.delivery_enabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="delivery_instructions">Mensaje para delivery</Label>
-                    <Textarea id="delivery_instructions" value={deliverySettings.delivery_instructions} className="rounded-xl"
-                      placeholder="Ej: Realizamos delivery en la zona..."
-                      onChange={(e) => setDeliverySettings(p => ({ ...p, delivery_instructions: e.target.value }))} />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Tiempos */}
-            <div className="bg-card rounded-3xl border border-border p-6 shadow-sm">
-              <h4 className="font-bold text-base mb-4 dark:text-white">Tiempos Estimados</h4>
-              <div className="space-y-4">
-                {deliverySettings.pickup_enabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="pickup_time">Tiempo estimado para retiro</Label>
-                    <Input id="pickup_time" value={deliverySettings.pickup_time_estimate} className="rounded-xl" placeholder="Ej: 15-20 minutos"
-                      onChange={(e) => setDeliverySettings(p => ({ ...p, pickup_time_estimate: e.target.value }))} />
-                  </div>
-                )}
-                {deliverySettings.delivery_enabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="delivery_time">Tiempo estimado para delivery</Label>
-                    <Input id="delivery_time" value={deliverySettings.delivery_time_estimate} className="rounded-xl" placeholder="Ej: 30-45 minutos"
-                      onChange={(e) => setDeliverySettings(p => ({ ...p, delivery_time_estimate: e.target.value }))} />
-                  </div>
-                )}
-
-                {/* Ajuste por demanda. Los tiempos de arriba son con la cocina
-                    vacía; esto los estira solo cuando hay cola. */}
-                <div className="pt-4 border-t border-border/40 space-y-3">
-                  <div>
-                    <Label className="font-medium">Ajustar por demanda</Label>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Los tiempos de arriba son sin cola. Cuando hay pedidos en marcha, el
-                      bot los estira solo. Dejalo vacío para no ajustar nada.
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="kitchen_capacity" className="text-xs">Pedidos a la vez</Label>
-                      <Input
-                        id="kitchen_capacity"
-                        type="number"
-                        min={1}
-                        className="rounded-xl"
-                        placeholder="4"
-                        value={deliverySettings.kitchen_capacity ?? ''}
-                        onChange={(e) => setDeliverySettings(p => ({ ...p, kitchen_capacity: e.target.value ? Number(e.target.value) : null }))}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="batch_minutes" className="text-xs">Minutos por tanda</Label>
-                      <Input
-                        id="batch_minutes"
-                        type="number"
-                        min={1}
-                        className="rounded-xl"
-                        placeholder="10"
-                        value={deliverySettings.batch_minutes ?? ''}
-                        onChange={(e) => setDeliverySettings(p => ({ ...p, batch_minutes: e.target.value ? Number(e.target.value) : null }))}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="max_extra" className="text-xs">Tope extra (min)</Label>
-                      <Input
-                        id="max_extra"
-                        type="number"
-                        min={0}
-                        className="rounded-xl"
-                        placeholder="45"
-                        value={deliverySettings.max_extra_minutes ?? ''}
-                        onChange={(e) => setDeliverySettings(p => ({ ...p, max_extra_minutes: e.target.value ? Number(e.target.value) : null }))}
-                      />
-                    </div>
-                  </div>
-                  {deliverySettings.kitchen_capacity && deliverySettings.batch_minutes ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Con {deliverySettings.kitchen_capacity} pedidos a la vez: hasta{' '}
-                      {deliverySettings.kitchen_capacity} sin cambios, de{' '}
-                      {Number(deliverySettings.kitchen_capacity) + 1} en adelante suma{' '}
-                      {deliverySettings.batch_minutes} min por cada tanda.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          </div>
-        </TabsContent>
+        {/* La pestaña de Configuración se sacó el 31/07/2026: todo lo de envío
+            (costo, mínimo, modalidades, tiempos) ahora lo escribe el dueño en las
+            instrucciones del bot, y el ajuste por demanda pasó a la configuración
+            del bot. Tener dos lugares para lo mismo terminaba en datos que se
+            contradecían entre sí. */}
       </Tabs>
 
       {/* Edit Product Dialog */}

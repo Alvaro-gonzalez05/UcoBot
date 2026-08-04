@@ -11,7 +11,6 @@ import { callGeminiWithFallback as callGemini } from "@/lib/gemini"
 import { formatBusinessHours, isOpenNow } from "@/lib/business-hours"
 import {
   ACTIVE_ORDER_STATUSES,
-  applyDemandToEstimate,
   describeDemand,
   extraMinutesForDemand,
 } from "@/lib/delivery-time"
@@ -33,6 +32,68 @@ function toMessagingFormatting(text: string): string {
     .replace(/^\s{0,3}[-*]\s+/gm, "• ")
     // Enlaces Markdown [texto](url) → "texto: url" (WhatsApp ya hace el link solo)
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1: $2")
+}
+
+/**
+ * Avisa al dueño cuando el bot NO pudo responderle a un cliente.
+ *
+ * POR QUÉ: ante una falla el cliente recibe "disculpá, tengo problemas técnicos" y
+ * ahí termina todo. El dueño se enteraba solo si miraba los logs de Vercel — pasó
+ * exactamente eso con un import roto: el bot estuvo pidiendo disculpas un rato
+ * largo sin que nadie lo supiera.
+ *
+ * Además la conversación queda marcada para atención, así aparece resaltada en la
+ * bandeja y alguien la puede tomar.
+ */
+async function alertarFalloDelBot(
+  supabase: any,
+  bot: any,
+  conversationId: string | undefined,
+  motivo: string,
+  detalle?: string,
+  mensajeCliente?: string,
+) {
+  try {
+    // Registro para el ADMIN de la plataforma: el dueño recibe la notificación,
+    // pero quien tiene que arreglarlo necesita el motivo técnico sin ir a Vercel.
+    await supabase.from('bot_failures').insert({
+      user_id: bot.user_id,
+      bot_id: bot.id,
+      conversation_id: conversationId ?? null,
+      reason: motivo,
+      detail: detalle ? String(detalle).slice(0, 2000) : null,
+      user_message: mensajeCliente ? String(mensajeCliente).slice(0, 500) : null,
+    })
+
+    if (conversationId) {
+      await supabase
+        .from('conversations')
+        .update({ needs_attention: true })
+        .eq('id', conversationId)
+    }
+
+    // Una sola notificación por hora y por bot: si Gemini está caído, cada mensaje
+    // generaría una y el dueño terminaría con la bandeja llena de lo mismo.
+    const unaHoraAtras = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const { count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', bot.user_id)
+      .eq('title', 'El bot no pudo responder')
+      .gte('created_at', unaHoraAtras)
+
+    if ((count ?? 0) > 0) return
+
+    await createNotification({
+      userId: bot.user_id,
+      title: 'El bot no pudo responder',
+      message: `${bot.name} le respondió a un cliente que tenía problemas técnicos. La conversación quedó marcada para que la revises.`,
+      type: 'error',
+      link: '/dashboard/chat',
+    })
+  } catch (e) {
+    console.error('No se pudo avisar del fallo del bot:', e)
+  }
 }
 
 /**
@@ -558,7 +619,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate bot response using the same logic as the main chat API
-    const { content: botResponse, shouldPause } = await generateBotResponse(
+    const { content: botResponse, shouldPause, isError } = await generateBotResponse(
       supabase, 
       bot, 
       conversation, 
@@ -579,8 +640,14 @@ export async function POST(request: NextRequest) {
     const splitEnabled = !!bot.feature_config?.split_long_messages
     const messages = splitEnabled ? splitBotMessage(botResponse) : [botResponse]
 
+    // Las disculpas por fallo NO se guardan. Quedaban en el historial y la IA las
+    // releía en el turno siguiente, arrastrando el "tengo problemas técnicos" a una
+    // conversación que ya se había recuperado. El cliente igual la recibe; lo que no
+    // corresponde es que pase a ser parte de la memoria de la charla.
     const nowMs = Date.now()
-    const { error: saveError } = await supabase
+    const { error: saveError } = isError
+      ? { error: null }
+      : await supabase
       .from("messages")
       .insert(
         messages.map((content, idx) => ({
@@ -662,7 +729,7 @@ async function generateBotResponse(
   senderInstagramId?: string,
   mediaPart?: any,
   geminiApiKey?: string
-): Promise<{ content: string, shouldPause: boolean }> {
+): Promise<{ content: string; shouldPause: boolean; isError?: boolean }> {
   try {
     // Get conversation history for context (recent messages first)
     const { data: messages } = await supabase
@@ -842,12 +909,14 @@ a abrir según los horarios de arriba, y ofrecé dejarlo listo para ese momento.
           }
         }
 
-        if (finalDeliverySettings) {
-          // DEMANDA: los tiempos configurados son para la cocina vacía. Se cuentan
-          // los pedidos que todavía están en marcha y se estiran en consecuencia,
-          // así el bot no promete 20 minutos con quince pedidos por delante.
-          let extraMinutes = 0
-          let activeOrders = 0
+        // ENVÍO: los datos (costo, mínimo, modalidades, tiempos) los escribe el
+        // dueño en las instrucciones del bot. Acá NO se arma nada de eso: tener dos
+        // fuentes para lo mismo garantizaba que un día se contradijeran.
+        //
+        // Lo único que sigue calculándose es la demora por demanda, porque depende
+        // de los pedidos que hay ahora y no se puede escribir en un texto fijo.
+        const demand = (bot.feature_config as any)?.demand
+        if (demand?.capacity && demand?.batch_minutes) {
           try {
             const { count } = await supabase
               .from('orders')
@@ -855,34 +924,20 @@ a abrir según los horarios de arriba, y ofrecé dejarlo listo para ese momento.
               .eq('user_id', bot.user_id)
               .in('status', ACTIVE_ORDER_STATUSES)
               .is('deleted_at', null)
-            activeOrders = count || 0
-            extraMinutes = extraMinutesForDemand(activeOrders, finalDeliverySettings)
+
+            const activeOrders = count || 0
+            const extraMinutes = extraMinutesForDemand(activeOrders, {
+              kitchen_capacity: demand.capacity,
+              batch_minutes: demand.batch_minutes,
+              max_extra_minutes: demand.max_extra,
+            })
+
+            if (extraMinutes > 0) {
+              deliveryModesInfo = `DEMANDA ACTUAL: ${describeDemand(activeOrders, extraMinutes)}
+Sumale ${extraMinutes} minutos a cualquier tiempo de entrega que tengas en las instrucciones.`
+            }
           } catch (e) {
             console.error('No se pudo calcular la demanda:', e)
-          }
-
-          const availableModes = []
-          const modeOptions = []
-
-          if (finalDeliverySettings.pickup_enabled) {
-            const t = applyDemandToEstimate(finalDeliverySettings.pickup_time_estimate, extraMinutes)
-            availableModes.push(`• RETIRO: ${t}`)
-            modeOptions.push('retiro')
-          }
-          if (finalDeliverySettings.delivery_enabled) {
-            const t = applyDemandToEstimate(finalDeliverySettings.delivery_time_estimate, extraMinutes)
-            availableModes.push(`• ENVÍO: ${t}`)
-            modeOptions.push('envío')
-          }
-
-          if (availableModes.length > 0) {
-            const demandNote = describeDemand(activeOrders, extraMinutes)
-            // Simplified mode info to let personality prompt take precedence if needed
-            deliveryModesInfo = `
-MODALIDADES ACTIVAS EN SISTEMA: ${availableModes.join(', ')}
-${finalDeliverySettings.delivery_enabled ? 'Para envío propio: pedir dirección completa' : ''}
-${demandNote}
-            `.trim()
           }
         }
 
@@ -968,6 +1023,15 @@ INFORMACIÓN ADICIONAL PARA RESPUESTAS SOBRE MENÚ:
 - Si el cliente pregunta por la carta/menú, muestra el catálogo de productos disponibles
 - Menciona los platos destacados según la descripción: ${userProfile.business_description || fallbackInfo.description || ''}
 - El enlace del menú completo es: ${menuLink || 'No disponible'}
+
+CÓMO DAR UN TOTAL (importante):
+Antes de decir un total, escribí el detalle línea por línea con el precio de cada
+cosa y recién después la suma. Ejemplo:
+   • 2x Muzzarella — $9.000
+   • 1x Coca 1,5 — $2.500
+   Total: $11.500
+NUNCA sumes de memoria ni des un total sin haber listado los items arriba: es la
+forma más común de equivocarse, y el cliente después reclama por ese número.
           `.trim()
         }
       }
@@ -1022,13 +1086,18 @@ Al compartir un formulario, enviá el enlace directamente sin formatearlo como h
             variations.push(senderPhone.substring(3))
             variations.push('54' + senderPhone.substring(3))
           }
-          const { data } = await supabase
+          // limit(1) ANTES de tomar la fila: el mismo cliente puede estar cargado
+          // con dos formatos del número (549261… y 54261…), y ahí `maybeSingle()`
+          // devuelve error en vez de datos — el bot le decía que no tenía puntos a
+          // un cliente que sí los tenía. Medido: 13 clientes así en producción.
+          const { data: loyaltyRows } = await supabase
             .from('clients')
             .select('id, points, stamps, loyalty_code')
             .eq('user_id', bot.user_id)
             .in('phone', variations)
-            .maybeSingle()
-          loyaltyClient = data
+            .order('created_at', { ascending: true })
+            .limit(1)
+          loyaltyClient = loyaltyRows?.[0] || null
         }
 
         const { data: loyaltyConfig } = await supabase
@@ -1399,7 +1468,8 @@ PRIORIDADES ANTE CONFLICTO:
 
     // Generate response using Gemini
     if (!geminiApiKey) {
-      return { content: "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente (Falta API Key).", shouldPause: false }
+      await alertarFalloDelBot(supabase, bot, conversation?.id, 'falta_api_key', 'El bot no tiene gemini_api_key cargada', userMessage)
+      return { content: "Lo siento, no puedo responder en este momento. El bot no está configurado correctamente (Falta API Key).", shouldPause: false, isError: true }
     }
 
     // Generamos la respuesta con cadena de fallback de modelos (si uno está saturado,
@@ -1424,7 +1494,8 @@ PRIORIDADES ANTE CONFLICTO:
 
     if (!response || !response.ok) {
       console.error('Gemini API failed after all models/retries')
-      return { content: "Disculpa, tengo problemas técnicos. Intenta nuevamente en un momento.", shouldPause: false }
+      await alertarFalloDelBot(supabase, bot, conversation?.id, 'ia_sin_respuesta', `Gemini falló en todos los modelos (HTTP ${response?.status ?? 'sin respuesta'})`, userMessage)
+      return { content: "Disculpa, tengo problemas técnicos. Intenta nuevamente en un momento.", shouldPause: false, isError: true }
     }
 
     const data = await response.json()
@@ -1575,11 +1646,14 @@ PRIORIDADES ANTE CONFLICTO:
     }
     
     console.error('Invalid Gemini response structure:', JSON.stringify(data, null, 2))
-    return { content: "Disculpa, no pude generar una respuesta. Intenta con otra pregunta.", shouldPause: false }
+    await alertarFalloDelBot(supabase, bot, conversation?.id, 'respuesta_vacia', 'La IA respondió sin contenido utilizable', userMessage)
+    return { content: "Disculpa, no pude generar una respuesta. Intenta con otra pregunta.", shouldPause: false, isError: true }
 
   } catch (error) {
     console.error('Error generating bot response:', error)
-    return { content: "Disculpa, tengo problemas técnicos en este momento. Intenta nuevamente más tarde.", shouldPause: false }
+    await alertarFalloDelBot(supabase, bot, conversation?.id, 'error_inesperado', error instanceof Error ? `${error.message}
+${error.stack || ''}` : String(error), userMessage)
+    return { content: "Disculpa, tengo problemas técnicos en este momento. Intenta nuevamente más tarde.", shouldPause: false, isError: true }
   }
 }
 
@@ -2043,9 +2117,23 @@ async function saveOrderFromAI(
         .toFixed(2)
     )
     if (Math.abs(computedTotal - (Number(orderData.total) || 0)) > 0.01) {
+      const declarado = Number(orderData.total) || 0
       console.warn(
-        `⚠️ Total de la IA corregido: decía $${orderData.total}, los items suman $${computedTotal}`
+        `⚠️ Total de la IA corregido: decía $${declarado}, los items suman $${computedTotal}`
       )
+      // Si le dijo al cliente un número muy distinto del real, queda registrado.
+      // El pedido se guarda bien, pero el cliente vio otro precio en el chat y el
+      // reclamo va a llegar igual: mejor que el dueño se entere antes.
+      const desvio = computedTotal > 0 ? Math.abs(computedTotal - declarado) / computedTotal : 0
+      if (declarado > 0 && desvio > 0.05) {
+        await alertarFalloDelBot(
+          supabase,
+          bot,
+          conversation?.id,
+          'total_mal_calculado',
+          `El bot le dijo al cliente $${declarado} pero los items suman $${computedTotal}. El pedido se guardó con el total correcto.`,
+        )
+      }
     }
 
     // ANTI-DUPLICADO: el análisis corre en CADA mensaje, y basta con que el cliente
@@ -3237,14 +3325,18 @@ async function createOrUpdateClient(supabase: any, userId: string, clientData: a
         phoneVariations.push('54' + clientData.phone.substring(3));
       }
       
-      const { data: phoneClient } = await supabase
+      // Mismo caso que en fidelización: con el cliente cargado en dos formatos,
+      // `maybeSingle()` da error y el bot lo trata como cliente nuevo — creando
+      // TODAVÍA otro duplicado en cada conversación. Se toma el más antiguo.
+      const { data: phoneClients } = await supabase
         .from("clients")
         .select("*")
         .eq("user_id", userId)
         .in("phone", phoneVariations)
-        .maybeSingle()
-      
-      existingClient = phoneClient
+        .order("created_at", { ascending: true })
+        .limit(1)
+
+      existingClient = phoneClients?.[0] || null
       console.log('🔍 Found existing client by phone:', existingClient ? existingClient.id : 'none')
     } else if (clientData.instagram_id) {
       const { data: instagramClient } = await supabase

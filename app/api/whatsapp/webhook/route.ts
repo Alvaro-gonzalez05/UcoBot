@@ -5,6 +5,7 @@ import { getWhatsAppToken } from '@/lib/meta/credentials'
 import { storeWhatsAppMedia } from '@/lib/meta/store-media'
 import { handleQualityUpdate } from '@/lib/meta/quality'
 import { getWhatsAppProvider } from '@/lib/whatsapp/provider'
+import { waitUntil } from '@vercel/functions'
 
 // Webhook verification (GET request)
 export async function GET(request: NextRequest) {
@@ -83,12 +84,24 @@ export async function POST(request: NextRequest) {
     // TODO: Implement signature verification
 
     // Process webhook events
+    //
+    // LOS MENSAJES SE PROCESAN EN SEGUNDO PLANO. Antes se hacía `await` acá, y el
+    // 200 a Meta salía recién al terminar TODO: los 7 segundos de la ventana de
+    // escucha más lo que tardara la IA, entre 15 y 20 segundos. Meta reintenta si
+    // tardás demasiado, y cada reintento es una oportunidad de mensaje duplicado.
+    // Con waitUntil, el 200 sale al instante y el trabajo sigue corriendo.
+    const pendientes: Promise<any>[] = []
+
     if (body.entry && body.entry.length > 0) {
       for (const entry of body.entry) {
         if (entry.changes && entry.changes.length > 0) {
           for (const change of entry.changes) {
             if (change.field === 'messages') {
-              await processWhatsAppMessage(change.value, origin)
+              pendientes.push(
+                processWhatsAppMessage(change.value, origin).catch((e) =>
+                  console.error('Error procesando mensaje en segundo plano:', e),
+                ),
+              )
             } else if (change.field === 'phone_number_quality_update') {
               // Meta avisa acá cuando baja la calidad de un número. Es la única
               // señal temprana antes de que inhabilite el número o el negocio.
@@ -109,6 +122,11 @@ export async function POST(request: NextRequest) {
         }
       }
     }
+
+    // El runtime mantiene viva la función hasta que estas promesas terminen, pero
+    // la respuesta ya salió. Sin esto, el proceso se cortaría al retornar y el
+    // mensaje quedaría sin contestar.
+    if (pendientes.length > 0) waitUntil(Promise.all(pendientes))
 
     return NextResponse.json({ success: true }, { status: 200 })
   } catch (error) {
