@@ -196,7 +196,11 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         .select('*')
         .eq('user_id', integration.user_id)
         .contains('platforms', ['whatsapp'])
-        .eq('is_active', true)
+        // SIN filtrar por is_active a propósito: con el bot apagado los mensajes
+        // se tienen que seguir recibiendo y guardando (el negocio los contesta a
+        // mano desde el panel). Antes este filtro descartaba el mensaje ENTERO y
+        // la conversación no aparecía en ningún lado. Lo que cambia es que no se
+        // genera respuesta automática — ver el corte más abajo.
         .order('created_at', { ascending: true })
         .limit(1)
         .maybeSingle()
@@ -228,7 +232,9 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
       }
 
       if (botError || !bot) {
-        console.error('No active WhatsApp bot found for user:', integration.user_id, botError)
+        // Sin ningún bot (ni apagado) no hay a qué atar la conversación:
+        // conversations.bot_id es NOT NULL.
+        console.error('No WhatsApp bot found for user:', integration.user_id, botError)
         continue
       }
 
@@ -549,6 +555,14 @@ async function processWhatsAppMessage(messageData: any, origin: string) {
         .eq('id', conversationId)
 
       console.log('✅ Message stored successfully')
+
+      // BOT APAGADO: el mensaje ya quedó guardado y la conversación aparece en el
+      // panel como cualquier otra. Lo único que no ocurre es la respuesta
+      // automática. Es el modo "solo bandeja": recibir y contestar a mano.
+      if (!bot.is_active) {
+        console.log('🤖 Bot desactivado: mensaje recibido, sin respuesta automática')
+        continue
+      }
 
       // Only process AI response for text messages (for now)
       // Also process button replies and interactive messages as text

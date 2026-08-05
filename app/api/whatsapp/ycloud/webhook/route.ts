@@ -457,7 +457,9 @@ async function handlePhoneEcho(msg: any) {
     .select('id, feature_config')
     .eq('user_id', integration.user_id)
     .contains('platforms', ['whatsapp'])
-    .eq('is_active', true)
+    // SIN filtrar por is_active: con el bot apagado, lo que el dueño contesta
+    // desde su celular tiene que verse igual en el panel. El filtro hacía que esos
+    // mensajes se perdieran justo en el modo donde TODO se contesta a mano.
     // Mismo bot siempre (ver webhook de Cloud API): sin ORDER BY, una cuenta con
     // varios bots duplicaba la conversación del mismo cliente.
     .order('created_at', { ascending: true })
