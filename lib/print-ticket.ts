@@ -166,6 +166,8 @@ export interface CashCloseTicketData {
   totalsByMethod: { label: string; amount: number }[]
   tipsTotal?: number
   salesCount: number
+  /** Unidades vendidas por producto, de mayor a menor. */
+  soldItems?: { name: string; qty: number }[]
   cancelledCount?: number
   /** Detalle de los cancelados, para que el arqueo diga CUÁLES y por cuánto. */
   cancelledDetail?: { id: string; total: number; created_at: string }[]
@@ -251,6 +253,19 @@ export function buildCashCloseTicketInner(d: CashCloseTicketData): string {
             ? `<div class="row"><span>Total eliminado</span><span>${money(d.deletedTotal)}</span></div>`
             : "")
         : ""
+    }
+    ${
+      d.soldItems && d.soldItems.length > 0
+        ? `<div class="sep"></div>
+           <div class="center bold" style="margin:2px 0 4px;">PRODUCTOS VENDIDOS</div>
+           ${d.soldItems
+             .map(
+               (p) =>
+                 `<div class="row sub"><span>${esc(p.name)}</span><span>${p.qty}</span></div>`,
+             )
+             .join('')}
+           <div class="row"><span>Unidades totales</span><span>${d.soldItems.reduce((a, p) => a + p.qty, 0)}</span></div>`
+        : ''
     }
     <div class="sep"></div>
     <div class="row total"><span>Total generado</span><span>${money(salesTotal)}</span></div>

@@ -870,51 +870,14 @@ a abrir según los horarios de arriba, y ofrecé dejarlo listo para ese momento.
 }
       `.trim()
 
-      // Get delivery settings if bot can take orders
+      // ENVÍO: los datos (costo, mínimo, modalidades, tiempos) los escribe el dueño
+      // en las instrucciones del bot desde el 31/07/2026. Acá había una consulta a
+      // delivery_settings que además CREABA la fila si no existía — escritura en
+      // producción para un dato que ya nadie lee.
+      //
+      // Lo único que sigue calculándose es la demora por demanda: depende de los
+      // pedidos que hay AHORA y no se puede escribir en un texto fijo.
       if ((bot.features || []).includes('take_orders')) {
-        const { data: deliverySettings, error: deliveryError } = await supabase
-          .from("delivery_settings")
-          .select("*")
-          .eq("user_id", userId)
-          .single()
-
-        console.log('🚚 Delivery settings:', deliverySettings, 'Error:', deliveryError)
-
-        let finalDeliverySettings = deliverySettings
-
-        // If no delivery settings exist, create default ones
-        if (!deliverySettings) {
-          console.log('🚚 Creating default delivery settings for user')
-          const { data: newSettings, error: createError } = await supabase
-            .from("delivery_settings")
-            .insert({
-              user_id: userId,
-              pickup_enabled: true,
-              delivery_enabled: false,
-              pickup_instructions: 'Retiro en el local',
-              delivery_instructions: 'Envío a domicilio',
-              delivery_fee: 0,
-              minimum_order_delivery: 0,
-              delivery_time_estimate: '30-45 minutos',
-              pickup_time_estimate: '15-20 minutos'
-            })
-            .select()
-            .single()
-
-          if (!createError && newSettings) {
-            finalDeliverySettings = newSettings
-            console.log('✅ Default delivery settings created:', newSettings)
-          } else {
-            console.error('❌ Error creating default delivery settings:', createError)
-          }
-        }
-
-        // ENVÍO: los datos (costo, mínimo, modalidades, tiempos) los escribe el
-        // dueño en las instrucciones del bot. Acá NO se arma nada de eso: tener dos
-        // fuentes para lo mismo garantizaba que un día se contradijeran.
-        //
-        // Lo único que sigue calculándose es la demora por demanda, porque depende
-        // de los pedidos que hay ahora y no se puede escribir en un texto fijo.
         const demand = (bot.feature_config as any)?.demand
         if (demand?.capacity && demand?.batch_minutes) {
           try {

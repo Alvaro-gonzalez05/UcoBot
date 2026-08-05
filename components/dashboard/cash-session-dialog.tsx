@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Loader2, Printer, History, Wallet, ChevronLeft, Ban, Trash2 } from "lucide-react"
+import { Loader2, Printer, History, Wallet, ChevronLeft, Ban, Trash2, ShoppingBag } from "lucide-react"
 import { toast } from "sonner"
 import { paymentLabel } from "@/lib/payment-methods"
 import {
@@ -31,7 +31,9 @@ export interface CashSession {
   closed_at: string | null
   closed_by: string | null
   status: "open" | "closed"
-  expected_totals: Record<string, number> | null
+  // Además de los totales por método guarda claves internas con prefijo "_"
+  // (_expected_cash, _sold_items). Quien las lee filtra por ese prefijo.
+  expected_totals: Record<string, any> | null
   counted_totals: Record<string, number> | null
   difference: number | null
   closing_amount: number | null
@@ -59,6 +61,8 @@ interface SessionTotals {
   deletedCount: number
   deleted: CancelledOrder[]
   deletedTotal: number
+  /** Qué se vendió y cuánto, para el arqueo ("12 Promo 1, 8 Lomos…"). */
+  soldItems: { name: string; qty: number }[]
 }
 
 async function loadSessionTotals(
@@ -68,7 +72,7 @@ async function loadSessionTotals(
 ): Promise<SessionTotals> {
   const { data: rows, error } = await supabase
     .from("orders")
-    .select("status, payments, tip_amount")
+    .select("status, payments, tip_amount, items")
     .eq("cash_session_id", session.id)
     // Un pedido ELIMINADO no es una venta del turno, aunque se haya cobrado. Sin
     // este filtro el cierre lo seguía sumando a los totales por método mientras
@@ -119,6 +123,9 @@ async function loadSessionTotals(
     items: Array.isArray(o.items) ? o.items : [],
   }))
 
+  // Acumulador de unidades por producto; se vuelca a `totals` al final.
+  const vendidos = new Map<string, number>()
+
   const totals: SessionTotals = {
     byMethod: {},
     tips: 0,
@@ -128,6 +135,7 @@ async function loadSessionTotals(
     deletedCount: deleted.length,
     deleted,
     deletedTotal: deleted.reduce((acc, d) => acc + d.total, 0),
+    soldItems: [],
   }
   for (const row of rows || []) {
     if (row.status === "cancelled") {
@@ -136,6 +144,17 @@ async function loadSessionTotals(
     const payments = Array.isArray(row.payments) ? row.payments : []
     if (payments.length === 0) continue
     totals.salesCount += 1
+
+    // Unidades vendidas por producto. Se cuentan solo los pedidos COBRADOS (los
+    // que llegaron hasta acá), que es lo que corresponde a un arqueo de caja.
+    for (const it of Array.isArray(row.items) ? row.items : []) {
+      // Los "-N" de una edición no son productos que salieron.
+      if (it?.removed) continue
+      const nombre = String(it?.name || "").trim()
+      if (!nombre) continue
+      const cantidad = Number(it?.quantity) || 1
+      vendidos.set(nombre, (vendidos.get(nombre) || 0) + cantidad)
+    }
 
     // Propina del pedido SIN duplicar: al cobrar, el vuelto dejado de propina se
     // guarda en el pago (p.tip) Y también se acumula en tip_amount. Sumar los dos
@@ -150,6 +169,11 @@ async function loadSessionTotals(
       // (la propina ya se contabilizó arriba, sin duplicar)
     }
   }
+  // De más vendido a menos: es el orden en que un dueño quiere leerlo.
+  totals.soldItems = [...vendidos.entries()]
+    .map(([name, qty]) => ({ name, qty }))
+    .sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name))
+
   return totals
 }
 
@@ -175,6 +199,9 @@ function buildCloseTicket(
     })),
     tipsTotal: totals.tips > 0 ? totals.tips : undefined,
     salesCount: totals.salesCount,
+    // Lo guardado manda sobre lo recalculado: un cierre reimpreso tiene que
+    // mostrar lo que se vendió ESE turno, no lo que quedó en la base después.
+    soldItems: (session.expected_totals?._sold_items as any[]) || totals.soldItems,
     cancelledCount: totals.cancelledCount || undefined,
     cancelledDetail: totals.cancelled.map((c) => ({
       id: c.id,
@@ -339,7 +366,14 @@ export function CashSessionDialog({
           status: "closed",
           closed_at: closedAt,
           closed_by: openedBy.trim() || activeSession.opened_by,
-          expected_totals: { ...totals.byMethod, _expected_cash: Number(expectedCash.toFixed(2)) },
+          expected_totals: {
+            ...totals.byMethod,
+            _expected_cash: Number(expectedCash.toFixed(2)),
+            // Se congela acá para que la REIMPRESIÓN muestre lo mismo que el
+            // ticket original. Recalcularlo después daría otro número si algún
+            // pedido del turno se editó o se borró más tarde.
+            _sold_items: totals.soldItems,
+          },
           counted_totals: { cash: Number(countedNum.toFixed(2)) },
           difference: Number(diff.toFixed(2)),
           closing_amount: Number(countedNum.toFixed(2)),
@@ -490,6 +524,27 @@ export function CashSessionDialog({
                     {totals.cancelledCount > 0 ? ` · ${totals.cancelledCount} cancelada${totals.cancelledCount === 1 ? "" : "s"}` : ""}
                   </p>
                 </div>
+
+                {/* Qué se vendió: el dueño lo quiere ver antes de cerrar, no
+                    recién cuando sale el papel. */}
+                {totals.soldItems.length > 0 && (
+                  <div className="rounded-xl border p-3">
+                    <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold">
+                      <ShoppingBag className="h-3.5 w-3.5" /> Productos vendidos
+                      <span className="ml-auto text-muted-foreground">
+                        {totals.soldItems.reduce((a, p) => a + p.qty, 0)} unidades
+                      </span>
+                    </p>
+                    <div className="max-h-40 space-y-1 overflow-y-auto">
+                      {totals.soldItems.map((p) => (
+                        <div key={p.name} className="flex justify-between gap-2 text-xs">
+                          <span className="min-w-0 truncate">{p.name}</span>
+                          <span className="flex-shrink-0 font-semibold tabular-nums">{p.qty}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Detalle de cancelados del turno (bot + POS) */}
                 {totals.cancelled.length > 0 && (

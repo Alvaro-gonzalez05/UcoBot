@@ -21,7 +21,8 @@ interface Closure {
   openingAmount: number
   closingAmount: number | null
   difference: number | null
-  expectedTotals: Record<string, number> | null
+  // Incluye claves internas con prefijo "_" (_expected_cash, _sold_items).
+  expectedTotals: Record<string, any> | null
   notes: string | null
 }
 
@@ -164,6 +165,8 @@ export function StoresTile({
         totalsByMethod,
         salesCount: 0,
         expectedCash: Number(c.expectedTotals?._expected_cash) || 0,
+        // Detalle congelado al cerrar la caja; los cierres viejos no lo tienen.
+        soldItems: (c.expectedTotals?._sold_items as any[]) || undefined,
         countedCash: c.closingAmount ?? undefined,
         difference: c.difference ?? undefined,
         notes: c.notes || undefined,
